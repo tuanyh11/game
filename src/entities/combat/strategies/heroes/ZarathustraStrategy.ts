@@ -1,0 +1,142 @@
+import { BaseCombatStrategy } from "../../BaseCombatStrategy";
+import { CombatContext } from "../../CombatTypes";
+import { Unit } from "../../../Unit";
+import { ParticleSystem } from "../../../../effects/ParticleSystem";
+import { HeroSkillUtils } from "./HeroSkillUtils";
+
+export class ZarathustraStrategy extends BaseCombatStrategy {
+
+    public castHeroSkill(unit: Unit, skillIndex: number, particles: ParticleSystem, findNearestEnemy?: (x: number, y: number, team: number, range: number) => Unit | null, findNearestEnemyBuilding?: (x: number, y: number, team: number, range: number) => import("../../../Building").Building | null): void {
+        const skills = unit.heroSkills;
+        const skill = skills[skillIndex];
+        const aoeRange = 80;
+        if (!skill) return;
+
+        const sid = skill.skillId;
+
+        // Uses _findEnemy and _findEnemyBuilding bound references injected from context in update loop
+        // However, for immediate casting, we can rely on the nearest enemy logic in cast handler if needed,
+        // or just use a local radius search over all units since skills are rare events.
+        switch (sid) {
+            case 'batu_w0': // Giáp Rakhsh — golden shield aura
+                HeroSkillUtils.buffVfx(unit, particles, ['#ffd700', '#ffee88', '#fff', '#daa520']);
+                particles.emit({ x: unit.x, y: unit.y, count: 30, spread: 4, speed: [80, 200], angle: [0, Math.PI * 2], life: [0.4, 0.8], size: [3, 6], colors: ['#ffd70088', '#ffee8866', '#daa52066'], gravity: 0, shape: 'circle' });
+                particles.emit({ x: unit.x, y: unit.y - 12, count: 16, spread: 8, speed: [30, 80], angle: [-Math.PI * 0.9, -Math.PI * 0.1], life: [0.6, 1.2], size: [2, 4], colors: ['#ffd700', '#fff'], gravity: -50, shape: 'star' });
+                break;
+            case 'batu_w1': // Hào Quang Vua — royal aura burst
+                particles.emit({ x: unit.x, y: unit.y, count: 48, spread: 6, speed: [100, 260], angle: [0, Math.PI * 2], life: [0.5, 1.2], size: [3, 8], colors: ['#ffd700', '#ff8c00', '#ffee88', '#fff'], gravity: -20, shape: 'star' });
+                for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; particles.emit({ x: unit.x + Math.cos(a) * 30, y: unit.y + Math.sin(a) * 20, count: 3, spread: 2, speed: [20, 50], angle: [a - 0.3, a + 0.3], life: [0.8, 1.5], size: [2, 4], colors: ['#ffd700', '#fff'], gravity: -15, shape: 'star' }); }
+                particles.emit({ x: unit.x, y: unit.y - 20, count: 8, spread: 3, speed: [10, 40], angle: [-Math.PI * 0.9, -Math.PI * 0.1], life: [1.0, 2.0], size: [4, 7], colors: ['#ffd700'], gravity: -30, shape: 'star' });
+                break;
+            case 'batu_w2': // Bất Tử Rostam — heal 60%
+                HeroSkillUtils.healFx(unit, particles, 0.6, ['#ffd700', '#ffee88', '#ff8c00', '#fff']);
+                particles.emit({ x: unit.x, y: unit.y, count: 20, spread: 10, speed: [40, 100], angle: [0, Math.PI * 2], life: [0.6, 1.4], size: [4, 8], colors: ['#ffd70066', '#ffee8844'], gravity: 0, shape: 'circle' });
+                particles.emit({ x: unit.x, y: unit.y - 8, count: 12, spread: 4, speed: [60, 140], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.8, 1.6], size: [3, 6], colors: ['#ffd700', '#fff'], gravity: -60, shape: 'star' });
+                break;
+            case 'batu_m0': { // Lửa Thánh — sacred fire 45 AOE
+                const t = unit.attackTarget; const fx = t ? t.x : unit.x + (unit.facingRight ? 60 : -60); const fy = t ? t.y : unit.y;
+                HeroSkillUtils.aoeDamage(unit, 45, aoeRange, 6, findNearestEnemy);
+                HeroSkillUtils.explodeVfx(fx, fy, particles, ['#ff2200', '#ff4400', '#ff6600', '#ffaa00']);
+                const fa = Math.atan2(fy - unit.y, fx - unit.x);
+                particles.emit({ x: unit.x, y: unit.y - 8, count: 12, spread: 2, speed: [220, 400], angle: [fa - 0.08, fa + 0.08], life: [0.08, 0.2], size: [3, 7], colors: ['#ff6600', '#ffaa00', '#fff'], gravity: 0, shape: 'circle' });
+                for (let i = 0; i < 5; i++) { const p = i / 5; particles.emit({ x: unit.x + (fx - unit.x) * p, y: unit.y + (fy - unit.y) * p - 4, count: 4, spread: 4, speed: [10, 30], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.3, 0.6], size: [2, 4], colors: ['#ff440088', '#ff880066'], gravity: -20, shape: 'circle' }); }
+                break;
+            }
+            case 'batu_m1': { // Thiêu Đốt — DOT 8/s 5s
+                const hs = new Set<number>();
+                for (let i = 0; i < 18 && hs.size < 6; i++) {
+                    const e = findNearestEnemy ? findNearestEnemy(unit.x, unit.y, unit.team, aoeRange) : null;
+                    if (e && !hs.has(e.id)) {
+                        hs.add(e.id);
+                        let t = 0;
+                        const iv = setInterval(() => { if (e.alive && t < 5) { e.hp -= 8; t++; particles.emit({ x: e.x, y: e.y - 4, count: 6, spread: 4, speed: [20, 60], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.2, 0.5], size: [2, 4], colors: ['#ff4400', '#ff6600', '#ffaa00'], gravity: -40, shape: 'circle' }); } else clearInterval(iv); }, 1000);
+                    }
+                }
+                particles.emit({ x: unit.x, y: unit.y + 4, count: 40, spread: 35, speed: [20, 70], angle: [0, Math.PI * 2], life: [0.5, 1.5], size: [3, 9], colors: ['#ff2200', '#ff4400', '#ff660088'], gravity: -10, shape: 'circle' });
+                particles.emit({ x: unit.x, y: unit.y, count: 28, spread: 12, speed: [50, 130], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.4, 1.0], size: [2, 5], colors: ['#ffaa00', '#ffcc00', '#fff'], gravity: -70, shape: 'circle' });
+                particles.emit({ x: unit.x, y: unit.y - 10, count: 12, spread: 20, speed: [10, 30], angle: [-Math.PI * 0.9, -Math.PI * 0.1], life: [0.8, 2.0], size: [6, 12], colors: ['#22222288', '#33333366'], gravity: -15, shape: 'circle' });
+                break;
+            }
+            case 'batu_m2': { // Ngọn Lửa Vĩnh Cửu — 80 massive AOE
+                HeroSkillUtils.aoeDamage(unit, 80, aoeRange * 1.5, 10, findNearestEnemy);
+                const t2 = unit.attackTarget; const fx2 = t2 ? t2.x : unit.x + (unit.facingRight ? 60 : -60); const fy2 = t2 ? t2.y : unit.y;
+                HeroSkillUtils.explodeVfx(fx2, fy2, particles, ['#ff0000', '#ff2200', '#ff4400', '#ff6600']);
+                particles.emit({ x: fx2, y: fy2, count: 36, spread: 30, speed: [80, 250], angle: [-Math.PI * 0.85, -Math.PI * 0.15], life: [0.5, 1.5], size: [3, 9], colors: ['#6B4226', '#8B5A2B', '#D2691E'], gravity: 130, shape: 'rect' });
+                particles.emit({ x: fx2, y: fy2, count: 24, spread: 30, speed: [15, 50], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [1.0, 2.5], size: [8, 18], colors: ['#22222288', '#33333388', '#44444466'], gravity: -25, shape: 'circle' });
+                for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; particles.emit({ x: fx2 + Math.cos(a) * 40, y: fy2 + Math.sin(a) * 25, count: 6, spread: 5, speed: [20, 60], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.4, 1.0], size: [3, 6], colors: ['#ff4400', '#ff6600', '#ffaa00'], gravity: -30, shape: 'circle' }); }
+                break;
+            }
+            case 'batu_r0': { // Mũi Tên Arash 
+                if (unit.attackTarget) {
+                    const e = unit.attackTarget; e.hp -= 50 + unit.heroLevel * 4;
+                    if (e.hp <= 0 && e.alive) unit.addHeroXp(Math.max(10, Math.floor(e.maxHp * 0.3)));
+                    const a = Math.atan2(e.y - unit.y, e.x - unit.x);
+                    particles.emit({ x: unit.x, y: unit.y - 8, count: 4, spread: 1, speed: [450, 560], angle: [a - 0.015, a + 0.015], life: [0.06, 0.18], size: [5, 10], colors: ['#ffd700', '#fff', '#ffee88'], gravity: 0, shape: 'rect' });
+                    particles.emit({ x: unit.x, y: unit.y - 8, count: 10, spread: 2, speed: [300, 420], angle: [a - 0.06, a + 0.06], life: [0.1, 0.3], size: [2, 4], colors: ['#ffd70088', '#ffaa0066'], gravity: 0, shape: 'circle' });
+                    particles.emit({ x: e.x, y: e.y, count: 18, spread: 10, speed: [50, 150], angle: [0, Math.PI * 2], life: [0.2, 0.6], size: [2, 6], colors: ['#ffd700', '#ff6600', '#fff'], gravity: 30, shape: 'star' });
+                }
+                break;
+            }
+            case 'batu_r1': // Gió Sa Mạc
+                unit.speed = Math.round(unit._baseSpeed * 1.8);
+                HeroSkillUtils.buffVfx(unit, particles, ['#c9a84c', '#dab86c', '#e8d4a0', '#fff'], 'circle');
+                particles.emit({ x: unit.x, y: unit.y + 4, count: 24, spread: 15, speed: [60, 160], angle: [unit.facingRight ? -0.3 : Math.PI - 0.3, unit.facingRight ? 0.3 : Math.PI + 0.3], life: [0.3, 0.8], size: [2, 5], colors: ['#c9a84c88', '#dab86c66', '#e8d4a044'], gravity: 10, shape: 'circle' });
+                break;
+            case 'batu_r2': { // Mưa Tên Thần
+                HeroSkillUtils.multiShot(unit, 8, 12, unit.civRange * 1.5, ['#ffd700', '#ffaa00', '#ff8800'], particles, findNearestEnemy);
+                const rx = unit.x + (unit.facingRight ? 50 : -50);
+                particles.emit({ x: rx, y: unit.y - 60, count: 24, spread: 50, speed: [140, 300], angle: [Math.PI * 0.35, Math.PI * 0.65], life: [0.15, 0.45], size: [3, 6], colors: ['#ffd700', '#ffaa00'], gravity: 110, shape: 'rect' });
+                particles.emit({ x: rx, y: unit.y, count: 16, spread: 40, speed: [20, 60], angle: [0, Math.PI * 2], life: [0.3, 0.7], size: [2, 4], colors: ['#ffd700', '#fff44f88'], gravity: -10, shape: 'star' });
+                break;
+            }
+        }
+    }
+
+    protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
+        const { unit, particles } = context;
+
+        // Arcane bolt projectile — brighter, larger
+        particles.emit({
+            x: unit.x + (unit.facingRight ? 12 : -12),
+            y: unit.y - 10, count: 4, spread: 2,
+            speed: [260, 380],
+            angle: [atkAngle - 0.04, atkAngle + 0.04],
+            life: [0.12, 0.3], size: [4, 7],
+            colors: ['#aa44ff', '#cc66ff', '#ff44ff', '#fff'],
+            gravity: 0, shape: 'circle',
+        });
+        // Swirling arcane trail
+        particles.emit({
+            x: unit.x, y: unit.y - 8, count: 10, spread: 4,
+            speed: [80, 180],
+            angle: [atkAngle - 0.4, atkAngle + 0.4],
+            life: [0.1, 0.3], size: [1.5, 3.5],
+            colors: ['#cc88ff', '#ff88ff', '#8844ff', '#aa66ff', '#fff'],
+            gravity: 0, shape: 'star',
+        });
+        // Arcane explosion at target — bigger
+        particles.emit({
+            x: target.x, y: target.y, count: 18, spread: 8,
+            speed: [50, 140], angle: [0, Math.PI * 2],
+            life: [0.2, 0.6], size: [2.5, 6],
+            colors: ['#aa44ff', '#ff44ff', '#cc88ff', '#fff'],
+            gravity: 15, shape: 'star',
+        });
+        // Inner flash at impact
+        particles.emit({
+            x: target.x, y: target.y, count: 6, spread: 3,
+            speed: [10, 40], angle: [0, Math.PI * 2],
+            life: [0.15, 0.3], size: [4, 8],
+            colors: ['#ffffff', '#eeddff', '#ffccff'],
+            gravity: 0, shape: 'circle',
+        });
+        // Purple ground ring
+        particles.emit({
+            x: target.x, y: target.y + 4, count: 10, spread: 12,
+            speed: [60, 120], angle: [0, Math.PI * 2],
+            life: [0.15, 0.4], size: [2, 4],
+            colors: ['#6622cc', '#8844ff', '#aa66ff'],
+            gravity: 50, shape: 'circle',
+        });
+    }
+}
