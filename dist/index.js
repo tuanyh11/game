@@ -17,11 +17,17 @@ class Camera {
   mouseX = 0;
   mouseY = 0;
   mouseInWindow = false;
+  isPanningTouch = false;
+  touchStartX = 0;
+  touchStartY = 0;
   boundKeyDown;
   boundKeyUp;
   boundMouseMove;
   boundMouseEnter;
   boundMouseLeave;
+  boundTouchStart;
+  boundTouchMove;
+  boundTouchEnd;
   constructor(config) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.boundKeyDown = (e) => this.onKeyDown(e);
@@ -33,11 +39,18 @@ class Camera {
     this.boundMouseLeave = () => {
       this.mouseInWindow = false;
     };
+    this.boundTouchStart = (e) => this.onTouchStart(e);
+    this.boundTouchMove = (e) => this.onTouchMove(e);
+    this.boundTouchEnd = (e) => this.onTouchEnd(e);
     window.addEventListener("keydown", this.boundKeyDown);
     window.addEventListener("keyup", this.boundKeyUp);
     window.addEventListener("mousemove", this.boundMouseMove);
     window.addEventListener("mouseenter", this.boundMouseEnter);
     window.addEventListener("mouseleave", this.boundMouseLeave);
+    window.addEventListener("touchstart", this.boundTouchStart, { passive: false });
+    window.addEventListener("touchmove", this.boundTouchMove, { passive: false });
+    window.addEventListener("touchend", this.boundTouchEnd);
+    window.addEventListener("touchcancel", this.boundTouchEnd);
   }
   resize(width, height) {
     this.viewportWidth = width;
@@ -113,6 +126,10 @@ class Camera {
     window.removeEventListener("mousemove", this.boundMouseMove);
     window.removeEventListener("mouseenter", this.boundMouseEnter);
     window.removeEventListener("mouseleave", this.boundMouseLeave);
+    window.removeEventListener("touchstart", this.boundTouchStart);
+    window.removeEventListener("touchmove", this.boundTouchMove);
+    window.removeEventListener("touchend", this.boundTouchEnd);
+    window.removeEventListener("touchcancel", this.boundTouchEnd);
   }
   onKeyDown(e) {
     this.keys.add(e.key);
@@ -124,6 +141,31 @@ class Camera {
     this.mouseX = e.clientX;
     this.mouseY = e.clientY;
     this.mouseInWindow = true;
+  }
+  onTouchStart(e) {
+    if (e.touches.length >= 2) {
+      this.isPanningTouch = true;
+      this.touchStartX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      this.touchStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    }
+  }
+  onTouchMove(e) {
+    if (this.isPanningTouch && e.touches.length >= 2) {
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const dx = mx - this.touchStartX;
+      const dy = my - this.touchStartY;
+      this.x -= dx;
+      this.y -= dy;
+      this.touchStartX = mx;
+      this.touchStartY = my;
+      this.clamp();
+    }
+  }
+  onTouchEnd(e) {
+    if (e.touches.length < 2) {
+      this.isPanningTouch = false;
+    }
   }
 }
 
@@ -305,7 +347,10 @@ function isInfantryType(type) {
   return type === "spearman" /* Spearman */ || type === "swordsman" /* Swordsman */ || type === "chuKoNu" /* ChuKoNu */ || type === "ninja" /* Ninja */ || type === "centurion" /* Centurion */ || type === "ulfhednar" /* Ulfhednar */;
 }
 function isCavalryType(type) {
-  return type === "scout" /* Scout */ || type === "knight" /* Knight */;
+  return type === "scout" /* Scout */ || type === "knight" /* Knight */ || type === "warElephant" /* WarElephant */ || type === "fireLancer" /* FireLancer */ || type === "yabusame" /* Yabusame */ || type === "equites" /* Equites */ || type === "bearRider" /* BearRider */;
+}
+function isCivCavalry(type) {
+  return type === "warElephant" /* WarElephant */ || type === "fireLancer" /* FireLancer */ || type === "yabusame" /* Yabusame */ || type === "equites" /* Equites */ || type === "bearRider" /* BearRider */;
 }
 function isRangedType(type) {
   return type === "archer" /* Archer */ || type === "immortal" /* Immortal */;
@@ -320,9 +365,16 @@ var CIV_ELITE_UNIT = {
   ["laMa" /* LaMa */]: "centurion" /* Centurion */,
   ["viking" /* Viking */]: "ulfhednar" /* Ulfhednar */
 };
+var CIV_UNIQUE_CAVALRY = {
+  ["baTu" /* BaTu */]: "warElephant" /* WarElephant */,
+  ["daiTong" /* DaiMinh */]: "fireLancer" /* FireLancer */,
+  ["yamato" /* Yamato */]: "yabusame" /* Yabusame */,
+  ["laMa" /* LaMa */]: "equites" /* Equites */,
+  ["viking" /* Viking */]: "bearRider" /* BearRider */
+};
 var CIV_UNIT_MODIFIERS = {
   ["baTu" /* BaTu */]: {
-    ["swordsman" /* Swordsman */]: { attack: 1.1, speed: 1.05, name: "Bất Tử" },
+    ["swordsman" /* Swordsman */]: { attack: 1.1, speed: 1.05, name: "Cấm Quân" },
     ["scout" /* Scout */]: { speed: 1.1, name: "Kỵ Sĩ Sa Mạc" },
     ["knight" /* Knight */]: { attack: 1.2, hp: 1.15, name: "Kỵ Binh Nặng" },
     ["heroZarathustra" /* HeroZarathustra */]: { attack: 1.12, hp: 0.93, range: 1.05, name: "\uD83D\uDD25 Zarathustra" }
@@ -414,7 +466,15 @@ var BUILDING_DATA = {
     cost: { wood: 175, gold: 50 },
     size: [4, 4],
     hp: 1200,
-    trainable: ["scout" /* Scout */, "knight" /* Knight */],
+    trainable: [
+      "scout" /* Scout */,
+      "knight" /* Knight */,
+      "warElephant" /* WarElephant */,
+      "fireLancer" /* FireLancer */,
+      "yabusame" /* Yabusame */,
+      "equites" /* Equites */,
+      "bearRider" /* BearRider */
+    ],
     ageRequired: 2
   },
   ["tower" /* Tower */]: {
@@ -461,21 +521,26 @@ var TOWER_ATTACK_DATA = [
 ];
 var UNIT_DATA = {
   ["villager" /* Villager */]: { name: "Dân", cost: { food: 50 }, hp: 25, speed: 90, attack: 3, range: 24, attackSpeed: 2, sight: 6, trainTime: 25, ageRequired: 1 },
-  ["spearman" /* Spearman */]: { name: "Lính Giáo", cost: { food: 35, wood: 25 }, hp: 60, speed: 80, attack: 8, range: 32, attackSpeed: 1.4, sight: 7, trainTime: 20, ageRequired: 1 },
-  ["archer" /* Archer */]: { name: "Cung Thủ", cost: { food: 25, gold: 45 }, hp: 35, speed: 80, attack: 5, range: 120, attackSpeed: 1.6, sight: 9, trainTime: 30, ageRequired: 2 },
+  ["spearman" /* Spearman */]: { name: "Lính Giáo", cost: { food: 35, wood: 25 }, hp: 60, speed: 80, attack: 8, range: 32, attackSpeed: 1.4, sight: 10, trainTime: 20, ageRequired: 1 },
+  ["archer" /* Archer */]: { name: "Cung Thủ", cost: { food: 25, gold: 45 }, hp: 35, speed: 80, attack: 5, range: 120, attackSpeed: 1.6, sight: 10, trainTime: 30, ageRequired: 2 },
   ["scout" /* Scout */]: { name: "Trinh Sát", cost: { food: 80 }, hp: 75, speed: 120, attack: 4, range: 30, attackSpeed: 1, sight: 12, trainTime: 30, ageRequired: 1 },
-  ["swordsman" /* Swordsman */]: { name: "Kiếm Sĩ", cost: { food: 60, gold: 30 }, hp: 80, speed: 70, attack: 12, range: 28, attackSpeed: 1.2, sight: 6, trainTime: 25, ageRequired: 2 },
-  ["knight" /* Knight */]: { name: "Kỵ Sĩ", cost: { food: 60, gold: 75 }, hp: 120, speed: 140, attack: 14, range: 35, attackSpeed: 1.8, sight: 8, trainTime: 35, ageRequired: 3 },
+  ["swordsman" /* Swordsman */]: { name: "Kiếm Sĩ", cost: { food: 60, gold: 30 }, hp: 80, speed: 70, attack: 12, range: 28, attackSpeed: 1.2, sight: 10, trainTime: 25, ageRequired: 2 },
+  ["knight" /* Knight */]: { name: "Kỵ Sĩ", cost: { food: 60, gold: 75 }, hp: 120, speed: 140, attack: 14, range: 35, attackSpeed: 1.8, sight: 10, trainTime: 35, ageRequired: 3 },
   ["heroSpartacus" /* HeroSpartacus */]: { name: "\uD83D\uDDE1️ Spartacus", cost: { gold: 250 }, hp: 280, speed: 100, attack: 35, range: 38, attackSpeed: 1, sight: 10, trainTime: 55, ageRequired: 2 },
   ["heroZarathustra" /* HeroZarathustra */]: { name: "\uD83D\uDD25 Zarathustra", cost: { gold: 250 }, hp: 160, speed: 90, attack: 30, range: 180, attackSpeed: 1.2, sight: 12, trainTime: 55, ageRequired: 2 },
   ["heroHuangZhong" /* HeroQiJiguang */]: { name: "\uD83D\uDEE1️ T. Kế Quang", cost: { gold: 250 }, hp: 250, speed: 95, attack: 32, range: 45, attackSpeed: 1.1, sight: 10, trainTime: 55, ageRequired: 2 },
-  ["heroMusashi" /* HeroMusashi */]: { name: "⚔️ Musashi", cost: { gold: 250 }, hp: 200, speed: 110, attack: 40, range: 35, attackSpeed: 0.7, sight: 9, trainTime: 55, ageRequired: 2 },
+  ["heroMusashi" /* HeroMusashi */]: { name: "⚔️ Musashi", cost: { gold: 250 }, hp: 175, speed: 110, attack: 45, range: 35, attackSpeed: 0.9, sight: 9, trainTime: 55, ageRequired: 2 },
   ["heroRagnar" /* HeroRagnar */]: { name: "\uD83E\uDE93 Ragnar", cost: { gold: 250 }, hp: 240, speed: 90, attack: 35, range: 40, attackSpeed: 1.1, sight: 10, trainTime: 55, ageRequired: 2 },
-  ["immortal" /* Immortal */]: { name: "Phù Thuỷ Tối Thượng", cost: { food: 50, gold: 65 }, hp: 65, speed: 65, attack: 14, range: 220, attackSpeed: 1.8, sight: 14, trainTime: 35, ageRequired: 3 },
-  ["chuKoNu" /* ChuKoNu */]: { name: "Cẩm Y Vệ", cost: { food: 55, gold: 50 }, hp: 70, speed: 100, attack: 13, range: 28, attackSpeed: 0.8, sight: 9, trainTime: 28, ageRequired: 3 },
+  ["immortal" /* Immortal */]: { name: "Bất Tử Quân", cost: { food: 60, gold: 55 }, hp: 55, speed: 80, attack: 7, range: 120, attackSpeed: 1.3, sight: 10, trainTime: 32, ageRequired: 3 },
+  ["chuKoNu" /* ChuKoNu */]: { name: "Cẩm Y Vệ", cost: { food: 55, gold: 50 }, hp: 85, speed: 115, attack: 13, range: 28, attackSpeed: 0.8, sight: 10, trainTime: 28, ageRequired: 3 },
   ["ninja" /* Ninja */]: { name: "Ninja", cost: { food: 50, gold: 60 }, hp: 50, speed: 130, attack: 15, range: 26, attackSpeed: 0.9, sight: 10, trainTime: 32, ageRequired: 3 },
-  ["centurion" /* Centurion */]: { name: "Centurion", cost: { food: 80, gold: 50 }, hp: 150, speed: 65, attack: 10, range: 130, attackSpeed: 1.5, sight: 10, trainTime: 35, ageRequired: 3 },
-  ["ulfhednar" /* Ulfhednar */]: { name: "Chiến Binh Sói", cost: { food: 55, gold: 45 }, hp: 90, speed: 90, attack: 13, range: 28, attackSpeed: 1, sight: 7, trainTime: 30, ageRequired: 3 },
+  ["centurion" /* Centurion */]: { name: "Centurion", cost: { food: 80, gold: 50 }, hp: 135, speed: 65, attack: 10, range: 80, attackSpeed: 1.5, sight: 10, trainTime: 35, ageRequired: 3 },
+  ["ulfhednar" /* Ulfhednar */]: { name: "Chiến Binh Sói", cost: { food: 55, gold: 45 }, hp: 90, speed: 90, attack: 13, range: 28, attackSpeed: 1, sight: 10, trainTime: 30, ageRequired: 3 },
+  ["warElephant" /* WarElephant */]: { name: "\uD83D\uDC18 Voi Chiến", cost: { food: 120, gold: 80 }, hp: 300, speed: 60, attack: 18, range: 35, attackSpeed: 2.2, sight: 10, trainTime: 45, ageRequired: 3 },
+  ["fireLancer" /* FireLancer */]: { name: "\uD83C\uDF87 Hỏa Thương", cost: { food: 70, gold: 60 }, hp: 110, speed: 135, attack: 25, range: 35, attackSpeed: 1.8, sight: 10, trainTime: 35, ageRequired: 3 },
+  ["yabusame" /* Yabusame */]: { name: "\uD83C\uDFF9 Yabusame", cost: { food: 60, gold: 70 }, hp: 90, speed: 145, attack: 10, range: 140, attackSpeed: 1.2, sight: 11, trainTime: 30, ageRequired: 3 },
+  ["equites" /* Equites */]: { name: "\uD83D\uDEE1️ Equites", cost: { food: 65, gold: 60 }, hp: 130, speed: 130, attack: 12, range: 35, attackSpeed: 1.5, sight: 10, trainTime: 32, ageRequired: 3 },
+  ["bearRider" /* BearRider */]: { name: "\uD83D\uDC3B Kỵ Binh Gấu", cost: { food: 75, gold: 45 }, hp: 170, speed: 110, attack: 22, range: 30, attackSpeed: 1.4, sight: 10, trainTime: 28, ageRequired: 3 },
   ["targetDummy" /* TargetDummy */]: { name: "Hình Nhân", cost: {}, hp: 999999999, speed: 0, attack: 0, range: 0, attackSpeed: 0, sight: 4, trainTime: 1, ageRequired: 1 }
 };
 var GATHER_RATES = {
@@ -3020,8 +3085,199 @@ var HERO_SKILLS = {
 function getHeroSkills(heroType) {
   return HERO_SKILLS[heroType] ?? [];
 }
-var HERO_XP_TABLE = [0, 0, 50, 130, 250, 420, 650];
+var HERO_XP_TABLE = [0, 0, 100, 250, 500, 850, 1300];
 var HERO_MAX_LEVEL = 6;
+// src/systems/AudioSystem.ts
+class AudioSystem {
+  ctx = null;
+  initialized = false;
+  volume = 0.5;
+  sfxCache = new Map;
+  constructor() {
+    const interactionEvent = () => {
+      this.init();
+      if (this.ctx && this.ctx.state === "suspended") {
+        this.ctx.resume();
+      }
+    };
+    window.addEventListener("click", interactionEvent);
+    window.addEventListener("keydown", interactionEvent);
+  }
+  init() {
+    if (this.initialized)
+      return;
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AudioContextClass;
+      this.initialized = true;
+    } catch (e) {
+      console.error("Web Audio API not supported", e);
+    }
+  }
+  setVolume(vol) {
+    this.volume = Math.max(0, Math.min(1, vol));
+  }
+  async playSFX(url, volumeScale = 1) {
+    if (!this.ctx || this.volume === 0)
+      return;
+    let buffer = this.sfxCache.get(url);
+    if (!buffer) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok)
+          return;
+        const arrayBuffer = await response.arrayBuffer();
+        buffer = await this.ctx.decodeAudioData(arrayBuffer);
+        this.sfxCache.set(url, buffer);
+      } catch (e) {
+        console.error("Failed to load SFX:", url, e);
+        return;
+      }
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    const gain = this.ctx.createGain();
+    gain.gain.value = this.volume * volumeScale;
+    source.connect(gain);
+    gain.connect(this.ctx.destination);
+    source.start(0);
+  }
+  playExplosionSound() {
+    if (!this.ctx || this.volume === 0)
+      return;
+    const now = this.ctx.currentTime;
+    const duration = 0.5;
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.connect(oscGain);
+    oscGain.connect(this.ctx.destination);
+    osc.type = "square";
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(10, now + duration);
+    oscGain.gain.setValueAtTime(this.volume * 0.8, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+  playDeathSound() {
+    if (!this.ctx || this.volume === 0)
+      return;
+    const now = this.ctx.currentTime;
+    const duration = 0.4;
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.connect(oscGain);
+    oscGain.connect(this.ctx.destination);
+    osc.type = "square";
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(30, now + duration);
+    oscGain.gain.setValueAtTime(this.volume * 0.4, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+    osc.start(now);
+    osc.stop(now + duration);
+    const bufferSize = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0;i < bufferSize; i++) {
+      const noise = Math.random() * 2 - 1;
+      data[i] = noise * (1 - i / bufferSize);
+    }
+    const noiseSource = this.ctx.createBufferSource();
+    noiseSource.buffer = buffer;
+    const noiseFilter = this.ctx.createBiquadFilter();
+    noiseFilter.type = "lowpass";
+    noiseFilter.frequency.setValueAtTime(1000, now);
+    noiseFilter.frequency.linearRampToValueAtTime(100, now + duration);
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(this.volume * 0.5, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+    noiseSource.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(this.ctx.destination);
+    noiseSource.start(now);
+  }
+  playSpearStab() {
+    if (!this.ctx || this.volume === 0)
+      return;
+    const now = this.ctx.currentTime;
+    const duration = 0.1;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(600, now);
+    osc.frequency.exponentialRampToValueAtTime(150, now + duration);
+    gain.gain.setValueAtTime(this.volume * 0.7, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+  playArrowSound() {
+    if (!this.ctx || this.volume === 0)
+      return;
+    const now = this.ctx.currentTime;
+    const duration = 0.15;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(800, now);
+    osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+    gain.gain.setValueAtTime(this.volume * 0.8, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+  playSlashSound() {
+    if (!this.ctx || this.volume === 0)
+      return;
+    const duration = 0.15;
+    const bufferSize = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0;i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noiseSource = this.ctx.createBufferSource();
+    noiseSource.buffer = buffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 1200;
+    const peakFilter = this.ctx.createBiquadFilter();
+    peakFilter.type = "peaking";
+    peakFilter.frequency.value = 5000;
+    peakFilter.Q.value = 5;
+    peakFilter.gain.value = 10;
+    const gain = this.ctx.createGain();
+    noiseSource.connect(filter);
+    filter.connect(peakFilter);
+    peakFilter.connect(gain);
+    gain.connect(this.ctx.destination);
+    const now = this.ctx.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(this.volume * 0.8, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+    filter.frequency.setValueAtTime(4000, now);
+    filter.frequency.exponentialRampToValueAtTime(800, now + duration);
+    noiseSource.start(now);
+    const metalOsc = this.ctx.createOscillator();
+    const metalGain = this.ctx.createGain();
+    metalOsc.connect(metalGain);
+    metalGain.connect(this.ctx.destination);
+    metalOsc.type = "triangle";
+    metalOsc.frequency.setValueAtTime(6000, now);
+    metalOsc.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+    metalGain.gain.setValueAtTime(0, now);
+    metalGain.gain.linearRampToValueAtTime(this.volume * 0.6, now + 0.01);
+    metalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    metalOsc.start(now);
+    metalOsc.stop(now + 0.1);
+  }
+}
+var audioSystem = new AudioSystem;
+
 // src/entities/unit-rendering/shared.ts
 function getCivColors(unit) {
   const civ = unit.civilization;
@@ -3233,720 +3489,1840 @@ function drawVillager(unit, ctx, age, bob, moving) {
   }
 }
 
-// src/entities/unit-rendering/draw-spearman.ts
-function drawSpearman(unit, ctx, age, bob, moving) {
-  const cv = getCivColors(unit);
-  const legOffset = moving ? Math.sin(unit.animTimer * 22) * 3 : 0;
-  const lvl = unit.upgradeLevel;
-  const civ = cv.civ;
-  const armorColor = age >= 3 ? cv.bodyDark : age >= 2 ? cv.bodyMid : cv.bodyLight;
-  ctx.fillStyle = armorColor;
-  ctx.fillRect(-6, -4 + bob, 12, 14);
-  if (age >= 2) {
-    if (civ === "daiTong" /* DaiMinh */ || civ === "yamato" /* Yamato */) {
-      ctx.fillStyle = "rgba(255,255,255,0.12)";
-      for (let i = 0;i < 5; i++) {
-        ctx.fillRect(-5, -3 + bob + i * 3, 10, 1);
+// src/entities/unit-rendering/draw-elites.ts
+function drawChuKoNu(unit, ctx, age, bob, moving) {
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  ctx.save();
+  ctx.translate(0, 4);
+  let attackState = false;
+  if (unit.state === 5 /* Attacking */) {
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    if (target) {
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+      if (dist <= unit.civRange + bldgRadius + 20) {
+        attackState = true;
       }
+    }
+  }
+  const walkBob = moving ? Math.sin(bob * 0.5) * 2.5 : 0;
+  const legSwing = moving ? Math.sin(bob * 0.6) * 5 : 0;
+  let attackProgress = 0;
+  let attackRot = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+    if (attackProgress < 0.3) {
+      attackRot = -Math.PI / 1.2 * (attackProgress / 0.3);
+    } else if (attackProgress < 0.5) {
+      attackRot = -Math.PI / 1.1;
     } else {
-      ctx.fillStyle = "rgba(255,255,255,0.08)";
-      for (let i = 0;i < 4; i++) {
-        ctx.fillRect(-5, -2 + bob + i * 3, 10, 1);
-      }
+      let t = (attackProgress - 0.5) / 0.5;
+      attackRot = -Math.PI / 1.1 + (Math.PI / 1.1 + Math.PI / 3) * t;
     }
   }
-  switch (civ) {
-    case "baTu" /* BaTu */:
-      ctx.fillStyle = "#c9a84c";
-      ctx.fillRect(-6, -4 + bob, 12, 2);
-      if (age >= 3) {
-        ctx.fillRect(-6, 8 + bob, 12, 2);
-      }
-      break;
-    case "yamato" /* Yamato */:
-      if (age >= 2) {
-        ctx.fillStyle = cv.accent;
-        ctx.fillRect(-8, -5 + bob, 3, 6);
-        ctx.fillRect(5, -5 + bob, 3, 6);
-      }
-      break;
-    case "viking" /* Viking */:
-      ctx.fillStyle = "#8a7a5a";
-      ctx.fillRect(-7, -5 + bob, 14, 3);
-      break;
-    case "laMa" /* LaMa */:
-      if (age >= 2) {
-        ctx.fillStyle = "#daa520";
-        ctx.fillRect(-7, 7 + bob, 14, 3);
-        ctx.fillStyle = "#8b0000";
-        for (let i = 0;i < 4; i++) {
-          ctx.fillRect(-6 + i * 3, 10 + bob, 2, 3);
-        }
-      }
-      break;
+  if (moving && !attackState) {
+    ctx.scale(1, 1 - Math.abs(walkBob) * 0.02);
+    ctx.rotate(0.05);
   }
-  if (age >= 3 && civ !== "yamato" /* Yamato */) {
-    ctx.fillStyle = age >= 4 ? cv.accent : cv.secondary;
-    ctx.fillRect(-8, -5 + bob, 4, 7);
-    ctx.fillRect(4, -5 + bob, 4, 7);
-    if (age >= 4) {
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-8, -5 + bob, 4, 1);
-      ctx.fillRect(4, -5 + bob, 4, 1);
+  const robeBase = ctx.createLinearGradient(0, -10, 0, 15);
+  robeBase.addColorStop(0, age >= 4 ? "#4a0808" : "#730c0c");
+  robeBase.addColorStop(1, age >= 4 ? "#7c0c0c" : "#9e1a1a");
+  const goldAccent = ctx.createLinearGradient(-5, 0, 5, 0);
+  goldAccent.addColorStop(0, "#8a6608");
+  goldAccent.addColorStop(0.5, "#ffd700");
+  goldAccent.addColorStop(1, "#a67c00");
+  const steelMetal = age >= 4 ? "#fff" : "#ddd";
+  const darkLeather = "#1a1a1a";
+  const skinTone = "#d2a688";
+  ctx.save();
+  ctx.translate(-2, -4 + walkBob);
+  if (attackState) {
+    ctx.rotate(attackRot);
+  } else {
+    const reachRot = 80 * Math.PI / 180 + (moving ? Math.sin(bob * 0.6) * 0.05 : 0);
+    ctx.rotate(reachRot);
+  }
+  ctx.fillStyle = robeBase;
+  ctx.fillRect(-2, 0, 4, 8);
+  ctx.fillStyle = darkLeather;
+  ctx.fillRect(-1.5, 4, 3, 6);
+  ctx.fillStyle = goldAccent;
+  ctx.fillRect(-1.5, 4, 3, 1);
+  ctx.fillRect(-1.5, 9, 3, 1);
+  ctx.fillStyle = "#4a3320";
+  ctx.fillRect(-1.5, 10, 3, 3);
+  if (attackState) {
+    ctx.translate(0, 13);
+    ctx.fillStyle = "#3a2010";
+    ctx.fillRect(-1, 0, 2, -6);
+    ctx.fillStyle = goldAccent;
+    ctx.beginPath();
+    ctx.arc(0, -6, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-2.5, 0, 5, 1.5);
+    ctx.fillStyle = "#888";
+    ctx.beginPath();
+    ctx.moveTo(-1, 1.5);
+    ctx.lineTo(-1, 16);
+    ctx.quadraticCurveTo(0, 20, 2, 18);
+    ctx.lineTo(2, 1.5);
+    ctx.fill();
+    ctx.fillStyle = steelMetal;
+    ctx.fillRect(1, 2, 1, 15);
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-0.5, 3, 0.5, 10);
+    if (attackProgress > 0.6) {
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.moveTo(1, 15);
+      ctx.quadraticCurveTo(12, 12, 6, 2);
+      ctx.lineTo(2, 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "rgba(200, 0, 0, 0.8)";
+      ctx.beginPath();
+      ctx.arc(1.5, 12, 1.5, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
-  ctx.fillStyle = cv.skinColor;
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(1, -8 + bob, 2, 2);
-  switch (civ) {
-    case "baTu" /* BaTu */:
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#c9a84c" : "#9a8040";
-        ctx.fillRect(-5, -15 + bob, 10, 6);
-        ctx.fillStyle = age >= 4 ? "#ffd700" : "#c9a84c";
-        ctx.fillRect(-1, -19 + bob, 2, 5);
-        ctx.fillStyle = "#8a8888";
-        ctx.fillRect(-5, -10 + bob, 10, 3);
-      } else if (age >= 2) {
-        ctx.fillStyle = "#9a8040";
-        ctx.fillRect(-4, -14 + bob, 8, 5);
-        ctx.fillStyle = "#8a8888";
-        ctx.fillRect(-4, -10 + bob, 8, 2);
-      } else {
-        ctx.fillStyle = "#e0d8c0";
-        ctx.fillRect(-4, -14 + bob, 8, 4);
-      }
-      break;
-    case "daiTong" /* DaiMinh */:
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#8a2222" : "#6a3333";
-        ctx.fillRect(-5, -15 + bob, 10, 6);
-        ctx.fillRect(-7, -10 + bob, 14, 2);
-        ctx.fillStyle = "#ffd700";
-        ctx.fillRect(-1, -18 + bob, 2, 4);
-      } else if (age >= 2) {
-        ctx.fillStyle = "#6a3333";
-        ctx.fillRect(-4, -14 + bob, 8, 4);
-      } else {
-        ctx.fillStyle = "#1a1a1a";
-        ctx.fillRect(-4, -14 + bob, 8, 4);
-        ctx.fillRect(-2, -17 + bob, 4, 4);
-      }
-      break;
-    case "yamato" /* Yamato */:
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#1a1a2a" : "#2a2a3a";
-        ctx.fillRect(-6, -15 + bob, 12, 6);
-        ctx.fillStyle = age >= 4 ? "#ffd700" : "#cc9944";
-        ctx.beginPath();
-        ctx.moveTo(0, -22 + bob);
-        ctx.lineTo(-3, -15 + bob);
-        ctx.lineTo(3, -15 + bob);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = age >= 4 ? "#1a1a2a" : "#2a2a3a";
-        ctx.fillRect(-6, -10 + bob, 12, 3);
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(-6, -12 + bob, 12, 1);
-      } else if (age >= 2) {
-        ctx.fillStyle = "#2a2a2a";
-        ctx.fillRect(-5, -14 + bob, 10, 5);
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(-5, -14 + bob, 10, 1);
-      } else {
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(-4, -13 + bob, 8, 2);
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(2, -13 + bob, 2, 2);
-        ctx.fillStyle = "#1a1a1a";
-        ctx.fillRect(-4, -15 + bob, 8, 3);
-      }
-      break;
-    case "laMa" /* LaMa */:
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#6a6a68" : "#5a5a58";
-        ctx.fillRect(-5, -15 + bob, 10, 6);
-        ctx.fillRect(-6, -10 + bob, 3, 4);
-        ctx.fillRect(3, -10 + bob, 3, 4);
-        ctx.fillStyle = age >= 4 ? "#dd2222" : "#aa3333";
-        ctx.fillRect(-1, -21 + bob, 2, 8);
-        ctx.fillRect(-3, -20 + bob, 6, 2);
-        if (age >= 4) {
-          ctx.fillStyle = "#ffd700";
-          ctx.fillRect(-5, -15 + bob, 10, 1);
-        }
-      } else if (age >= 2) {
-        ctx.fillStyle = "#5a5a58";
-        ctx.fillRect(-4, -14 + bob, 8, 5);
-        ctx.fillStyle = "#333";
-        ctx.fillRect(-3, -10 + bob, 6, 1);
-      } else {
-        ctx.fillStyle = "#333";
-        ctx.fillRect(-4, -13 + bob, 8, 4);
-      }
-      break;
-    case "viking" /* Viking */:
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#5a5a58" : "#4a4a48";
-        ctx.fillRect(-5, -15 + bob, 10, 6);
-        ctx.fillStyle = "#6a6a68";
-        ctx.fillRect(0, -12 + bob, 2, 5);
-        ctx.fillRect(-4, -11 + bob, 3, 2);
-        ctx.fillRect(2, -11 + bob, 3, 2);
-        if (age >= 4) {
-          ctx.fillStyle = "#eee";
-          ctx.fillRect(-8, -17 + bob, 2, 5);
-          ctx.fillRect(6, -17 + bob, 2, 5);
-          ctx.fillRect(-9, -18 + bob, 2, 3);
-          ctx.fillRect(7, -18 + bob, 2, 3);
-        }
-      } else if (age >= 2) {
-        ctx.fillStyle = "#4a4a48";
-        ctx.fillRect(-4, -14 + bob, 8, 5);
-      } else {
-        ctx.fillStyle = "#b89050";
-        ctx.fillRect(-4, -14 + bob, 8, 4);
-        ctx.fillRect(-5, -12 + bob, 2, 4);
-      }
-      break;
-  }
-  if (age >= 3) {
-    switch (civ) {
-      case "baTu" /* BaTu */:
-        ctx.fillStyle = cv.accent;
-        ctx.beginPath();
-        ctx.arc(-8, 2 + bob, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#ffd700";
-        ctx.beginPath();
-        ctx.arc(-8, 2 + bob, 3, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      case "daiTong" /* DaiMinh */:
-        ctx.fillStyle = "#aa1111";
-        ctx.fillRect(-11, -3 + bob, 5, 14);
-        ctx.fillStyle = "#ffd700";
-        ctx.fillRect(-10, 1 + bob, 3, 3);
-        break;
-      case "yamato" /* Yamato */:
-        ctx.fillStyle = "#2a2a2a";
-        ctx.fillRect(-9, -3 + bob, 3, 8);
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(-9, -3 + bob, 3, 1);
-        break;
-      case "laMa" /* LaMa */:
-        ctx.fillStyle = "#8b0000";
-        ctx.fillRect(-11, -5 + bob, 5, 16);
-        ctx.fillStyle = "#daa520";
-        ctx.fillRect(-10, 0 + bob, 3, 4);
-        ctx.strokeStyle = "#daa520";
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(-11, -5 + bob, 5, 16);
-        break;
-      case "viking" /* Viking */:
-        ctx.fillStyle = "#6a5a3a";
-        ctx.beginPath();
-        ctx.arc(-7, 2 + bob, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#8a8a88";
-        ctx.beginPath();
-        ctx.arc(-7, 2 + bob, 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = cv.accent;
-        ctx.fillRect(-8, -1 + bob, 2, 6);
-        break;
-      default:
-        ctx.fillStyle = cv.bodyMid;
-        ctx.fillRect(-10, -4 + bob, 5, 14);
-        break;
-    }
-  } else if (age >= 2) {
-    ctx.fillStyle = cv.bodyMid;
-    ctx.fillRect(-9, -2 + bob, 4, 10);
-    ctx.fillStyle = cv.accent;
-    ctx.fillRect(-8, 1 + bob, 2, 2);
-  }
-  const spearColor = age >= 4 ? "#ddd" : age >= 3 ? "#ccc" : age >= 2 ? "#bbb" : "#aaa";
-  const handleColor = age >= 3 ? "#5a3a18" : "#8B5E3C";
-  ctx.fillStyle = handleColor;
-  ctx.fillRect(6, -8 + bob, 2, 22);
-  ctx.fillStyle = spearColor;
+  ctx.restore();
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-5 + legSwing, 6, 4.5, 11);
+  ctx.fillRect(1 - legSwing, 6, 4.5, 11);
+  ctx.fillStyle = age >= 4 ? goldAccent : "#333";
+  ctx.fillRect(-5.5 + legSwing, 10, 5.5, 6);
+  ctx.fillRect(0.5 - legSwing, 10, 5.5, 6);
+  ctx.fillStyle = "#050505";
   ctx.beginPath();
-  ctx.moveTo(6, -14 + bob);
-  ctx.lineTo(7, -8 + bob);
-  ctx.lineTo(8, -14 + bob);
-  ctx.closePath();
+  ctx.ellipse(-3 + legSwing, 18, 4.5, 2.5, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(3 - legSwing, 18, 4.5, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#eee";
+  ctx.fillRect(-6 + legSwing, 19, 5, 1);
+  ctx.fillRect(1 - legSwing, 19, 5, 1);
+  ctx.fillStyle = robeBase;
+  ctx.beginPath();
+  ctx.moveTo(-6.5, 2 + walkBob);
+  ctx.lineTo(6.5, 2 + walkBob);
+  ctx.lineTo(10, 11 + walkBob);
+  ctx.lineTo(-10, 11 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = goldAccent;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-10, 11 + walkBob);
+  ctx.lineTo(10, 11 + walkBob);
+  ctx.stroke();
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-1, 5 + walkBob, 2, 7);
+  ctx.fillStyle = robeBase;
+  ctx.fillRect(-7, -7 + walkBob, 14, 11);
   if (age >= 4) {
     ctx.fillStyle = "#ffd700";
-    ctx.fillRect(5, -8 + bob, 4, 2);
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.arc(0, -2 + walkBob, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-3, -3 + walkBob, 6, 1);
+    ctx.fillRect(-1, -4 + walkBob, 2, 4);
+    ctx.globalAlpha = 1;
   }
-  ctx.fillStyle = age >= 3 ? "#4a4a48" : "#6a5040";
-  ctx.fillRect(-5, 10, 4, 6 + legOffset);
-  ctx.fillRect(1, 10, 4, 6 - legOffset);
-  if (age >= 2) {
-    ctx.fillStyle = age >= 3 ? "#3a3a38" : "#4a3a28";
-    ctx.fillRect(-6, 14 + legOffset, 5, 3);
-    ctx.fillRect(0, 14 - legOffset, 5, 3);
+  ctx.fillStyle = darkLeather;
+  ctx.fillRect(-7.5, 2 + walkBob, 15, 3.5);
+  ctx.fillStyle = age >= 4 ? goldAccent : "#ddd";
+  ctx.fillRect(-3, 1.5 + walkBob, 6, 4.5);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-1, 2.5 + walkBob, 2, 2.5);
+  ctx.fillStyle = "#bb1111";
+  ctx.beginPath();
+  ctx.moveTo(-6, 5 + walkBob);
+  ctx.quadraticCurveTo(-8, 10 + walkBob, -5 - legSwing * 0.5, 14 + walkBob);
+  ctx.lineTo(-4 - legSwing * 0.5, 14 + walkBob);
+  ctx.lineTo(-4, 5 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = darkLeather;
+  ctx.beginPath();
+  ctx.moveTo(-8, -7 + walkBob);
+  ctx.lineTo(8, -7 + walkBob);
+  ctx.lineTo(3, 0 + walkBob);
+  ctx.lineTo(-3, 0 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = goldAccent;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.save();
+  ctx.translate(4.5, -4 + walkBob);
+  const leftArmRot = moving && !attackState ? 15 * Math.PI / 180 + Math.sin(bob * 0.8) * 0.05 : 20 * Math.PI / 180;
+  ctx.rotate(leftArmRot);
+  ctx.fillStyle = robeBase;
+  ctx.fillRect(-2, 0, 4, 8);
+  ctx.fillStyle = darkLeather;
+  ctx.fillRect(-1.5, 4, 3, 5);
+  ctx.fillStyle = goldAccent;
+  ctx.fillRect(-1.5, 4, 3, 1);
+  ctx.fillRect(-1.5, 8, 3, 1);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1, 9, 2.5, 2.5);
+  ctx.translate(0.5, 10);
+  ctx.rotate(-70 * Math.PI / 180);
+  ctx.fillStyle = "#1a0d00";
+  ctx.beginPath();
+  ctx.roundRect(-2, -5, 4, 24, 1);
+  ctx.fill();
+  ctx.fillStyle = goldAccent;
+  ctx.fillRect(-2.5, -4, 5, 2);
+  ctx.fillRect(-2.5, 14, 5, 3);
+  ctx.strokeStyle = "#d00";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-2, 2);
+  ctx.lineTo(-4, 8);
+  ctx.stroke();
+  if (!attackState) {
+    ctx.translate(0, -4);
+    ctx.fillStyle = "#3a2010";
+    ctx.fillRect(-1, -6, 2, 6);
+    ctx.fillStyle = goldAccent;
+    ctx.beginPath();
+    ctx.arc(0, -6, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 3.5, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
+  ctx.restore();
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-3.5, -9 + walkBob, 7, 2.5);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-3.5, -14 + walkBob, 7, 5);
+  if (age >= 4) {
+    ctx.fillStyle = "#1a1a1a";
+    ctx.beginPath();
+    ctx.moveTo(-4, -13 + walkBob);
+    ctx.lineTo(4, -13 + walkBob);
+    ctx.lineTo(3, -9 + walkBob);
+    ctx.lineTo(-3, -9 + walkBob);
+    ctx.fill();
+    ctx.fillStyle = goldAccent;
+    ctx.fillRect(-1.5, -10 + walkBob, 1, 1);
+    ctx.fillRect(0.5, -10 + walkBob, 1, 1);
+    ctx.fillRect(-3.5, -13 + walkBob, 7, 0.5);
+    ctx.fillStyle = "#ff1111";
+    ctx.fillRect(-2, -12 + walkBob, 1.5, 1);
+    ctx.fillRect(0.5, -12 + walkBob, 1.5, 1);
+  } else {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(-2.5, -12.5 + walkBob, 1.5, 1.5);
+    ctx.fillRect(1, -12.5 + walkBob, 1.5, 1.5);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(-2.5, -12.5 + walkBob, 0.5, 0.5);
+    ctx.fillRect(1, -12.5 + walkBob, 0.5, 0.5);
+  }
+  ctx.fillStyle = "#181614";
+  ctx.beginPath();
+  ctx.ellipse(0, -15 + walkBob, 9, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-5.5, -15 + walkBob);
+  ctx.lineTo(5.5, -15 + walkBob);
+  ctx.lineTo(0, -21 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = goldAccent;
+  ctx.beginPath();
+  ctx.arc(0, -21 + walkBob, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#e60000";
+  ctx.lineWidth = 1;
+  const sway = Math.sin(unit.animTimer * 6) * 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-5, -15 + walkBob);
+  ctx.quadraticCurveTo(-6, -10 + walkBob, -5 - sway, -6 + walkBob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(5, -15 + walkBob);
+  ctx.quadraticCurveTo(6, -10 + walkBob, 5 - sway, -6 + walkBob);
+  ctx.stroke();
+  if (age >= 4) {
+    ctx.globalAlpha = 0.12 + Math.sin(unit.animTimer * 4) * 0.04;
+    const aura = ctx.createRadialGradient(0, walkBob, 6, 0, walkBob, 20);
+    aura.addColorStop(0, "#ff0033");
+    aura.addColorStop(1, "transparent");
+    ctx.fillStyle = aura;
+    ctx.fillRect(-20, -20 + walkBob, 40, 40);
+    ctx.globalAlpha = 1;
+  }
+  if (unit.upgradeLevel > 0) {
+    ctx.fillStyle = goldAccent;
+    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++) {
+      ctx.beginPath();
+      ctx.arc(-11, 6 + walkBob - i * 4, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  ctx.restore();
+}
+function drawImmortal(unit, ctx, age, bob, moving) {
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  let attackState = false;
+  if (unit.state === 5 /* Attacking */) {
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    if (target) {
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+      if (dist <= unit.civRange + bldgRadius + 20) {
+        attackState = true;
+      }
+    }
+  }
+  const isBlocking = unit.magiCastActive || unit.passiveCooldown > 0;
+  const walkBob = moving ? Math.sin(bob * 0.5) * 2.5 : 0;
+  const legSwing = moving ? Math.sin(bob * 0.6) * 5 : 0;
+  const robeSway = moving ? Math.cos(bob * 0.3) * 3 : Math.sin(unit.animTimer * 2) * 1;
+  let attackRot = 0;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+    if (attackProgress < 0.2) {
+      let recoverT = attackProgress / 0.2;
+      attackRot = Math.PI / 4 * (1 - recoverT) + -Math.PI / 8 * recoverT;
+    } else if (attackProgress < 0.7) {
+      let windupT = (attackProgress - 0.2) / 0.5;
+      attackRot = -Math.PI / 8 * (1 - windupT) + -Math.PI / 1.1 * windupT;
+    } else {
+      let strikeT = (attackProgress - 0.7) / 0.3;
+      strikeT = strikeT * strikeT;
+      attackRot = -Math.PI / 1.1 * (1 - strikeT) + Math.PI / 3 * strikeT;
+    }
+  }
+  const goldArmorColor = ctx.createLinearGradient(-8, -5, 8, 5);
+  goldArmorColor.addColorStop(0, age >= 4 ? "#b8860b" : "#8a6608");
+  goldArmorColor.addColorStop(0.5, age >= 4 ? "#ffe55c" : "#d4af37");
+  goldArmorColor.addColorStop(1, "#b8860b");
+  const darkGold = "#5c4304";
+  const clothBase = ctx.createLinearGradient(0, -10, 0, 15);
+  clothBase.addColorStop(0, "#590a0a");
+  clothBase.addColorStop(1, "#2e0505");
+  const turbanColor = "#1a1a1a";
+  const skinTone = "#a67b5b";
+  let magicAura = 0;
+  if (unit.magiCastActive) {
+    magicAura = Math.random() * 0.5 + 0.5;
+  }
+  ctx.save();
+  ctx.translate(0, 3);
+  if (moving && !attackState) {
+    ctx.scale(1, 1 - Math.abs(walkBob) * 0.02);
+    ctx.rotate(0.08);
+  } else if (attackState) {
+    ctx.rotate(0.12);
+  }
+  if (unit.magiCastActive) {
+    ctx.globalAlpha = magicAura * 0.6;
+    const aura = ctx.createRadialGradient(0, 5, 5, 0, 5, 25);
+    aura.addColorStop(0, "#ffaa00");
+    aura.addColorStop(1, "transparent");
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.arc(0, 5, 25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = clothBase;
+  ctx.beginPath();
+  ctx.ellipse(-4 + legSwing, 12, 4.5, 6, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.ellipse(-4 + legSwing, 17, 3.5, 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = goldArmorColor;
+  ctx.fillRect(-6 + legSwing, 12, 4, 4);
+  ctx.fillStyle = clothBase;
+  ctx.beginPath();
+  ctx.moveTo(-7, 5 + walkBob);
+  ctx.quadraticCurveTo(-14 + robeSway, 10 + walkBob, -12 + robeSway, 18 + walkBob);
+  ctx.lineTo(-4 + robeSway, 18 + walkBob);
+  ctx.lineTo(8, 5 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = clothBase;
+  ctx.beginPath();
+  ctx.ellipse(4 - legSwing, 12, 4.5, 6, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.ellipse(4 - legSwing, 17, 3.5, 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = goldArmorColor;
+  ctx.fillRect(2 - legSwing, 12, 4, 4);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-7.5, -2 + walkBob, 15, 12);
+  ctx.fillStyle = goldArmorColor;
+  ctx.beginPath();
+  ctx.moveTo(-8, -6 + walkBob);
+  ctx.lineTo(8, -6 + walkBob);
+  ctx.lineTo(9.5, 6 + walkBob);
+  ctx.lineTo(0, 10 + walkBob);
+  ctx.lineTo(-9.5, 6 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = darkGold;
+  ctx.lineWidth = 0.5;
+  for (let y = -5;y <= 8; y += 2.5) {
+    ctx.beginPath();
+    for (let x = -7;x <= 7; x += 3.5) {
+      const ox = Math.abs(y % 5) === 0 ? x + 1.75 : x;
+      if (Math.abs(ox) < 9 - y * 0.2) {
+        ctx.arc(ox, y + walkBob, 1.8, 0, Math.PI);
+      }
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-8, 5 + walkBob, 16, 2.5);
+  ctx.fillStyle = darkGold;
+  ctx.fillRect(-2.5, 4.5 + walkBob, 5, 3.5);
+  ctx.fillStyle = "#d4af37";
+  ctx.fillRect(-1.5, 5.5 + walkBob, 3, 1.5);
+  ctx.fillStyle = "#8b0000";
+  ctx.beginPath();
+  ctx.moveTo(0, 7.5 + walkBob);
+  ctx.quadraticCurveTo(4, 12, 6, 17 + walkBob);
+  ctx.lineTo(2, 17 + walkBob);
+  ctx.lineTo(-1, 7.5 + walkBob);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(5, 0 + walkBob);
+  if (attackState) {
+    const liftProgress = Math.min(attackProgress * 3, 1);
+    ctx.rotate(-20 * Math.PI / 180 * liftProgress);
+    ctx.translate(-2 * liftProgress, -6 * liftProgress);
+  } else {
+    const leftArmRot = moving ? Math.sin(bob * 0.8) * 0.1 : 10 * Math.PI / 180;
+    ctx.rotate(leftArmRot);
+  }
+  ctx.fillStyle = clothBase;
+  ctx.fillRect(0, 0, 3.5, 8);
+  ctx.fillStyle = goldArmorColor;
+  ctx.fillRect(-0.5, 0, 4.5, 3);
+  ctx.fillStyle = darkGold;
+  ctx.fillRect(0.5, 5, 2.5, 3);
+  ctx.translate(1, 9);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1, 0, 2.5, 3);
+  ctx.strokeStyle = goldArmorColor;
+  ctx.lineWidth = 2.5;
+  let bowPull = 0;
+  if (attackState && attackProgress < 0.9) {
+    bowPull = Math.min(attackProgress * 10, 8);
+  }
+  ctx.beginPath();
+  ctx.moveTo(0, -18);
+  ctx.quadraticCurveTo(8, -10, 2, 0);
+  ctx.quadraticCurveTo(8, 10, 0, 18);
+  ctx.stroke();
+  ctx.strokeStyle = "#eee";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -18);
+  ctx.lineTo(-bowPull, 0);
+  ctx.lineTo(0, 18);
+  ctx.stroke();
+  if (attackState && attackProgress < 0.9) {
+    ctx.fillStyle = "#111";
+    ctx.fillRect(-bowPull, -0.5, 20 + bowPull, 1);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(-bowPull, -1.5, 3, 3);
+    ctx.fillStyle = "#888";
+    ctx.beginPath();
+    ctx.moveTo(20, -1.5);
+    ctx.lineTo(24, 0);
+    ctx.lineTo(20, 1.5);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-4, -1 + walkBob);
+  if (attackState) {
+    const pullProgress = Math.min(attackProgress * 3, 1);
+    const release = attackProgress > 0.9;
+    if (release) {
+      ctx.rotate(20 * Math.PI / 180);
+      ctx.translate(2, 4);
+    } else {
+      ctx.rotate(-45 * Math.PI / 180 * pullProgress);
+      ctx.translate(-4 * pullProgress, -4 * pullProgress);
+    }
+  } else {
+    const armRot = moving ? -Math.sin(bob * 0.6) * 0.5 : -0.1;
+    ctx.rotate(armRot);
+  }
+  ctx.fillStyle = clothBase;
+  ctx.fillRect(-2, 0, 4, 8);
+  ctx.fillStyle = goldArmorColor;
+  ctx.fillRect(-2.5, -2, 5, 4);
+  ctx.fillStyle = darkGold;
+  ctx.fillRect(-1.5, 4, 3, 4);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1, 8, 2, 2.5);
+  ctx.restore();
+  if (!attackState) {
+    ctx.save();
+    ctx.translate(-5, -5 + walkBob);
+    ctx.rotate(-45 * Math.PI / 180);
+    ctx.fillStyle = darkGold;
+    ctx.fillRect(-2, -5, 4, 18);
+    ctx.fillStyle = "#111";
+    ctx.fillRect(-2, -5, 4, 2);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(-1.5, -9, 1, 4);
+    ctx.fillRect(0.5, -8, 1, 3);
+    ctx.restore();
+  }
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-3, -10 + walkBob, 6, 4);
+  ctx.fillStyle = turbanColor;
+  ctx.beginPath();
+  ctx.arc(0, -12 + walkBob, 5.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#0a0a0a";
+  ctx.beginPath();
+  ctx.ellipse(0, -14 + walkBob, 6.5, 3.5, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#222";
+  ctx.beginPath();
+  ctx.ellipse(0, -15 + walkBob, 5.5, 3, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#d4af37";
+  ctx.beginPath();
+  ctx.arc(0, -14 + walkBob, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ff2222";
+  ctx.beginPath();
+  ctx.arc(0, -14 + walkBob, 0.8, 0, Math.PI * 2);
+  ctx.fill();
+  if (age >= 4) {
+    ctx.fillStyle = "rgba(20, 20, 20, 0.8)";
+    ctx.beginPath();
+    ctx.moveTo(-5, -10 + walkBob);
+    ctx.lineTo(5, -10 + walkBob);
+    ctx.lineTo(3, -5 + walkBob);
+    ctx.lineTo(-3, -5 + walkBob);
+    ctx.fill();
+    ctx.strokeStyle = "#777";
+    ctx.lineWidth = 0.5;
+    for (let x = -4;x <= 4; x += 1.5) {
+      ctx.beginPath();
+      ctx.moveTo(x, -10 + walkBob);
+      ctx.lineTo(x * 0.6, -5 + walkBob);
+      ctx.stroke();
+    }
+    for (let y = -9;y <= -5; y += 1.5) {
+      ctx.beginPath();
+      ctx.moveTo(-4 + (y + 10) * 0.5, y + walkBob);
+      ctx.lineTo(4 - (y + 10) * 0.5, y + walkBob);
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = "#8b0000";
+    ctx.beginPath();
+    ctx.moveTo(-5, -10 + walkBob);
+    ctx.lineTo(5, -10 + walkBob);
+    ctx.lineTo(4, -6 + walkBob);
+    ctx.lineTo(-4, -6 + walkBob);
+    ctx.fill();
+  }
+  ctx.fillStyle = unit.magiCastActive ? "#ffaa00" : "#fff";
+  ctx.fillRect(-2.5, -12 + walkBob, 1.5, 1);
+  ctx.fillRect(1.5, -12 + walkBob, 1.5, 1);
+  if (!unit.magiCastActive) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(-2, -12 + walkBob, 0.5, 0.5);
+    ctx.fillRect(2, -12 + walkBob, 0.5, 0.5);
+  } else {
+    ctx.fillStyle = "rgba(255, 170, 0, 0.5)";
+    ctx.beginPath();
+    ctx.arc(-2, -11.5 + walkBob, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(2, -11.5 + walkBob, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (unit.upgradeLevel > 0) {
+    ctx.fillStyle = goldArmorColor;
+    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++) {
+      ctx.beginPath();
+      ctx.arc(12, 4 + walkBob - i * 4, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  ctx.restore();
+}
+function drawNinja(unit, ctx, age, bob, moving) {
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  let attackState = false;
+  if (unit.state === 5 /* Attacking */) {
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    if (target) {
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+      if (dist <= unit.civRange + bldgRadius + 20) {
+        attackState = true;
+      }
+    }
+  }
+  const walkBob = moving ? Math.sin(bob * 0.5) * 2 : 0;
+  const legSwing = moving ? Math.sin(bob * 0.7) * 4.5 : 0;
+  const windSway = Math.sin(unit.animTimer * 5) * 2.5;
+  let darkBase = ctx.createLinearGradient(0, -10, 0, 15);
+  darkBase.addColorStop(0, age >= 4 ? "#050508" : "#111114");
+  darkBase.addColorStop(1, age >= 4 ? "#1a1a24" : "#222228");
+  let clothHighlight = age >= 4 ? "#252535" : "#33333d";
+  let obiColor = unit.slotColor || (age >= 4 ? "#990000" : "#881111");
+  const skinTone = "#ffcdaf";
+  let attackRot = 0;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+    if (attackProgress < 0.2) {
+      let t = attackProgress / 0.2;
+      attackRot = -Math.PI / 4 * (1 - t) + -Math.PI / 8 * t;
+    } else if (attackProgress < 0.7) {
+      let t = (attackProgress - 0.2) / 0.5;
+      attackRot = -Math.PI / 8 * (1 - t) + -Math.PI * 0.85 * t;
+    } else {
+      let t = (attackProgress - 0.7) / 0.3;
+      t = t * t;
+      attackRot = -Math.PI * 0.85 * (1 - t) + -Math.PI / 4 * t;
+    }
+  }
+  if (moving) {
+    ctx.globalAlpha = 0.15 + Math.sin(unit.animTimer * 20) * 0.05;
+    ctx.save();
+    ctx.translate(-8, 0);
+    ctx.rotate(-0.05);
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(-4, -10, 8, 20);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(-16, 0);
+    ctx.rotate(-0.1);
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(-3, -8, 6, 16);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = age >= 4 ? "#8a2be2" : "#4169e1";
+    ctx.lineWidth = 1.5;
+    for (let i = 0;i < 3; i++) {
+      ctx.beginPath();
+      const trailY = Math.random() * 20 - 5;
+      const trailLen = 10 + Math.random() * 8;
+      ctx.moveTo(-5, trailY + walkBob);
+      ctx.lineTo(-5 - trailLen, trailY + walkBob);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.save();
+  if (moving && !attackState) {
+    ctx.scale(1, 1 - Math.abs(walkBob) * 0.03);
+    ctx.rotate(0.2);
+    ctx.translate(0, 4);
+  } else if (attackState) {
+    ctx.rotate(0.15);
+    ctx.translate(0, 4);
+  } else {
+    ctx.rotate(0);
+    ctx.translate(0, 4 + Math.sin(unit.animTimer * 5) * 0.5);
+  }
+  ctx.fillStyle = obiColor;
+  ctx.save();
+  ctx.translate(-2, -12 + walkBob);
+  ctx.rotate((moving ? 0.4 : 0.1) + Math.sin(unit.animTimer * 8) * 0.3);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(-8, -3 - windSway, -14 - windSway * 2, -5 + Math.cos(unit.animTimer * 10) * 2);
+  ctx.quadraticCurveTo(-6, 2, 0, 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(0, 1);
+  ctx.quadraticCurveTo(-5, 0 - windSway, -11 - windSway * 1.5, -2 + Math.sin(unit.animTimer * 9) * 2);
+  ctx.quadraticCurveTo(-4, 3, 0, 3);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = darkBase;
+  ctx.fillRect(-5.5 + legSwing, 6, 4.5, 11);
+  ctx.fillRect(1.5 - legSwing, 6, 4.5, 11);
+  ctx.strokeStyle = "#111";
+  ctx.lineWidth = 1;
+  for (let i = 0;i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-5.5 + legSwing, 10 + i * 2);
+    ctx.lineTo(-1 + legSwing, 11.5 + i * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-1 + legSwing, 10 + i * 2);
+    ctx.lineTo(-5.5 + legSwing, 11.5 + i * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(1.5 - legSwing, 10 + i * 2);
+    ctx.lineTo(6 - legSwing, 11.5 + i * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(6 - legSwing, 10 + i * 2);
+    ctx.lineTo(1.5 - legSwing, 11.5 + i * 2);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#050505";
+  ctx.fillRect(-6.5 + legSwing, 17, 5.5, 2);
+  ctx.fillRect(0.5 - legSwing, 17, 5.5, 2);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2 + legSwing, 17, 0.5, 1);
+  ctx.fillRect(5 - legSwing, 17, 0.5, 1);
+  ctx.fillStyle = darkBase;
+  ctx.beginPath();
+  ctx.moveTo(-6.5, -6 + walkBob);
+  ctx.lineTo(6.5, -6 + walkBob);
+  ctx.lineTo(5.5, 7 + walkBob);
+  ctx.lineTo(-5.5, 7 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = clothHighlight;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-3, -6 + walkBob);
+  ctx.lineTo(1, 2 + walkBob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(3, -6 + walkBob);
+  ctx.lineTo(-1, 2 + walkBob);
+  ctx.stroke();
+  if (age >= 4) {
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-2.5, -7 + walkBob, 5, 2.5);
+    ctx.fillStyle = "#888";
+    for (let i = 0;i < 3; i++) {
+      ctx.fillRect(-2, -6.5 + i + walkBob, 4, 0.5);
+      ctx.fillRect(-1.5 + i * 1.5, -7 + walkBob, 0.5, 2);
+    }
+  }
+  ctx.fillStyle = obiColor;
+  ctx.fillRect(-6.5, 4.5 + walkBob, 13, 3.5);
+  ctx.fillStyle = "#660000";
+  ctx.fillRect(-4, 4 + walkBob, 4, 4);
+  ctx.fillRect(-4, 8 + walkBob, 2, 3);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(-6.5, 5 + walkBob, 3, 4);
+  ctx.fillRect(4.5, 5 + walkBob, 2.5, 4);
+  ctx.fillStyle = "#555";
+  ctx.fillRect(-5.5, 6 + walkBob, 1, 1);
+  ctx.save();
+  ctx.translate(4, -2 + walkBob);
+  if (attackState && attackProgress < 0.5) {
+    ctx.rotate(-Math.PI / 4);
+    ctx.translate(2, -2);
+  } else {
+    const leftRot = moving ? 20 * Math.PI / 180 + Math.sin(bob * 0.8) * 0.1 : 30 * Math.PI / 180;
+    ctx.rotate(leftRot);
+  }
+  ctx.fillStyle = darkBase;
+  ctx.fillRect(0, 0, 3.5, 8);
+  ctx.fillStyle = clothHighlight;
+  ctx.fillRect(0, 4, 3.5, 4);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(0.5, 8, 2.5, 2.5);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0.5, 8, 2.5, 1.5);
+  if (attackState && attackProgress < 0.5) {
+    ctx.fillStyle = "#eee";
+    ctx.beginPath();
+    ctx.moveTo(1.5, 10);
+    ctx.lineTo(2.5, 12);
+    ctx.lineTo(4, 12.5);
+    ctx.lineTo(2.5, 13);
+    ctx.lineTo(1.5, 15);
+    ctx.lineTo(0.5, 13);
+    ctx.lineTo(-1, 12.5);
+    ctx.lineTo(0.5, 12);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-4.5, -2 + walkBob);
+  if (attackState) {
+    ctx.rotate(attackRot);
+    ctx.translate(-4, -2);
+  } else {
+    const walkRot = moving ? -Math.sin(bob * 0.6) * 0.5 : -0.1;
+    ctx.rotate(walkRot);
+  }
+  ctx.fillStyle = darkBase;
+  ctx.fillRect(-2, 0, 3.5, 8);
+  ctx.fillStyle = clothHighlight;
+  ctx.fillRect(-2, 5, 3.5, 4);
+  ctx.strokeStyle = "#111";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(-2, 7);
+  ctx.lineTo(1.5, 7);
+  ctx.stroke();
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1.5, 9, 2.5, 2.5);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-1.5, 9, 2.5, 1.5);
+  if (attackState) {
+    ctx.translate(-1, 10);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(-1.5, -5, 2.5, 7);
+    ctx.fillStyle = "#a1a1a1";
+    ctx.beginPath();
+    ctx.moveTo(-1.5, -4);
+    ctx.lineTo(-0.25, -3);
+    ctx.lineTo(1, -4);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-1.5, -2);
+    ctx.lineTo(-0.25, -1);
+    ctx.lineTo(1, -2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-1.5, 0);
+    ctx.lineTo(-0.25, 1);
+    ctx.lineTo(1, 0);
+    ctx.fill();
+    ctx.fillStyle = "#444";
+    ctx.fillRect(-2, -6, 3.5, 1.5);
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(-3, 2, 5.5, 2);
+    const bladeColor = ctx.createLinearGradient(-1, 0, 1, 0);
+    bladeColor.addColorStop(0, "#555");
+    bladeColor.addColorStop(0.5, "#eee");
+    bladeColor.addColorStop(1, "#888");
+    ctx.fillStyle = bladeColor;
+    ctx.beginPath();
+    ctx.moveTo(-1.5, 4);
+    ctx.lineTo(-1.5, 16);
+    ctx.lineTo(1, 14);
+    ctx.lineTo(1, 4);
+    ctx.fill();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, 4);
+    for (let i = 5;i < 14; i += 2) {
+      ctx.lineTo(0.5, i);
+      ctx.lineTo(-0.5, i + 1);
+    }
+    ctx.stroke();
+    if (age >= 4) {
+      ctx.shadowColor = "#8a2be2";
+      ctx.shadowBlur = 5 + Math.sin(unit.animTimer * 10) * 3;
+      ctx.strokeStyle = "#d8b2ff";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(1, 4);
+      ctx.lineTo(1, 14);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(-1.5, 4);
+    ctx.lineTo(-1.5, 16);
+    ctx.lineTo(0.5, 16);
+    ctx.fill();
+    if (attackProgress > 0.5) {
+      ctx.fillStyle = "#fff";
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(1, 14);
+      ctx.lineTo(8, 12);
+      ctx.lineTo(1, 6);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#990000";
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath();
+      ctx.arc(-0.5, 12, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(0, -4 + walkBob);
+  ctx.rotate(Math.PI / 3.5);
+  ctx.fillStyle = "#050505";
+  ctx.beginPath();
+  ctx.roundRect(-2, -8, 4, 30, 1.5);
+  ctx.fill();
+  ctx.fillStyle = obiColor;
+  ctx.fillRect(-2, -5, 4, 1.5);
+  ctx.fillRect(-2, 3, 4, 1.5);
+  ctx.fillStyle = "#333";
+  ctx.fillRect(-2, 21, 4, 1.5);
+  if (!attackState) {
+    ctx.translate(0, -8);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(-1.5, -8, 3, 8);
+    ctx.fillStyle = "#a1a1a1";
+    ctx.beginPath();
+    ctx.moveTo(-1.5, -6);
+    ctx.lineTo(0, -5);
+    ctx.lineTo(1.5, -6);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-1.5, -4);
+    ctx.lineTo(0, -3);
+    ctx.lineTo(1.5, -4);
+    ctx.fill();
+    ctx.fillStyle = "#444";
+    ctx.fillRect(-2, -9, 4, 1.5);
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(-3, -1, 6, 1.5);
+  }
+  ctx.restore();
+  ctx.fillStyle = darkBase;
+  ctx.beginPath();
+  ctx.arc(0, -12 + walkBob, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-2, -16 + walkBob);
+  ctx.lineTo(1, -16 + walkBob);
+  ctx.lineTo(0, -12 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-3, -13 + walkBob, 7, 3);
+  ctx.fillStyle = clothHighlight;
+  ctx.fillRect(-4, -10 + walkBob, 9, 5);
+  ctx.beginPath();
+  ctx.moveTo(-4, -10 + walkBob);
+  ctx.lineTo(-1, -12 + walkBob);
+  ctx.lineTo(5, -10 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(-2, -12 + walkBob, 2, 1);
+  ctx.fillRect(2, -12 + walkBob, 2, 1);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-1, -12 + walkBob, 1, 1);
+  ctx.fillRect(2, -12 + walkBob, 1, 1);
+  if (age >= 4) {
+    ctx.globalAlpha = 0.6 + Math.sin(unit.animTimer * 10) * 0.4;
+    ctx.fillStyle = "#ff1133";
+    ctx.fillRect(-1.5, -12 + walkBob, 1.5, 1.5);
+    ctx.fillRect(2.5, -12 + walkBob, 1.5, 1.5);
+    if (moving) {
+      ctx.beginPath();
+      ctx.moveTo(-1, -11.5 + walkBob);
+      ctx.quadraticCurveTo(-6, -12 + walkBob, -10 - Math.random() * 4, -13 + walkBob);
+      ctx.lineTo(-1, -10.5 + walkBob);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (unit.upgradeLevel > 0) {
+    ctx.fillStyle = "#6600cc";
+    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++)
+      ctx.fillRect(-9, 4 + walkBob - i * 3, 2, 2);
+  }
+  ctx.restore();
+  ctx.restore();
+}
+function drawCenturion(unit, ctx, age, bob, moving) {
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  const attackState = unit.state === 5 /* Attacking */;
+  const walkBob = moving ? Math.sin(bob * 0.5) * 2 : 0;
+  const legSwing = moving ? Math.sin(bob * 0.6) * 5 : 0;
+  let attackRot = 0;
+  let attackProgress = 0;
+  let attackThrust = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+  }
+  let isRangedThrow = false;
+  let isMeleeThrust = false;
+  if (unit.centurionMode === "spear") {
+    const cd = unit.centurionPilumCooldown;
+    isRangedThrow = cd > 0 && cd < 3 && Boolean(unit.attackTarget && Math.hypot(unit.attackTarget.x - unit.x, unit.attackTarget.y - unit.y) > 40 || unit.attackBuildingTarget && Math.hypot(unit.attackBuildingTarget.x - unit.x, unit.attackBuildingTarget.y - unit.y) > 40);
+    isMeleeThrust = attackState && !isRangedThrow;
+  }
+  if (isRangedThrow) {
+    const cd = unit.centurionPilumCooldown;
+    if (cd > 0.15) {
+      const prepProgress = 1 - (cd - 0.15) / 0.85;
+      attackRot = -Math.PI / 6 - prepProgress * (Math.PI / 3);
+    } else {
+      const swingProgress = cd <= 0 ? 1 : 1 - cd / 0.15;
+      attackRot = -Math.PI / 2 + swingProgress * Math.PI;
+    }
+  } else if (isMeleeThrust) {
+    if (attackProgress < 0.3) {
+      let t = attackProgress / 0.3;
+      attackRot = Math.PI / 2.5;
+      attackThrust = 3 * t;
+    } else if (attackProgress < 0.6) {
+      let t = (attackProgress - 0.3) / 0.3;
+      t = 1 - Math.pow(1 - t, 3);
+      attackRot = Math.PI / 2.5 - 0.1 * t;
+      attackThrust = 3 - 38 * t;
+    } else {
+      let t = (attackProgress - 0.6) / 0.4;
+      attackRot = (Math.PI / 2.5 - 0.1) * (1 - t) + Math.PI / 3.5 * t;
+      attackThrust = -35 * (1 - t);
+    }
+  } else if (unit.centurionMode === "sword") {
+    if (attackState) {
+      if (attackProgress < 0.2) {
+        let t = attackProgress / 0.2;
+        attackRot = Math.PI / 4 * (1 - t) + -Math.PI / 10 * t;
+      } else if (attackProgress < 0.6) {
+        let t = (attackProgress - 0.2) / 0.4;
+        attackRot = -Math.PI / 10 * (1 - t) + -Math.PI / 1.5 * t;
+      } else {
+        let t = (attackProgress - 0.6) / 0.4;
+        t = t * t;
+        attackRot = -Math.PI / 1.5 * (1 - t) + Math.PI / 6 * t;
+      }
+    }
+  }
+  const ironColor = "#8899aa";
+  const brassColor = age >= 4 ? "#ffd700" : "#b8860b";
+  const darkRed = "#8b0000";
+  const brightRed = "#cc0000";
+  const skinTone = "#d29676";
+  const leather = "#5a3a1a";
+  ctx.save();
+  ctx.translate(0, 4);
+  if (moving && !attackState) {
+    ctx.rotate(0.05);
+  }
+  if (age >= 3) {
+    ctx.fillStyle = darkRed;
+    const capeWave = moving ? Math.sin(bob * 0.8) * 3 : 0;
+    ctx.beginPath();
+    ctx.moveTo(-5, -6 + walkBob);
+    ctx.quadraticCurveTo(-15, 0, -12 + capeWave, 16 + walkBob);
+    ctx.lineTo(-6 + capeWave, 18 + walkBob);
+    ctx.lineTo(2, 6 + walkBob);
+    ctx.fill();
+  }
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-5 + legSwing, 8, 4.5, 9);
+  ctx.fillRect(1 - legSwing, 8, 4.5, 9);
+  if (age >= 4) {
+    ctx.fillStyle = brassColor;
+    ctx.fillRect(-5.5 + legSwing, 10, 5.5, 6);
+    ctx.fillRect(0.5 - legSwing, 10, 5.5, 6);
+  } else {
+    ctx.fillStyle = skinTone;
+    ctx.fillRect(-4.5 + legSwing, 10, 3.5, 6);
+    ctx.fillRect(1.5 - legSwing, 10, 3.5, 6);
+  }
+  ctx.fillStyle = "#4a2f1d";
+  ctx.fillRect(-5.5 + legSwing, 17, 5.5, 2);
+  ctx.fillRect(0.5 - legSwing, 17, 5.5, 2);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-4.5 + legSwing, 17.5, 1, 1);
+  ctx.fillRect(2.5 - legSwing, 17.5, 1, 1);
+  ctx.fillStyle = darkRed;
+  ctx.fillRect(-6, 2 + walkBob, 12, 6);
+  ctx.fillStyle = leather;
+  for (let x = -5;x <= 5; x += 3) {
+    ctx.fillRect(x, 4 + walkBob, 2, 6);
+    ctx.fillStyle = brassColor;
+    ctx.fillRect(x, 8 + walkBob, 2, 1);
+    ctx.fillStyle = leather;
+  }
+  ctx.fillStyle = darkRed;
+  ctx.fillRect(-6.5, -6 + walkBob, 13, 10);
+  ctx.fillStyle = ironColor;
+  ctx.fillRect(-7, -5 + walkBob, 14, 9);
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  for (let y = -4;y <= 3; y += 2) {
+    ctx.fillRect(-7, y + walkBob, 14, 0.5);
+  }
+  ctx.fillStyle = leather;
+  ctx.fillRect(-7.5, 2 + walkBob, 15, 3);
+  ctx.fillStyle = brassColor;
+  ctx.fillRect(-2, 1.5 + walkBob, 4, 4);
+  for (let x = -2;x <= 2; x += 2) {
+    ctx.fillRect(x, 5 + walkBob, 1, 5);
+    ctx.beginPath();
+    ctx.arc(x + 0.5, 10 + walkBob, 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.save();
+  ctx.translate(5, -2 + walkBob);
+  if (unit.centurionShielding) {
+    ctx.translate(-2, 0);
+  } else {
+    const shieldBob = moving ? Math.sin(bob * 0.8) * 1 : 0;
+    ctx.translate(0, shieldBob);
+  }
+  ctx.fillStyle = brightRed;
+  if (unit.slotColor) {
+    ctx.fillStyle = unit.slotColor;
+  }
+  ctx.beginPath();
+  ctx.roundRect(-4, -14, 12, 30, 2);
+  ctx.fill();
+  ctx.strokeStyle = brassColor;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(-4, -14, 12, 30, 2);
+  ctx.stroke();
+  ctx.fillStyle = ironColor;
+  ctx.fillRect(-1, -2, 6, 6);
+  ctx.fillStyle = brassColor;
+  ctx.beginPath();
+  ctx.arc(2, 1, 2, 0, Math.PI * 2);
+  ctx.fill();
+  if (age >= 3) {
+    ctx.beginPath();
+    ctx.moveTo(-1, 1);
+    ctx.lineTo(-3, -4);
+    ctx.lineTo(-3, -8);
+    ctx.lineTo(-1, -4);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-1, 1);
+    ctx.lineTo(-3, 6);
+    ctx.lineTo(-3, 10);
+    ctx.lineTo(-1, 6);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(5, 1);
+    ctx.lineTo(7, -4);
+    ctx.lineTo(7, -8);
+    ctx.lineTo(5, -4);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(5, 1);
+    ctx.lineTo(7, 6);
+    ctx.lineTo(7, 10);
+    ctx.lineTo(5, 6);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(2, -2);
+    ctx.lineTo(1, -10);
+    ctx.lineTo(3, -12);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(2, 4);
+    ctx.lineTo(3, 12);
+    ctx.lineTo(1, 14);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-6, -3 + walkBob);
+  let currentRot = moving && !attackState ? -Math.sin(bob * 0.6) * 0.2 : 0;
+  if (attackState || isRangedThrow) {
+    currentRot = attackRot;
+  } else if (unit.centurionMode === "spear") {
+    currentRot = Math.PI / 4;
+  }
+  ctx.rotate(currentRot);
+  ctx.fillStyle = ironColor;
+  ctx.fillRect(-3, -3, 6, 5);
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(-3, -1, 6, 0.5);
+  ctx.fillRect(-3, 1, 6, 0.5);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2, 2, 4, 7);
+  ctx.fillStyle = leather;
+  ctx.fillRect(-2.5, 5, 5, 4);
+  ctx.fillStyle = brassColor;
+  ctx.fillRect(-2.5, 6, 5, 1);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1.5, 9, 3, 3);
+  if (unit.centurionMode === "spear") {
+    if (unit.centurionPilumCooldown <= 1.5 || !isRangedThrow) {
+      ctx.translate(0, 10 + attackThrust);
+      if (isRangedThrow && attackState) {
+        ctx.translate(0, -10);
+      }
+      ctx.fillStyle = "#5a3020";
+      ctx.fillRect(-1, -12, 2, 24);
+      ctx.fillStyle = ironColor;
+      ctx.fillRect(-0.5, -28, 1, 16);
+      ctx.beginPath();
+      ctx.moveTo(0, -32);
+      ctx.lineTo(-1.5, -28);
+      ctx.lineTo(1.5, -28);
+      ctx.fill();
+      ctx.fillStyle = "#444";
+      ctx.beginPath();
+      ctx.moveTo(-2, -12);
+      ctx.lineTo(2, -12);
+      ctx.lineTo(1, -9);
+      ctx.lineTo(-1, -9);
+      ctx.fill();
+    }
+  } else {
+    ctx.translate(0, 11);
+    ctx.fillStyle = "#3a2010";
+    ctx.fillRect(-1.5, -3, 3, -4);
+    ctx.fillStyle = brassColor;
+    ctx.beginPath();
+    ctx.arc(0, -7, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, -3, 4, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = ironColor;
+    ctx.beginPath();
+    ctx.moveTo(-2, -1);
+    ctx.lineTo(-1.5, 12);
+    ctx.lineTo(0, 16);
+    ctx.lineTo(1.5, 12);
+    ctx.lineTo(2, -1);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -1);
+    ctx.lineTo(0, 16);
+    ctx.lineTo(-1.5, 12);
+    ctx.lineTo(-2, -1);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    if (attackState && attackProgress > 0.6) {
+      ctx.fillStyle = "#fff";
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(0, 16);
+      ctx.quadraticCurveTo(8, 12, 4, -2);
+      ctx.lineTo(-2, -1);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "rgba(200, 0, 0, 0.7)";
+      ctx.beginPath();
+      ctx.arc(0, 14, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-3, -11 + walkBob, 6, 6);
+  ctx.fillStyle = ironColor;
+  ctx.beginPath();
+  ctx.arc(0, -12 + walkBob, 5.5, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(-6, -12 + walkBob, 12, 3);
+  ctx.fillStyle = brassColor;
+  ctx.fillRect(-6.5, -11 + walkBob, 13, 1.5);
+  ctx.fillRect(-4, -13 + walkBob, 8, 1);
+  ctx.fillStyle = ironColor;
+  ctx.beginPath();
+  ctx.moveTo(-5.5, -9 + walkBob);
+  ctx.lineTo(-3.5, -4 + walkBob);
+  ctx.lineTo(-2.5, -4 + walkBob);
+  ctx.lineTo(-2.5, -9 + walkBob);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(5.5, -9 + walkBob);
+  ctx.lineTo(3.5, -4 + walkBob);
+  ctx.lineTo(2.5, -4 + walkBob);
+  ctx.lineTo(2.5, -9 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-2, -9 + walkBob, 1, 1);
+  ctx.fillRect(1, -9 + walkBob, 1, 1);
+  ctx.save();
+  ctx.translate(0, -17 + walkBob);
+  ctx.fillStyle = brassColor;
+  ctx.fillRect(-1.5, 0, 3, 3);
+  const plumeGradient = ctx.createLinearGradient(-10, 0, 10, 0);
+  plumeGradient.addColorStop(0, "#7a0000");
+  plumeGradient.addColorStop(0.5, brightRed);
+  plumeGradient.addColorStop(1, "#7a0000");
+  ctx.fillStyle = plumeGradient;
+  ctx.beginPath();
+  ctx.moveTo(-9, 0);
+  ctx.quadraticCurveTo(-12, -8, -6, -10);
+  ctx.quadraticCurveTo(0, -12, 6, -10);
+  ctx.quadraticCurveTo(12, -8, 9, 0);
+  ctx.quadraticCurveTo(6, -2, 0, -2);
+  ctx.quadraticCurveTo(-6, -2, -9, 0);
+  ctx.fill();
+  ctx.strokeStyle = "#550000";
+  ctx.lineWidth = 0.5;
+  for (let c = -8;c <= 8; c += 2) {
+    ctx.beginPath();
+    ctx.moveTo(c, -2);
+    ctx.lineTo(c * 1.2, -9);
+    ctx.stroke();
+  }
+  ctx.restore();
+  if (typeof unit.centurionMeleeHits === "number" && unit.centurionMeleeHits > 0) {
+    ctx.fillStyle = unit.centurionMeleeHits >= 3 ? "#ff2222" : "#ffaa00";
+    ctx.shadowColor = ctx.fillStyle;
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.arc(-14, -20 + bob, 3 + unit.centurionMeleeHits, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  if (age >= 4) {
+    ctx.globalAlpha = 0.05 + Math.sin(unit.animTimer * 3) * 0.03;
+    ctx.fillStyle = "#ff3333";
+    ctx.beginPath();
+    ctx.arc(0, 0 + bob, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  if (unit.upgradeLevel > 0) {
+    ctx.fillStyle = brassColor;
+    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++) {
+      ctx.beginPath();
+      ctx.arc(12, 6 + bob - i * 4, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  ctx.restore();
+}
+function drawUlfhednar(unit, ctx, age, bob, moving) {
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  let attackState = false;
+  if (unit.state === 5 /* Attacking */) {
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    if (target) {
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+      if (dist <= unit.civRange + bldgRadius + 20) {
+        attackState = true;
+      }
+    }
+  }
+  const legOffset = moving ? Math.sin(unit.animTimer * 22) * 5 : 0;
+  const breatheSway = Math.sin(unit.animTimer * 5) * 1.5;
+  const rage = unit.ulfhednarRageActive;
+  let bloodHue = rage ? "#ff0000" : "#880000";
+  let tattooColor = rage ? ctx.createLinearGradient(0, -5, 0, 5) : "#1a4e6e";
+  if (rage) {
+    tattooColor.addColorStop(0, "#00ffff");
+    tattooColor.addColorStop(1, "#0088ff");
+  }
+  const skinColor = "#c28359";
+  const shadowSkin = "#8f5a38";
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+  }
+  let bodyTilt = moving ? 0.25 : 0.05;
+  if (attackState) {
+    if (attackProgress < 0.2)
+      bodyTilt = 0.05;
+    else if (attackProgress < 0.5)
+      bodyTilt = 0.4;
+    else if (attackProgress < 0.7)
+      bodyTilt = 0.2;
+    else
+      bodyTilt = 0.5;
+  }
+  ctx.save();
+  ctx.translate(0, 16 + bob);
+  ctx.rotate(bodyTilt);
+  ctx.translate(0, -(16 + bob));
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-5.5, 10 + bob, 5, 8 + legOffset);
+  ctx.fillRect(1.5, 10 + bob, 5, 8 - legOffset);
+  ctx.fillStyle = shadowSkin;
+  ctx.beginPath();
+  ctx.ellipse(-3, 13 + bob + legOffset, 1.5, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(4, 13 + bob - legOffset, 1.5, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#3a2a1a";
+  ctx.fillRect(-5.5, 12 + bob + legOffset, 5.5, 5);
+  ctx.fillRect(1.5, 12 + bob - legOffset, 5.5, 5);
+  ctx.fillStyle = "#661111";
+  ctx.globalAlpha = 0.5;
+  ctx.fillRect(-5.5, 12 + bob + legOffset, 5.5, 2);
+  ctx.fillRect(1.5, 12 + bob - legOffset, 5.5, 2);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "#221100";
+  ctx.lineWidth = 1;
+  for (let i = 0;i < 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-5.5, 12.5 + bob + legOffset + i * 1.5);
+    ctx.lineTo(0, 13.5 + bob + legOffset + i * 1.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(1.5, 12.5 + bob - legOffset + i * 1.5);
+    ctx.lineTo(7, 13.5 + bob - legOffset + i * 1.5);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#22140a";
+  ctx.beginPath();
+  ctx.roundRect(-6.5, 18 + bob + legOffset, 7, 3, 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(0.5, 18 + bob - legOffset, 7, 3, 2);
+  ctx.fill();
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.moveTo(-7.5, -4 + bob - breatheSway);
+  ctx.lineTo(7.5, -4 + bob - breatheSway);
+  ctx.lineTo(6, 4 + bob);
+  ctx.lineTo(7, 10 + bob);
+  ctx.lineTo(-7, 10 + bob);
+  ctx.lineTo(-6, 4 + bob);
+  ctx.fill();
+  ctx.fillStyle = shadowSkin;
+  ctx.beginPath();
+  ctx.ellipse(-3.5, -1 + bob - breatheSway / 2, 3, 4, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(3.5, -1 + bob - breatheSway / 2, 3, 4, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  for (let r = 0;r < 4; r++) {
+    ctx.fillRect(-4.5, 2 + bob + r * 1.5, 4, 1);
+    ctx.fillRect(0.5, 2 + bob + r * 1.5, 4, 1);
+  }
+  ctx.fillRect(-0.5, -3 + bob, 1, 10);
+  ctx.fillStyle = "#5c3a21";
+  ctx.beginPath();
+  ctx.arc(0, 8 + bob, 0.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#a6594d";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-6, -2 + bob);
+  ctx.lineTo(2, 4 + bob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-5, -1 + bob);
+  ctx.lineTo(1, 5 + bob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(5, 0 + bob);
+  ctx.lineTo(7, 2 + bob);
+  ctx.stroke();
+  ctx.strokeStyle = tattooColor;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = rage ? 0.9 + Math.sin(unit.animTimer * 15) * 0.1 : 0.7;
+  ctx.beginPath();
+  ctx.moveTo(-6.5, -4 + bob);
+  ctx.quadraticCurveTo(-2, 0 + bob, -5, 5 + bob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(-5, 0 + bob, 1.5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(6.5, -4 + bob);
+  ctx.quadraticCurveTo(2, 0 + bob, 5, 5 + bob);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#2b1c11";
+  ctx.fillRect(-7.5, 10 + bob, 15, 3.5);
+  ctx.fillStyle = age >= 4 ? "#d4af37" : "#777";
+  ctx.beginPath();
+  ctx.arc(0, 11.5 + bob, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.arc(0, 11.5 + bob, 1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#3a2a1a";
+  ctx.beginPath();
+  ctx.moveTo(-7, 13 + bob);
+  ctx.lineTo(7, 13 + bob);
+  ctx.lineTo(10, 18 + bob);
+  ctx.lineTo(4, 16 + bob);
+  ctx.lineTo(0, 19 + bob);
+  ctx.lineTo(-4, 16 + bob);
+  ctx.lineTo(-10, 18 + bob);
+  ctx.fill();
+  const peltGradient = ctx.createLinearGradient(0, 13 + bob, 0, 18 + bob);
+  peltGradient.addColorStop(0, "#665544");
+  peltGradient.addColorStop(1, "#332a22");
+  ctx.fillStyle = peltGradient;
+  ctx.beginPath();
+  ctx.moveTo(-5, 13 + bob);
+  ctx.lineTo(5, 13 + bob);
+  ctx.lineTo(6, 17 + bob);
+  ctx.lineTo(1, 15 + bob);
+  ctx.lineTo(-1, 18 + bob);
+  ctx.lineTo(-6, 17 + bob);
+  ctx.fill();
+  ctx.fillStyle = "#221a11";
+  ctx.beginPath();
+  ctx.moveTo(-9, -4 + bob);
+  ctx.quadraticCurveTo(-12, 5 + bob, -8, 8 + bob);
+  ctx.fill();
+  const peltSway = moving ? Math.cos(unit.animTimer * 12) * 2 : 0;
+  ctx.save();
+  ctx.translate(0, -9 + bob - breatheSway * 0.5);
+  ctx.rotate(-0.15 + (moving ? 0.05 : 0));
+  ctx.fillStyle = "#4a3d33";
+  ctx.beginPath();
+  ctx.moveTo(-5, -3);
+  ctx.quadraticCurveTo(-14, 3 - peltSway, -13, 8 + peltSway);
+  ctx.quadraticCurveTo(-8, 3, -4, 4);
+  ctx.fill();
+  ctx.fillStyle = "#5c4d40";
+  ctx.beginPath();
+  ctx.arc(0, -6, 6, Math.PI, Math.PI * 2);
+  ctx.lineTo(6.5, -1);
+  ctx.lineTo(-6.5, -1);
+  ctx.fill();
+  ctx.fillStyle = "#3d3329";
+  ctx.beginPath();
+  ctx.moveTo(-3.5, -10.5);
+  ctx.lineTo(-6.5, -16);
+  ctx.lineTo(-1, -10);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(3.5, -10.5);
+  ctx.lineTo(6.5, -16);
+  ctx.lineTo(1, -10);
+  ctx.fill();
+  ctx.fillStyle = "#0a0a0a";
+  ctx.beginPath();
+  ctx.arc(6, -2, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(2, -2);
+  ctx.lineTo(5, -4);
+  ctx.stroke();
+  ctx.fillStyle = rage ? "#ff0000" : "#882222";
+  ctx.beginPath();
+  ctx.ellipse(-2.5, -7, 1.5, 0.8, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(1.5, -7, 1.5, 0.8, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  if (rage) {
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(-2.5, -7, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(1.5, -7, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  ctx.fillStyle = "#eaddca";
+  ctx.beginPath();
+  ctx.moveTo(4, -1);
+  ctx.lineTo(4.5, 1.5);
+  ctx.lineTo(3, -1);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-4, -1);
+  ctx.lineTo(-4.5, 1.5);
+  ctx.lineTo(-3, -1);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-4, -10 + bob, 7, 5.5);
+  ctx.fillStyle = rage ? "#ff0000" : "#ffffff";
+  ctx.fillRect(-2.5, -8.5 + bob, 1.5, 1);
+  ctx.fillRect(1.5, -8.5 + bob, 1.5, 1);
+  if (!rage) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(-2, -8.5 + bob, 0.5, 0.5);
+    ctx.fillRect(2, -8.5 + bob, 0.5, 0.5);
+  }
+  ctx.fillStyle = rage ? bloodHue : "#111";
+  ctx.globalAlpha = 0.8;
+  ctx.fillRect(-4, -8 + bob, 8, 1.5);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#b84514";
+  ctx.beginPath();
+  ctx.moveTo(-5, -5 + bob);
+  ctx.lineTo(5, -5 + bob);
+  ctx.lineTo(3.5, 0 + bob);
+  ctx.lineTo(0.5, 3 + bob);
+  ctx.lineTo(-2.5, 0 + bob);
+  ctx.fill();
+  ctx.fillStyle = "#d4af37";
+  ctx.fillRect(-1.5, 0 + bob, 4, 1);
+  let leftRot = -Math.PI / 10;
+  let rightRot = -Math.PI / 10;
+  let leftTrans = { x: 0, y: 0 };
+  let rightTrans = { x: 0, y: 0 };
+  if (attackState) {
+    if (attackProgress < 0.2) {
+      let t = attackProgress / 0.2;
+      rightRot = -Math.PI / 10 * (1 - t) + -Math.PI / 1.2 * t;
+      leftRot = -Math.PI / 10;
+    } else if (attackProgress < 0.5) {
+      let t = (attackProgress - 0.2) / 0.3;
+      t = t * t;
+      rightRot = -Math.PI / 1.2 * (1 - t) + Math.PI / 4 * t;
+      rightTrans = { x: 2, y: 1 };
+      leftRot = -Math.PI / 10;
+    } else if (attackProgress < 0.7) {
+      let t = (attackProgress - 0.5) / 0.2;
+      rightRot = Math.PI / 4 * (1 - t) + -Math.PI / 8 * t;
+      leftRot = -Math.PI / 10 * (1 - t) + -Math.PI / 1.2 * t;
+      leftTrans = { x: -2, y: -2 };
+    } else {
+      let t = (attackProgress - 0.7) / 0.3;
+      t = t * t;
+      rightRot = -Math.PI / 8 * (1 - t) + -Math.PI / 10 * t;
+      leftRot = -Math.PI / 1.2 * (1 - t) + Math.PI / 4 * t;
+      leftTrans = { x: 1, y: 3 };
+    }
+  } else {
+    leftRot = moving ? Math.sin(bob * 0.6) * 0.5 : 0;
+    rightRot = moving ? -Math.sin(bob * 0.6) * 0.5 : 0;
+  }
+  ctx.save();
+  ctx.translate(5.5, -2 + bob - breatheSway);
+  ctx.rotate(leftRot);
+  ctx.translate(leftTrans.x, leftTrans.y);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(0, 0, 4, 8.5);
+  ctx.fillStyle = shadowSkin;
+  ctx.fillRect(1, 0, 1, 8.5);
+  ctx.fillStyle = "#6b5c4d";
+  ctx.fillRect(-1, 4, 5.5, 4.5);
+  ctx.fillStyle = bloodHue;
+  ctx.globalAlpha = 0.85;
+  ctx.fillRect(-1, 5, 5.5, 3);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#4a2f1d";
+  ctx.fillRect(0.5, 8.5, 3, 3);
+  if (attackState) {
+    ctx.translate(2, 10.5);
+    ctx.rotate(Math.PI / 5);
+    ctx.fillStyle = "#2b1a10";
+    ctx.fillRect(-1, -5, 2.5, 17);
+    ctx.fillStyle = "#4a2f1d";
+    for (let i = 0;i < 4; i++)
+      ctx.fillRect(-1.5, -2 + i * 3, 3.5, 1);
+    ctx.fillStyle = age >= 4 ? "#ccc" : "#888";
+    ctx.beginPath();
+    ctx.moveTo(0, -3);
+    ctx.lineTo(8, -6);
+    ctx.lineTo(10, -2);
+    ctx.lineTo(9, 6);
+    ctx.quadraticCurveTo(4, 5, 2, 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(8, -6);
+    ctx.lineTo(10, -2);
+    ctx.lineTo(9, 6);
+    ctx.lineTo(7.5, -2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = bloodHue;
+    ctx.globalAlpha = rage ? 0.9 : 0.6;
+    ctx.beginPath();
+    ctx.arc(6, -1, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(5, -4, 4, 6);
+    ctx.globalAlpha = 1;
+    if (attackProgress > 0.7) {
+      ctx.fillStyle = "#fff";
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(10, -2);
+      ctx.lineTo(20, -10);
+      ctx.lineTo(9, 6);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-5.5, -2 + bob - breatheSway);
+  ctx.rotate(rightRot);
+  ctx.translate(rightTrans.x, rightTrans.y);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-4, 0, 4.5, 9);
+  ctx.globalAlpha = rage ? 0.9 + Math.sin(unit.animTimer * 12) * 0.1 : 0.7;
+  ctx.fillStyle = tattooColor;
+  ctx.fillRect(-3.5, 1, 3, 2.5);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#6b5c4d";
+  ctx.fillRect(-4.5, 4.5, 5.5, 4.5);
+  ctx.fillStyle = bloodHue;
+  ctx.globalAlpha = 0.9;
+  ctx.fillRect(-4.5, 6, 5.5, 2.5);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#221100";
+  ctx.fillRect(-3.5, 9, 3, 3);
+  if (attackState) {
+    ctx.translate(-2, 11);
+    ctx.rotate(Math.PI / 6);
+    ctx.fillStyle = "#2b1a10";
+    ctx.fillRect(-1.5, -5, 3, 19);
+    ctx.fillStyle = "#3a1f0d";
+    ctx.fillRect(-0.5, -4, 1.5, 16);
+    ctx.fillStyle = age >= 4 ? "#d4af37" : "#555";
+    ctx.beginPath();
+    ctx.arc(0, 15, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = age >= 4 ? "#e6e6e6" : "#a0a0a0";
+    ctx.beginPath();
+    ctx.moveTo(0, -4);
+    ctx.lineTo(10, -8);
+    ctx.lineTo(12, -2);
+    ctx.lineTo(10, 8);
+    ctx.quadraticCurveTo(4, 6, 2, 1);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(10, -8);
+    ctx.lineTo(12, -2);
+    ctx.lineTo(10, 8);
+    ctx.lineTo(8.5, -2);
+    ctx.fill();
+    ctx.globalAlpha = attackState ? 0.95 : rage ? 0.8 : 0.4;
+    ctx.fillStyle = bloodHue;
+    ctx.beginPath();
+    ctx.arc(7, -2, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(8, 4, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(5, -5, 5, 5);
+    ctx.globalAlpha = 1;
+    if (rage) {
+      ctx.strokeStyle = "#55ccff";
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = "#0088ff";
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.moveTo(9, -7);
+      ctx.lineTo(6, -1);
+      ctx.lineTo(8, 4);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    if (attackProgress > 0.2 && attackProgress < 0.5) {
+      ctx.fillStyle = "#fff";
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(12, -2);
+      ctx.lineTo(24, 6);
+      ctx.lineTo(10, 8);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.restore();
+  if (!attackState) {
+    ctx.save();
+    ctx.translate(0, 5 + bob);
+    const axeWood = "#2b1a10";
+    const axeSteel = age >= 4 ? "#a0a0a0" : "#888";
+    ctx.save();
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillStyle = axeWood;
+    ctx.fillRect(-1, -8, 2, 16);
+    ctx.fillStyle = axeSteel;
+    ctx.beginPath();
+    ctx.moveTo(1, -6);
+    ctx.lineTo(8, -8);
+    ctx.lineTo(9, -2);
+    ctx.lineTo(8, 4);
+    ctx.quadraticCurveTo(4, 3, 1, 0);
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, -2);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = axeWood;
+    ctx.fillRect(-1.5, -10, 3, 20);
+    ctx.fillStyle = axeSteel;
+    ctx.beginPath();
+    ctx.moveTo(1.5, -8);
+    ctx.lineTo(10, -10);
+    ctx.lineTo(12, -4);
+    ctx.lineTo(10, 6);
+    ctx.quadraticCurveTo(5, 4, 1.5, -1);
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+  }
+  if (rage || age >= 4) {
+    const pulseSpeed = rage ? 15 : 6;
+    ctx.globalAlpha = rage ? 0.35 + Math.sin(unit.animTimer * pulseSpeed) * 0.2 : 0.15 + Math.sin(unit.animTimer * 5) * 0.08;
+    const auraT = ctx.createRadialGradient(0, bob, 6, 0, bob, 22);
+    auraT.addColorStop(0, rage ? "#ff1100" : "#bb3333");
+    auraT.addColorStop(1, "transparent");
+    ctx.fillStyle = auraT;
+    ctx.beginPath();
+    ctx.arc(0, 0 + bob, rage ? 22 : 18, 0, Math.PI * 2);
+    ctx.fill();
+    if (rage) {
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = "#ff2222";
+      for (let p = 0;p < 4; p++) {
+        const px = Math.sin(unit.animTimer * 12 + p * 2.5) * 18;
+        const py = Math.cos(unit.animTimer * 9 - p * 3) * 16;
+        ctx.beginPath();
+        ctx.arc(px, bob + py - p * 2, 1.5 + Math.random(), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (unit.upgradeLevel > 0) {
+    ctx.fillStyle = rage ? tattooColor : "#ffd700";
+    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++) {
+      ctx.beginPath();
+      ctx.arc(12, 4 + bob - i * 4.5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+// src/entities/unit-rendering/draw-swords-finish.ts
+function drawSwordsFinish(unit, ctx, age, bob, _legOff, lvl, cv) {
   if (lvl > 0) {
     ctx.fillStyle = "#ffd700";
     ctx.font = "7px sans-serif";
-    ctx.fillText("★".repeat(lvl), -lvl * 3.5, -24 + bob);
+    ctx.fillText("★".repeat(lvl), -lvl * 3.5, -25 + bob);
   }
   if (age >= 4) {
     ctx.globalAlpha = 0.08 + Math.sin(unit.animTimer * 3) * 0.04;
     ctx.fillStyle = cv.accent;
     ctx.beginPath();
-    ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2);
+    ctx.arc(0, 0 + bob, 18, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
 }
-
-// src/entities/unit-rendering/draw-archer.ts
-function drawArcher(unit, ctx, age, bob, moving) {
-  const cv = getCivColors(unit);
-  const civ = cv.civ;
-  const legOffset = moving ? Math.sin(unit.animTimer * 22) * 3 : 0;
-  const lvl = unit.upgradeLevel;
-  const legColor = age >= 3 ? cv.bodyDark : "#6a5040";
-  ctx.fillStyle = legColor;
-  ctx.fillRect(-5, 10, 4, 6 + legOffset);
-  ctx.fillRect(1, 10, 4, 6 - legOffset);
-  if (age >= 2) {
-    ctx.fillStyle = age >= 3 ? "#3a3a30" : "#4a3a28";
-    ctx.fillRect(-6, 14 + legOffset, 5, 3);
-    ctx.fillRect(0, 14 - legOffset, 5, 3);
-    if (age >= 3) {
-      ctx.fillStyle = "#2a2a22";
-      ctx.fillRect(-6, 16 + legOffset, 2, 1);
-      ctx.fillRect(0, 16 - legOffset, 2, 1);
-    }
+function drawSpearsFinish(unit, ctx, age, bob, _legOff, lvl, cv) {
+  if (lvl > 0) {
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "7px sans-serif";
+    ctx.fillText("★".repeat(lvl), -lvl * 3.5, -27 + bob);
   }
-  if (age >= 3) {
-    ctx.fillStyle = age >= 4 ? "#6a6a68" : "#5a5a56";
-    ctx.fillRect(-5, 11 + legOffset, 4, 3);
-    ctx.fillRect(1, 11 - legOffset, 4, 3);
-    ctx.fillStyle = "rgba(255,255,255,0.1)";
-    ctx.fillRect(-5, 11 + legOffset, 1, 3);
-    ctx.fillRect(1, 11 - legOffset, 1, 3);
-  }
-  ctx.fillStyle = civ === "daiTong" /* DaiMinh */ ? "#5a2a2a" : civ === "baTu" /* BaTu */ ? "#8a6a30" : age >= 4 ? "#5a4028" : "#4a3018";
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(5, -4 + bob);
-  ctx.lineTo(6, -4 + bob);
-  ctx.lineTo(-7, 8 + bob);
-  ctx.lineTo(-8, 8 + bob);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-  if (age >= 3) {
-    const capeWave = moving ? Math.sin(unit.animTimer * 16) * 1.5 : Math.sin(unit.animTimer * 2) * 0.5;
-    ctx.fillStyle = cv.bodyDark;
-    ctx.fillRect(-8, -3 + bob, 3, 18 + capeWave);
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.fillRect(-8, -3 + bob, 1, 16);
-    if (age >= 4) {
-      ctx.fillStyle = cv.bodyDark;
-      ctx.fillRect(-9, 14 + bob + capeWave, 2, 3);
-      ctx.fillRect(-7, 15 + bob + capeWave, 2, 2);
-    }
-  }
-  ctx.fillStyle = age >= 3 ? cv.bodyDark : age >= 2 ? cv.bodyMid : cv.bodyLight;
-  ctx.fillRect(-6, -4 + bob, 12, 14);
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  ctx.fillRect(-6, -4 + bob, 2, 14);
-  switch (civ) {
-    case "baTu" /* BaTu */:
-      ctx.fillStyle = "rgba(201,168,76,0.12)";
-      for (let i = 0;i < 5; i++)
-        ctx.fillRect(-5, -3 + bob + i * 3, 10, 1);
-      ctx.fillStyle = "#c9a84c";
-      ctx.fillRect(-6, -4 + bob, 12, 2);
-      ctx.fillStyle = age >= 4 ? "#e8c860" : "#c9a84c";
-      ctx.fillRect(-6, 6 + bob, 12, 2);
-      if (age >= 4) {
-        ctx.fillStyle = "#ffd700";
-        ctx.fillRect(-6, 6 + bob, 12, 1);
-      }
-      break;
-    case "daiTong" /* DaiMinh */:
-      ctx.fillStyle = "rgba(255,255,255,0.08)";
-      for (let i = 0;i < 5; i++)
-        ctx.fillRect(-5, -3 + bob + i * 3, 10, 1);
-      ctx.fillStyle = "#aa2222";
-      ctx.fillRect(-6, -4 + bob, 12, 2);
-      ctx.fillStyle = "#cc3333";
-      ctx.fillRect(-6, 7 + bob, 12, 2);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-2, 7 + bob, 4, 2);
-      break;
-    case "yamato" /* Yamato */:
-      ctx.fillStyle = "rgba(0,0,0,0.05)";
-      for (let i = 0;i < 5; i++)
-        ctx.fillRect(-5, -2 + bob + i * 3, 10, 1);
-      if (age >= 2) {
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(-6, -4 + bob, 12, 1);
-      }
-      ctx.fillStyle = age >= 3 ? "#1a1a2a" : "#2a2a3a";
-      ctx.fillRect(-6, 6 + bob, 12, 3);
-      break;
-    case "viking" /* Viking */:
-      ctx.fillStyle = "#6a5a48";
-      ctx.fillRect(-6, -4 + bob, 12, 3);
-      ctx.fillStyle = "rgba(255,255,255,0.06)";
-      ctx.fillRect(-6, -4 + bob, 12, 1);
-      ctx.fillStyle = "#5a4a38";
-      ctx.fillRect(-6, 7 + bob, 12, 2);
-      ctx.fillStyle = "#8a8a88";
-      ctx.fillRect(-1, 7 + bob, 2, 2);
-      break;
-    default:
-      ctx.fillStyle = age >= 4 ? "#6a5030" : "#5a4020";
-      ctx.fillRect(-5, 0 + bob, 2, 10);
-      ctx.fillRect(3, -3 + bob, 2, 8);
-      ctx.fillStyle = "#4a3020";
-      ctx.fillRect(-6, 7 + bob, 12, 2);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(0, 7 + bob, 2, 2);
-  }
-  if (age >= 2) {
-    switch (civ) {
-      case "baTu" /* BaTu */:
-        ctx.fillStyle = age >= 4 ? "#c9a84c" : cv.bodyMid;
-        ctx.fillRect(5, -5 + bob, 4, 6);
-        ctx.fillStyle = age >= 4 ? "#ffd700" : "#c9a84c";
-        ctx.fillRect(5, -5 + bob, 4, 1);
-        break;
-      case "daiTong" /* DaiMinh */:
-        ctx.fillStyle = age >= 4 ? "#8a2222" : cv.bodyMid;
-        ctx.fillRect(5, -5 + bob, 4, 5);
-        if (age >= 3) {
-          ctx.fillStyle = "#ffd700";
-          ctx.fillRect(5, -5 + bob, 4, 1);
-        }
-        break;
-      case "yamato" /* Yamato */:
-        ctx.fillStyle = age >= 4 ? "#1a1a2a" : cv.bodyMid;
-        ctx.fillRect(5, -6 + bob, 4, 6);
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(5, -6 + bob, 4, 1);
-        break;
-      case "viking" /* Viking */:
-        ctx.fillStyle = age >= 3 ? "#5a4a38" : "#6a5a48";
-        ctx.fillRect(5, -5 + bob, 4, 5);
-        ctx.fillStyle = "#8a7a5a";
-        ctx.fillRect(5, -5 + bob, 4, 2);
-        break;
-      default:
-        ctx.fillStyle = age >= 4 ? "#6a5a48" : "#5a4a38";
-        ctx.fillRect(5, -5 + bob, 4, 5);
-        if (age >= 4) {
-          ctx.fillStyle = "#daa520";
-          ctx.fillRect(5, -5 + bob, 4, 1);
-        }
-    }
-  }
-  ctx.fillStyle = cv.skinColor;
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(1, -8 + bob, 2, 2);
-  ctx.fillStyle = "#444";
-  ctx.fillRect(0, -10 + bob, 3, 1);
-  switch (civ) {
-    case "baTu" /* BaTu */:
-      ctx.fillStyle = age >= 4 ? "#c9a84c" : age >= 3 ? "#e0d8c0" : "#ddd";
-      ctx.fillRect(-5, -15 + bob, 10, 6);
-      ctx.fillRect(-4, -12 + bob, 8, 2);
-      ctx.fillStyle = "rgba(0,0,0,0.06)";
-      ctx.fillRect(-4, -14 + bob, 8, 1);
-      ctx.fillRect(-4, -12 + bob, 8, 1);
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#ff4444" : "#44aaff";
-        ctx.fillRect(-1, -16 + bob, 2, 2);
-        ctx.fillStyle = "#ffd700";
-        ctx.fillRect(-2, -16 + bob, 1, 2);
-        ctx.fillRect(1, -16 + bob, 1, 2);
-      }
-      break;
-    case "daiTong" /* DaiMinh */:
-      ctx.fillStyle = age >= 4 ? "#222" : age >= 3 ? "#2a2a2a" : "#333";
-      ctx.fillRect(-5, -15 + bob, 10, 5);
-      ctx.fillStyle = age >= 4 ? "#1a1a1a" : "#2a2a2a";
-      ctx.fillRect(-6, -11 + bob, 12, 2);
-      ctx.fillStyle = "#aa2222";
-      ctx.fillRect(-5, -11 + bob, 10, 1);
-      if (age >= 4) {
-        ctx.fillStyle = "#ffd700";
-        ctx.fillRect(-1, -16 + bob, 2, 2);
-      }
-      break;
-    case "yamato" /* Yamato */:
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#1a1a2a" : "#2a2a3a";
-        ctx.fillRect(-5, -15 + bob, 10, 5);
-        ctx.fillRect(-6, -11 + bob, 12, 2);
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(-5, -13 + bob, 10, 1);
-        if (age >= 4) {
-          ctx.fillStyle = "#ffd700";
-          ctx.fillRect(-1, -17 + bob, 2, 3);
-        }
-      } else {
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(-4, -12 + bob, 8, 3);
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(-4, -11 + bob, 8, 1);
-        ctx.fillStyle = "#1a1a1a";
-        ctx.fillRect(-4, -15 + bob, 8, 3);
-      }
-      break;
-    case "viking" /* Viking */:
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#4a3a28" : "#3a2a1a";
-        ctx.fillRect(-5, -15 + bob, 10, 5);
-        ctx.fillStyle = "#6a6a68";
-        ctx.fillRect(-1, -12 + bob, 2, 4);
-        ctx.fillStyle = "#4a3a28";
-        ctx.fillRect(-4, -7 + bob, 2, 2);
-        ctx.fillRect(2, -7 + bob, 2, 2);
-        if (age >= 4) {
-          ctx.fillStyle = "#8a8a88";
-          ctx.fillRect(-5, -13 + bob, 10, 1);
-        }
-      } else {
-        ctx.fillStyle = "#b89050";
-        ctx.fillRect(-4, -14 + bob, 8, 4);
-        ctx.fillRect(-5, -12 + bob, 2, 4);
-        if (age >= 2) {
-          ctx.fillStyle = "#4a3a28";
-          ctx.fillRect(-4, -14 + bob, 8, 2);
-        }
-      }
-      break;
-    default:
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#3a5a3a" : "#4a5a3a";
-        ctx.fillRect(-5, -15 + bob, 10, 6);
-        ctx.fillRect(-4, -12 + bob, 8, 2);
-        ctx.fillStyle = age >= 4 ? "#2a4a2a" : "#3a4a30";
-        ctx.fillRect(2, -17 + bob, 4, 3);
-        if (age >= 4) {
-          ctx.fillStyle = "#daa520";
-          ctx.fillRect(-5, -15 + bob, 10, 1);
-        }
-      } else {
-        ctx.fillStyle = age >= 2 ? "#4a5a3a" : "#5a6a4a";
-        ctx.fillRect(-4, -14 + bob, 8, 4);
-        ctx.fillRect(-5, -12 + bob, 10, 2);
-      }
-  }
-  if (age >= 2) {
-    switch (civ) {
-      case "baTu" /* BaTu */:
-        ctx.fillStyle = age >= 4 ? "#c9a84c" : "#aa8a3a";
-        ctx.fillRect(6, 0 + bob, 3, 6);
-        break;
-      case "yamato" /* Yamato */:
-        ctx.fillStyle = "#2a2a2a";
-        ctx.fillRect(6, 1 + bob, 3, 5);
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(6, 1 + bob, 3, 1);
-        break;
-      case "daiTong" /* DaiMinh */:
-        ctx.fillStyle = "#5a2a2a";
-        ctx.fillRect(6, 0 + bob, 3, 5);
-        break;
-      case "viking" /* Viking */:
-        ctx.fillStyle = "#5a4a38";
-        ctx.fillRect(6, 0 + bob, 3, 6);
-        ctx.fillStyle = "#7a6a4a";
-        ctx.fillRect(6, 0 + bob, 3, 1);
-        break;
-      default:
-        ctx.fillStyle = age >= 4 ? "#5a4a38" : "#4a3a28";
-        ctx.fillRect(6, 0 + bob, 3, 5);
-    }
-  }
-  switch (civ) {
-    case "baTu" /* BaTu */: {
-      const bc = age >= 4 ? "#c9a040" : "#8a6a30";
-      ctx.strokeStyle = bc;
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.arc(9, 0 + bob, 9, -Math.PI * 0.38, Math.PI * 0.38);
-      ctx.stroke();
-      ctx.fillStyle = bc;
-      ctx.fillRect(9, -8 + bob, 2, 2);
-      ctx.fillRect(9, 6 + bob, 2, 2);
-      ctx.fillStyle = age >= 4 ? "#ffd700" : "#ddc060";
-      ctx.fillRect(9, -8 + bob, 1, 1);
-      ctx.fillRect(9, 7 + bob, 1, 1);
-      break;
-    }
-    case "daiTong" /* DaiMinh */: {
-      ctx.fillStyle = age >= 4 ? "#7a2222" : "#5a3a20";
-      ctx.fillRect(7, -2 + bob, 8, 4);
-      ctx.fillStyle = "#444";
-      ctx.fillRect(10, -5 + bob, 1, 10);
-      ctx.fillRect(7, -5 + bob, 5, 1);
-      ctx.fillRect(7, 4 + bob, 5, 1);
-      ctx.fillStyle = "#555";
-      ctx.fillRect(8, -1 + bob, 2, 2);
-      if (age >= 3) {
-        ctx.fillStyle = age >= 4 ? "#8a2222" : "#6a3a30";
-        ctx.fillRect(9, -7 + bob, 3, 3);
-      }
-      break;
-    }
-    case "yamato" /* Yamato */: {
-      const bc = age >= 4 ? "#8a6020" : "#6a4020";
-      ctx.strokeStyle = bc;
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.arc(9, -3 + bob, 11, -Math.PI * 0.48, Math.PI * 0.5);
-      ctx.stroke();
-      ctx.fillStyle = "#222";
-      ctx.fillRect(9, -1 + bob, 2, 3);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(9, -13 + bob, 1, 1);
-      ctx.fillRect(9, 7 + bob, 1, 1);
-      break;
-    }
-    case "viking" /* Viking */: {
-      const bc = age >= 4 ? "#5a4020" : "#4a3018";
-      ctx.strokeStyle = bc;
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.arc(9, 0 + bob, 8, -Math.PI * 0.35, Math.PI * 0.35);
-      ctx.stroke();
-      ctx.fillStyle = "#3a2a18";
-      ctx.fillRect(8, -1 + bob, 2, 3);
-      break;
-    }
-    default: {
-      const bc = age >= 4 ? "#c9a040" : age >= 3 ? "#6a4020" : "#8B5E3C";
-      ctx.strokeStyle = bc;
-      ctx.lineWidth = age >= 4 ? 1.8 : 1.4;
-      ctx.beginPath();
-      ctx.arc(9, 0 + bob, 9, -Math.PI * 0.4, Math.PI * 0.4);
-      ctx.stroke();
-      ctx.fillStyle = age >= 4 ? "#ffd700" : "#aaa";
-      ctx.fillRect(9, -7 + bob, 1, 1);
-      ctx.fillRect(9, 7 + bob, 1, 1);
-    }
-  }
-  let pullback = 0;
-  if (unit.attackTarget || unit.attackBuildingTarget) {
-    const maxCd = unit.civAttackSpeed;
-    const currentCd = unit.attackCooldown;
-    const pullPhase = 1 - currentCd / maxCd;
-    if (pullPhase > 0.4 && pullPhase < 1) {
-      const tension = (pullPhase - 0.4) / 0.6;
-      pullback = tension * 6;
-    }
-  }
-  if (civ !== "daiTong" /* DaiMinh */) {
-    ctx.strokeStyle = "#ccc";
-    ctx.lineWidth = 0.7;
-    const bowR = civ === "viking" /* Viking */ ? 8 : civ === "yamato" /* Yamato */ ? 11 : 9;
-    const bowX = 9;
-    const bowY = civ === "yamato" /* Yamato */ ? -3 + bob : bob;
-    const topAngle = civ === "yamato" /* Yamato */ ? -Math.PI * 0.48 : -Math.PI * 0.4;
-    const botAngle = civ === "yamato" /* Yamato */ ? Math.PI * 0.5 : Math.PI * 0.4;
+  if (age >= 4) {
+    ctx.globalAlpha = 0.08 + Math.sin(unit.animTimer * 3) * 0.04;
+    ctx.fillStyle = cv.accent;
     ctx.beginPath();
-    ctx.moveTo(bowX + bowR * Math.cos(topAngle), bowY + bowR * Math.sin(topAngle));
-    ctx.lineTo(bowX + 1 - pullback, bowY);
-    ctx.lineTo(bowX + bowR * Math.cos(botAngle), bowY + bowR * Math.sin(botAngle));
-    ctx.stroke();
-    const isAttacking = unit.attackTarget || unit.attackBuildingTarget;
-    const hideArrow = isAttacking && pullback === 0 && unit.attackCooldown > unit.civAttackSpeed * 0.8;
-    if (!hideArrow) {
-      const stringMidX = bowX + 1 - pullback;
-      const stringMidY = bowY;
-      ctx.fillStyle = age >= 4 ? "#ddc060" : "#aa9060";
-      ctx.fillRect(stringMidX, stringMidY - 1 + bob * 0.5, 6, 1);
-      ctx.fillStyle = age >= 4 ? "#eee" : "#bbb";
-      ctx.beginPath();
-      ctx.moveTo(stringMidX + 6, stringMidY - 1.5 + bob * 0.5);
-      ctx.lineTo(stringMidX + 8, stringMidY + bob * 0.5);
-      ctx.lineTo(stringMidX + 6, stringMidY + 1.5 + bob * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = civ === "yamato" /* Yamato */ ? "#cc3333" : civ === "baTu" /* BaTu */ ? "#c9a84c" : civ === "viking" /* Viking */ ? "#5a6a4a" : "#8b0000";
-      ctx.fillRect(stringMidX, stringMidY - 1.5 + bob * 0.5, 2, 2);
-    }
+    ctx.arc(0, 0 + bob, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
   }
-  const quiverColor = civ === "daiTong" /* DaiMinh */ ? "#5a2a2a" : civ === "baTu" /* BaTu */ ? "#8a6a30" : civ === "yamato" /* Yamato */ ? "#2a2a3a" : age >= 4 ? "#5a4028" : "#4a3018";
-  ctx.fillStyle = quiverColor;
-  ctx.fillRect(-10, -10 + bob, 4, 18);
-  ctx.fillStyle = cv.accent;
-  ctx.fillRect(-10, -10 + bob, 4, 2);
-  ctx.fillStyle = "#bbb";
-  ctx.fillRect(-9, -13 + bob, 1, 4);
-  ctx.fillRect(-8, -14 + bob, 1, 5);
-  ctx.fillRect(-7, -12 + bob, 1, 3);
-  const fletchColor = civ === "daiTong" /* DaiMinh */ ? "#aa2222" : civ === "yamato" /* Yamato */ ? "#cc3333" : civ === "baTu" /* BaTu */ ? "#c9a84c" : civ === "viking" /* Viking */ ? "#5a6a4a" : "#8b0000";
-  ctx.fillStyle = fletchColor;
-  ctx.fillRect(-9, -13 + bob, 1, 2);
-  ctx.fillRect(-8, -14 + bob, 1, 2);
-  ctx.fillRect(-7, -12 + bob, 1, 2);
-  switch (civ) {
-    case "baTu" /* BaTu */:
-      if (age >= 3) {
-        ctx.fillStyle = "#8a8888";
-        ctx.fillRect(5, 7 + bob, 2, 5);
-        ctx.fillStyle = "#c9a84c";
-        ctx.fillRect(5, 7 + bob, 2, 1);
-      }
-      break;
-    case "daiTong" /* DaiMinh */:
-      if (age >= 2) {
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(-7, 8 + bob, 1, 4);
-        ctx.fillStyle = "#ffd700";
-        ctx.fillRect(-7, 8 + bob, 1, 1);
-      }
-      break;
-    case "yamato" /* Yamato */:
-      if (age >= 3) {
-        ctx.fillStyle = "#1a1a2a";
-        ctx.fillRect(5, 7 + bob, 1, 5);
-        ctx.fillStyle = "#cc3333";
-        ctx.fillRect(5, 7 + bob, 1, 1);
-      }
-      break;
-    case "viking" /* Viking */:
-      if (age >= 2) {
-        ctx.fillStyle = "#5a4a38";
-        ctx.fillRect(-7, 7 + bob, 3, 3);
-        ctx.fillStyle = "#3a2a18";
-        ctx.fillRect(-7, 8 + bob, 3, 1);
-      }
-      if (age >= 4) {
-        ctx.globalAlpha = 0.15 + Math.sin(unit.animTimer * 4) * 0.08;
-        ctx.fillStyle = "#88ccff";
-        ctx.fillRect(-4, -2 + bob, 2, 2);
-        ctx.fillRect(2, 2 + bob, 2, 2);
-        ctx.globalAlpha = 1;
-      }
-      break;
-    default:
-      if (age >= 2) {
-        ctx.fillStyle = "#5a4a38";
-        ctx.fillRect(-7, 7 + bob, 3, 3);
-      }
-      if (age >= 4) {
-        ctx.fillStyle = "#daa520";
-        ctx.fillRect(2, -2 + bob, 3, 3);
-        ctx.fillStyle = "#ffd700";
-        ctx.fillRect(3, -1 + bob, 1, 1);
-      }
-  }
+}
+function drawArchersFinish(unit, ctx, age, bob, _legOff, lvl, cv) {
   if (lvl > 0) {
     ctx.fillStyle = "#ffd700";
     ctx.font = "7px sans-serif";
@@ -3967,815 +5343,6 @@ function drawArcher(unit, ctx, age, bob, moving) {
     ctx.fillStyle = cv.accent;
     ctx.beginPath();
     ctx.arc(9, 0 + bob, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-}
-
-// src/entities/unit-rendering/draw-elites.ts
-function drawChuKoNu(unit, ctx, age, bob, moving) {
-  const legOffset = moving ? Math.sin(unit.animTimer * 22) * 3.5 : 0;
-  let redBase = age >= 4 ? "#8a0a0a" : "#aa2222";
-  if (unit.slotColor) {
-    const sc = unit.slotColor;
-    const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16);
-    redBase = `rgb(${Math.round(r * 0.7)},${Math.round(g * 0.7)},${Math.round(b2 * 0.7)})`;
-  }
-  ctx.fillStyle = "#2a1a10";
-  ctx.fillRect(-3, 10 + bob, 3, 9 + legOffset);
-  ctx.fillRect(1, 10 + bob, 3, 9 - legOffset);
-  ctx.fillStyle = "#111";
-  ctx.fillRect(-4, 18 + bob + legOffset, 4, 3);
-  ctx.fillRect(0, 18 + bob - legOffset, 4, 3);
-  ctx.fillStyle = "#333";
-  ctx.fillRect(-4, 18 + bob + legOffset, 4, 1);
-  ctx.fillRect(0, 18 + bob - legOffset, 4, 1);
-  ctx.fillStyle = redBase;
-  ctx.fillRect(-6, 5 + bob, 13, 8);
-  ctx.fillStyle = "#1a0a0a";
-  ctx.fillRect(0, 8 + bob, 1, 5);
-  ctx.fillStyle = redBase;
-  ctx.fillRect(-6, -5 + bob, 13, 16);
-  ctx.fillStyle = "rgba(255,200,50,0.15)";
-  for (let i = 0;i < 5; i++) {
-    ctx.fillRect(-5 + i * 2.5, -4 + bob + i * 2, 2, 2);
-  }
-  ctx.fillStyle = age >= 4 ? "#ffd700" : "#c9a84c";
-  ctx.fillRect(-6, -5 + bob, 13, 2);
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(-6, 5 + bob, 13, 2);
-  ctx.fillStyle = age >= 4 ? "#ffd700" : "#dab84c";
-  ctx.fillRect(-2, 4 + bob, 5, 4);
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(-2, -2 + bob, 5, 5);
-  ctx.fillRect(-1, -3 + bob, 3, 1);
-  ctx.fillRect(-1, 3 + bob, 3, 1);
-  ctx.fillRect(-3, 0 + bob, 1, 2);
-  ctx.fillRect(3, 0 + bob, 1, 2);
-  ctx.fillStyle = redBase;
-  ctx.fillRect(-8, -3 + bob, 3, 10);
-  ctx.fillRect(6, -3 + bob, 3, 10);
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(-8, 5 + bob, 3, 2);
-  ctx.fillRect(6, 5 + bob, 3, 2);
-  ctx.fillStyle = "#e8c090";
-  ctx.fillRect(-8, 7 + bob, 3, 2);
-  ctx.fillRect(6, 7 + bob, 3, 2);
-  ctx.fillStyle = "#e8c090";
-  ctx.fillRect(-4, -13 + bob, 8, 9);
-  ctx.fillStyle = "#111";
-  ctx.fillRect(-3, -9 + bob, 2, 1.5);
-  ctx.fillRect(1, -9 + bob, 2, 1.5);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(-4, -11 + bob, 3, 1);
-  ctx.fillRect(1, -11 + bob, 3, 1);
-  ctx.fillStyle = "#333";
-  ctx.fillRect(-3, -5 + bob, 6, 1);
-  ctx.fillRect(-2, -4 + bob, 1, 1);
-  ctx.fillRect(1, -4 + bob, 1, 1);
-  ctx.fillStyle = redBase;
-  ctx.beginPath();
-  ctx.ellipse(0, -14 + bob, 8.5, 3, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = "#c9a84c";
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.ellipse(0, -16.5 + bob, 5.5, 4, 0, Math.PI, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#ffd700";
-  ctx.fillRect(-1.5, -17 + bob, 3, 2.5);
-  ctx.fillRect(-0.5, -18 + bob, 1, 4);
-  ctx.fillStyle = "#111";
-  ctx.beginPath();
-  ctx.moveTo(3, -15 + bob);
-  ctx.quadraticCurveTo(7, -20 + bob, 10, -19 + bob);
-  ctx.quadraticCurveTo(8, -16 + bob, 4, -14 + bob);
-  ctx.fill();
-  ctx.fillStyle = "#ff3333";
-  ctx.beginPath();
-  ctx.moveTo(6, -17 + bob);
-  ctx.quadraticCurveTo(9, -20 + bob, 10, -19 + bob);
-  ctx.quadraticCurveTo(8, -16 + bob, 7, -16 + bob);
-  ctx.fill();
-  ctx.save();
-  ctx.translate(-5, 3 + bob);
-  ctx.rotate(0.3);
-  ctx.fillStyle = "#1a0a0a";
-  ctx.fillRect(-1.5, -4, 3, 20);
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(-2, -4, 4, 2);
-  ctx.fillRect(-2, 4, 4, 2);
-  ctx.fillRect(-2, 14, 4, 2);
-  ctx.fillStyle = "#ffd700";
-  ctx.fillRect(-3, -6, 6, 2);
-  ctx.fillStyle = "#aa2222";
-  ctx.fillRect(-1, -11, 2, 5);
-  ctx.fillStyle = "#881111";
-  ctx.fillRect(-1, -10, 2, 1);
-  ctx.fillRect(-1, -8, 2, 1);
-  ctx.fillStyle = "#ffd700";
-  ctx.fillRect(-1.5, -12, 3, 2);
-  ctx.fillStyle = "#dd3333";
-  ctx.beginPath();
-  ctx.moveTo(0, -12);
-  ctx.quadraticCurveTo(-3, -16, -2, -18);
-  ctx.quadraticCurveTo(1, -15, 0, -12);
-  ctx.fill();
-  ctx.restore();
-  if (age >= 4) {
-    ctx.globalAlpha = 0.06 + Math.sin(unit.animTimer * 3) * 0.03;
-    ctx.fillStyle = "#ffd700";
-    ctx.beginPath();
-    ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  if (unit.upgradeLevel > 0) {
-    ctx.fillStyle = "#ffd700";
-    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++) {
-      ctx.fillRect(-8, 6 + bob - i * 4, 2, 2);
-    }
-  }
-}
-function drawImmortal(unit, ctx, age, bob, moving) {
-  const legOffset = moving ? Math.sin(unit.animTimer * 18) * 3 : 0;
-  const casting = unit.magiCastActive;
-  let robeBase = casting ? "#1a2a5a" : age >= 4 ? "#1e1040" : "#1a1a3a";
-  const goldAccent = casting ? "#88ccff" : "#c9a84c";
-  if (unit.slotColor && !casting) {
-    const sc = unit.slotColor;
-    const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16);
-    robeBase = `rgb(${Math.round(r * 0.4)},${Math.round(g * 0.4)},${Math.round(b2 * 0.4)})`;
-  }
-  if (moving || casting) {
-    ctx.globalAlpha = 0.15;
-    ctx.fillStyle = casting ? "#4488ff" : "#6644aa";
-    for (let t = 0;t < 3; t++) {
-      const tx = -6 - t * 4 + Math.sin(unit.animTimer * 4 + t) * 3;
-      const ty = 4 + bob + t * 3;
-      ctx.beginPath();
-      ctx.arc(tx, ty, 4 - t, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-  }
-  ctx.fillStyle = robeBase;
-  ctx.fillRect(-7, 5 + bob, 14, 14 + legOffset * 0.3);
-  ctx.fillRect(-8, 16 + bob, 4, 4 + Math.sin(unit.animTimer * 5) * 2);
-  ctx.fillRect(5, 16 + bob, 4, 3 - Math.sin(unit.animTimer * 5) * 2);
-  ctx.fillStyle = goldAccent;
-  ctx.fillRect(-7, 17 + bob, 14, 1);
-  ctx.fillStyle = robeBase;
-  ctx.fillRect(-6, -5 + bob, 12, 12);
-  ctx.fillStyle = casting ? "#44aaff" : "#4444aa";
-  ctx.fillRect(-4, -3 + bob, 1, 6);
-  ctx.fillRect(3, -3 + bob, 1, 6);
-  ctx.fillRect(-2, -1 + bob, 4, 1);
-  ctx.fillRect(-2, 2 + bob, 4, 1);
-  ctx.fillStyle = casting ? "#88ddff" : "#8866cc";
-  ctx.fillRect(-1, -1 + bob, 2, 2);
-  ctx.fillStyle = goldAccent;
-  ctx.fillRect(-6, -5 + bob, 12, 2);
-  ctx.fillRect(-3, -3 + bob, 6, 1);
-  ctx.fillStyle = robeBase;
-  ctx.fillRect(-10, -4 + bob, 4, 12);
-  ctx.fillRect(6, -4 + bob, 4, 12);
-  ctx.fillRect(-11, 5 + bob, 5, 4);
-  ctx.fillRect(6, 5 + bob, 5, 4);
-  ctx.fillStyle = goldAccent;
-  ctx.fillRect(-11, 5 + bob, 5, 1);
-  ctx.fillRect(6, 5 + bob, 5, 1);
-  ctx.fillStyle = "#d4a87a";
-  ctx.fillRect(-10, 7 + bob, 3, 2);
-  ctx.fillRect(7, 7 + bob, 3, 2);
-  ctx.fillStyle = "#d4a87a";
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = casting ? "#ff4400" : age >= 4 ? "#ffaa00" : "#888";
-  ctx.fillRect(-3, -9 + bob, 2, 2);
-  ctx.fillRect(1, -9 + bob, 2, 2);
-  if (casting) {
-    ctx.globalAlpha = 0.4;
-    ctx.fillStyle = "#ff6600";
-    ctx.fillRect(-4, -10 + bob, 3, 3);
-    ctx.fillRect(1, -10 + bob, 3, 3);
-    ctx.globalAlpha = 1;
-  }
-  ctx.fillStyle = age >= 4 ? "#ddd" : "#999";
-  ctx.fillRect(-3, -5 + bob, 6, 3);
-  ctx.fillRect(-2, -3 + bob, 4, 3);
-  ctx.fillRect(-1, -1 + bob, 2, 2);
-  ctx.fillStyle = "#f5f5f0";
-  ctx.fillRect(-5, -20 + bob, 10, 8);
-  ctx.fillStyle = "#e0e0d8";
-  ctx.fillRect(-4, -18 + bob, 8, 2);
-  ctx.fillRect(-5, -14 + bob, 10, 2);
-  ctx.fillStyle = "#ffaa00";
-  ctx.beginPath();
-  ctx.moveTo(0, -18 + bob);
-  ctx.quadraticCurveTo(-2, -15 + bob, 0, -14 + bob);
-  ctx.quadraticCurveTo(2, -15 + bob, 0, -18 + bob);
-  ctx.fill();
-  ctx.fillStyle = "#fdfdfd";
-  ctx.fillRect(-5, -6 + bob, 10, 5);
-  ctx.fillStyle = "#e8e8e8";
-  ctx.fillRect(-3, -5 + bob, 1, 4);
-  ctx.fillRect(2, -5 + bob, 1, 4);
-  const staffFloat = Math.sin(unit.animTimer * 3) * 1.5;
-  ctx.fillStyle = "#3a2010";
-  ctx.fillRect(9, -20 + bob + staffFloat, 2, 28);
-  ctx.fillStyle = "#daa520";
-  for (let i = 0;i < 8; i++) {
-    ctx.fillRect(9, -18 + bob + staffFloat + i * 3, 2, 1);
-  }
-  ctx.fillStyle = "#ffd700";
-  ctx.fillRect(8, 7 + bob + staffFloat, 4, 2);
-  ctx.fillStyle = "#daa520";
-  ctx.fillRect(8, -22 + bob + staffFloat, 4, 2);
-  ctx.fillStyle = "#ffd700";
-  ctx.beginPath();
-  ctx.moveTo(6, -26 + bob + staffFloat);
-  ctx.lineTo(14, -26 + bob + staffFloat);
-  ctx.lineTo(12, -22 + bob + staffFloat);
-  ctx.lineTo(8, -22 + bob + staffFloat);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = casting ? "#ff2200" : "#ff4400";
-  ctx.beginPath();
-  ctx.moveTo(10, -32 + bob + staffFloat);
-  ctx.quadraticCurveTo(5, -28 + bob + staffFloat, 10, -26 + bob + staffFloat);
-  ctx.quadraticCurveTo(15, -28 + bob + staffFloat, 10, -32 + bob + staffFloat);
-  ctx.fill();
-  ctx.fillStyle = casting ? "#ffffff" : "#ffcc00";
-  ctx.globalAlpha = 0.6 + Math.sin(unit.animTimer * 12) * 0.4;
-  ctx.beginPath();
-  ctx.moveTo(10, -30 + bob + staffFloat);
-  ctx.quadraticCurveTo(7, -27 + bob + staffFloat, 10, -26 + bob + staffFloat);
-  ctx.quadraticCurveTo(13, -27 + bob + staffFloat, 10, -30 + bob + staffFloat);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  if (casting || age >= 4) {
-    for (let p = 0;p < 3; p++) {
-      const pAngle = unit.animTimer * (casting ? 8 : 4) + p * (Math.PI * 2 / 3);
-      const pr = casting ? 7 : 5;
-      const px = 10 + Math.cos(pAngle) * pr;
-      const py = -26 + bob + staffFloat + Math.sin(pAngle) * pr;
-      ctx.fillStyle = casting ? "#ff8800" : "#ffcc00";
-      ctx.fillRect(px - 1, py - 1, 2, 2);
-    }
-  }
-  if (casting) {
-    ctx.globalAlpha = 0.25 + Math.sin(unit.animTimer * 6) * 0.1;
-    ctx.strokeStyle = "#44aaff";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 2 + bob, 18 + Math.sin(unit.animTimer * 8) * 3, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = "#44ff88";
-    ctx.beginPath();
-    ctx.arc(0, 2 + bob, 14 + Math.sin(unit.animTimer * 6 + 1) * 2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-  } else if (age >= 4) {
-    ctx.globalAlpha = 0.08 + Math.sin(unit.animTimer * 3) * 0.04;
-    ctx.fillStyle = "#8866cc";
-    ctx.beginPath();
-    ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  if (unit.upgradeLevel > 0) {
-    ctx.fillStyle = "#ffd700";
-    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++)
-      ctx.fillRect(-9, 6 + bob - i * 4, 2, 2);
-  }
-}
-function drawNinja(unit, ctx, age, bob, moving) {
-  const legOffset = moving ? Math.sin(unit.animTimer * 24) * 4 : 0;
-  const windSway = Math.sin(unit.animTimer * 3) * 2;
-  let darkBase = age >= 4 ? "#0e0e28" : "#16162e";
-  let accentColor = age >= 4 ? "#cc2244" : "#882244";
-  if (unit.slotColor) {
-    const sc = unit.slotColor;
-    const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16);
-    darkBase = `rgb(${Math.round(r * 0.3)},${Math.round(g * 0.3)},${Math.round(b2 * 0.3)})`;
-    accentColor = sc;
-  }
-  ctx.fillStyle = accentColor;
-  ctx.save();
-  ctx.translate(-3, -13 + bob);
-  ctx.rotate(Math.sin(unit.animTimer * 5) * 0.15);
-  ctx.fillRect(-2, 0, 3, 14 + windSway);
-  ctx.fillRect(-3, 10 + windSway, 3, 6);
-  ctx.fillRect(-4, 14 + windSway, 2, 4);
-  ctx.globalAlpha = 0.5;
-  ctx.fillRect(-5, 16 + windSway, 2, 3);
-  ctx.globalAlpha = 1;
-  ctx.restore();
-  ctx.fillStyle = darkBase;
-  ctx.fillRect(-3, 10 + bob, 3, 9 + legOffset);
-  ctx.fillRect(1, 10 + bob, 3, 9 - legOffset);
-  ctx.fillStyle = "#0a0a1a";
-  ctx.fillRect(-4, 18 + bob + legOffset, 2, 3);
-  ctx.fillRect(-2, 18 + bob + legOffset, 2, 3);
-  ctx.fillRect(0, 18 + bob - legOffset, 2, 3);
-  ctx.fillRect(2, 18 + bob - legOffset, 2, 3);
-  ctx.fillStyle = "#3a3a4e";
-  for (let s = 0;s < 3; s++) {
-    ctx.fillRect(-3, 11 + bob + s * 3 + legOffset * (s % 2 === 0 ? 1 : 0), 3, 1);
-    ctx.fillRect(1, 11 + bob + s * 3 - legOffset * (s % 2 === 0 ? 1 : 0), 3, 1);
-  }
-  ctx.fillStyle = "#2a2a3e";
-  ctx.fillRect(3, 11 + bob - legOffset, 2, 5);
-  ctx.fillStyle = "#888";
-  ctx.fillRect(3, 11 + bob - legOffset, 1, 3);
-  ctx.save();
-  ctx.translate(3, -4 + bob);
-  ctx.rotate(-0.45);
-  ctx.fillStyle = "#1a0a0a";
-  ctx.fillRect(-1.5, -24, 3, 22);
-  ctx.fillStyle = accentColor;
-  ctx.fillRect(-1.5, -24, 3, 1);
-  ctx.fillRect(-1.5, -3, 3, 1);
-  ctx.fillStyle = "#2a1a10";
-  ctx.fillRect(-1.5, -2, 3, 8);
-  ctx.fillStyle = "#444";
-  ctx.fillRect(-1, -1, 1, 1);
-  ctx.fillRect(0.5, 1, 1, 1);
-  ctx.fillRect(-1, 3, 1, 1);
-  ctx.fillRect(0.5, 5, 1, 1);
-  ctx.fillStyle = age >= 4 ? "#c9a84c" : "#887744";
-  ctx.fillRect(-3, -3, 6, 2);
-  ctx.fillStyle = accentColor;
-  ctx.fillRect(-1, 6, 2, 1);
-  ctx.restore();
-  ctx.fillStyle = darkBase;
-  ctx.fillRect(-5, -4 + bob, 11, 15);
-  ctx.fillStyle = age >= 4 ? "#1a1a3a" : "#1e1e36";
-  ctx.fillRect(-4, -3 + bob, 9, 6);
-  ctx.fillStyle = "#3a3a4e";
-  for (let i = 0;i < 6; i++) {
-    ctx.fillRect(-4 + i * 1.5, -3 + bob + i * 2, 1.5, 2);
-  }
-  ctx.fillStyle = accentColor;
-  ctx.fillRect(-5, 7 + bob, 11, 3);
-  ctx.fillStyle = age >= 4 ? "#dd3355" : "#993355";
-  ctx.fillRect(-4, 7 + bob, 3, 3);
-  ctx.fillStyle = "#333";
-  ctx.fillRect(3, 7 + bob, 3, 2);
-  ctx.fillStyle = "#555";
-  ctx.fillRect(3, 7 + bob, 1.5, 1.5);
-  ctx.fillRect(4.5, 7 + bob, 1.5, 1.5);
-  ctx.fillStyle = darkBase;
-  ctx.fillRect(-7, -2 + bob, 3, 10);
-  ctx.fillRect(5, -2 + bob, 3, 10);
-  ctx.fillStyle = "#3a3a4e";
-  ctx.fillRect(-7, 0 + bob, 3, 1);
-  ctx.fillRect(-7, 3 + bob, 3, 1);
-  ctx.fillRect(-7, 6 + bob, 3, 1);
-  ctx.fillRect(5, 0 + bob, 3, 1);
-  ctx.fillRect(5, 3 + bob, 3, 1);
-  ctx.fillRect(5, 6 + bob, 3, 1);
-  ctx.fillStyle = "#555";
-  ctx.fillRect(-8, 6 + bob, 4, 3);
-  ctx.fillRect(5, 6 + bob, 4, 3);
-  ctx.fillStyle = "#777";
-  ctx.fillRect(-8, 6 + bob, 4, 1);
-  ctx.fillRect(5, 6 + bob, 4, 1);
-  ctx.fillStyle = "#0e0e1e";
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = "#111";
-  ctx.fillRect(-4, -8 + bob, 8, 4);
-  ctx.fillStyle = "#c9a87a";
-  ctx.fillRect(-3, -7 + bob, 6, 3);
-  ctx.fillStyle = age >= 4 ? "#ff2244" : "#fff";
-  ctx.fillRect(-2, -6 + bob, 2, 2);
-  ctx.fillRect(1, -6 + bob, 2, 2);
-  ctx.fillStyle = age >= 4 ? "#aa0022" : "#111";
-  ctx.fillRect(-1, -6 + bob, 1, 2);
-  ctx.fillRect(2, -6 + bob, 1, 2);
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(-2, -6 + bob, 0.5, 0.5);
-  ctx.fillRect(1, -6 + bob, 0.5, 0.5);
-  ctx.fillStyle = "#0a0a18";
-  ctx.fillRect(-4, -14 + bob, 8, 3);
-  ctx.fillRect(-3, -15 + bob, 6, 2);
-  ctx.fillRect(-2, -16 + bob, 4, 2);
-  ctx.fillStyle = accentColor;
-  ctx.fillRect(-5, -11 + bob, 10, 2);
-  ctx.save();
-  ctx.translate(5, -10 + bob);
-  ctx.rotate(Math.sin(unit.animTimer * 6) * 0.2);
-  ctx.fillStyle = accentColor;
-  ctx.fillRect(0, 0, 5, 2);
-  ctx.fillRect(3, 1, 4, 1.5);
-  ctx.globalAlpha = 0.6;
-  ctx.fillRect(6, 2, 3, 1);
-  ctx.globalAlpha = 1;
-  ctx.restore();
-  if (age >= 3) {
-    ctx.fillStyle = "#aaa";
-    ctx.save();
-    ctx.translate(-1, 2 + bob);
-    ctx.rotate(unit.animTimer * 0.5);
-    ctx.fillRect(-1, -4, 2, 8);
-    ctx.fillRect(-4, -1, 8, 2);
-    ctx.fillRect(-2, -3, 1, 1);
-    ctx.fillRect(1, 2, 1, 1);
-    ctx.fillRect(-3, 1, 1, 1);
-    ctx.fillRect(2, -2, 1, 1);
-    ctx.restore();
-  }
-  if (age >= 4) {
-    ctx.globalAlpha = 0.08 + Math.sin(unit.animTimer * 4) * 0.04;
-    ctx.fillStyle = "#6600cc";
-    ctx.beginPath();
-    ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#aa00ff";
-    ctx.beginPath();
-    ctx.arc(0, 0 + bob, 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  if (moving) {
-    ctx.globalAlpha = 0.08;
-    ctx.fillStyle = "#4400aa";
-    ctx.fillRect(-8, -4 + bob, 3, 14);
-    ctx.globalAlpha = 0.04;
-    ctx.fillRect(-12, -2 + bob, 3, 10);
-    ctx.globalAlpha = 1;
-  }
-  if (unit.upgradeLevel > 0) {
-    ctx.fillStyle = "#8800ff";
-    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++)
-      ctx.fillRect(-7, 6 + bob - i * 4, 2, 2);
-  }
-}
-function drawCenturion(unit, ctx, age, bob, moving) {
-  const legOffset = moving ? Math.sin(unit.animTimer * 20) * 3 : 0;
-  let tunicColor = "#8a2222";
-  let shieldColor = "#aa2222";
-  let shieldLight = "#cc3333";
-  if (unit.slotColor) {
-    const sc = unit.slotColor;
-    const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16);
-    tunicColor = `rgb(${Math.round(r * 0.6)},${Math.round(g * 0.6)},${Math.round(b2 * 0.6)})`;
-    shieldColor = `rgb(${Math.round(r * 0.7)},${Math.round(g * 0.7)},${Math.round(b2 * 0.7)})`;
-    shieldLight = sc;
-  }
-  let bodyTilt = 0;
-  let frontLegLift = 0;
-  let frontLegFwd = 0;
-  if (unit.centurionMode === "spear" && unit.state === 5 /* Attacking */) {
-    const cd = unit.centurionPilumCooldown;
-    if (cd > 2.7) {
-      bodyTilt = 0.2 * ((3 - cd) / 0.3);
-    } else if (cd > 1) {
-      bodyTilt = 0;
-    } else if (cd > 0.15) {
-      const prepProgress = 1 - (cd - 0.15) / 0.85;
-      bodyTilt = -0.25 * prepProgress;
-      frontLegLift = prepProgress * 6;
-      frontLegFwd = prepProgress * 3;
-    } else {
-      const swingProgress = cd <= 0 ? 1 : 1 - cd / 0.15;
-      bodyTilt = -0.25 + 0.45 * swingProgress;
-      frontLegLift = 6 * (1 - swingProgress);
-      frontLegFwd = 3 * (1 - swingProgress);
-    }
-  }
-  ctx.save();
-  if (bodyTilt !== 0) {
-    ctx.translate(0, 16 + bob);
-    ctx.rotate(bodyTilt);
-    ctx.translate(0, -(16 + bob));
-  }
-  ctx.fillStyle = tunicColor;
-  ctx.fillRect(-4, 10 + bob, 4, 7 + legOffset);
-  ctx.fillRect(1 + frontLegFwd, 10 + bob - frontLegLift, 4, 7 - legOffset);
-  ctx.fillStyle = age >= 4 ? "#c9a84c" : "#aa8844";
-  ctx.fillRect(-4, 13 + bob + legOffset, 4, 4);
-  ctx.fillRect(1 + frontLegFwd, 13 + bob - legOffset - frontLegLift, 4, 4);
-  ctx.fillStyle = "#5a3020";
-  ctx.fillRect(-5, 16 + bob + legOffset, 5, 3);
-  ctx.fillRect(0 + frontLegFwd, 16 + bob - legOffset - frontLegLift, 5, 3);
-  ctx.fillStyle = shieldColor;
-  ctx.fillRect(5, -8 + bob, 7, 20);
-  ctx.fillStyle = shieldLight;
-  ctx.fillRect(6, -7 + bob, 5, 18);
-  ctx.fillStyle = "#ffd700";
-  ctx.fillRect(7, -2 + bob, 3, 3);
-  ctx.fillRect(6, -1 + bob, 5, 1);
-  ctx.fillRect(7, 1 + bob, 1, 3);
-  ctx.fillRect(9, 1 + bob, 1, 3);
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(7, 0 + bob, 3, 3);
-  ctx.fillStyle = shieldLight;
-  ctx.fillRect(-6, -5 + bob, 12, 16);
-  ctx.fillStyle = age >= 4 ? "#c9a84c" : "#aa8844";
-  ctx.fillRect(-6, -5 + bob, 12, 2);
-  ctx.fillRect(-6, -1 + bob, 12, 2);
-  ctx.fillRect(-6, 3 + bob, 12, 2);
-  ctx.fillRect(-6, 7 + bob, 12, 2);
-  ctx.fillStyle = "#5a3020";
-  ctx.fillRect(-6, 8 + bob, 12, 2);
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(-2, 8 + bob, 4, 2);
-  ctx.fillStyle = shieldColor;
-  ctx.fillRect(-9, -4 + bob, 4, 16);
-  ctx.fillStyle = age >= 4 ? "#c9a84c" : "#aa8844";
-  ctx.fillRect(-8, -5 + bob, 4, 5);
-  ctx.fillRect(4, -5 + bob, 4, 5);
-  ctx.fillStyle = "#d4a87a";
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(-2, -8 + bob, 2, 2);
-  ctx.fillRect(1, -8 + bob, 2, 2);
-  ctx.fillStyle = age >= 4 ? "#c9a84c" : "#aa8844";
-  ctx.fillRect(-5, -16 + bob, 10, 6);
-  ctx.fillRect(-5, -11 + bob, 2, 4);
-  ctx.fillRect(3, -11 + bob, 2, 4);
-  ctx.fillStyle = "#888";
-  ctx.fillRect(-1, -11 + bob, 2, 5);
-  ctx.fillStyle = shieldLight;
-  ctx.fillRect(-7, -19 + bob, 14, 4);
-  ctx.fillStyle = shieldColor;
-  ctx.fillRect(-6, -20 + bob, 12, 2);
-  if (unit.centurionShielding) {
-    ctx.fillStyle = shieldColor;
-    ctx.fillRect(-2, -12 + bob, 10, 24);
-    ctx.fillStyle = shieldLight;
-    ctx.fillRect(-1, -11 + bob, 8, 22);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(1, -2 + bob, 4, 4);
-    ctx.fillRect(0, -1 + bob, 6, 2);
-    ctx.fillStyle = "#ffee88";
-    ctx.fillRect(1, 0 + bob, 4, 3);
-    ctx.fillStyle = "#8B6914";
-    ctx.fillRect(-8, -20 + bob, 2, 26);
-    ctx.fillStyle = "#ccc";
-    ctx.beginPath();
-    ctx.moveTo(-7, -22 + bob);
-    ctx.lineTo(-9, -18 + bob);
-    ctx.lineTo(-5, -18 + bob);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = 0.15 + Math.sin(unit.animTimer * 6) * 0.08;
-    ctx.fillStyle = "#ffd700";
-    ctx.beginPath();
-    ctx.arc(0, 0 + bob, 18, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  } else if (unit.centurionMode === "sword") {
-    ctx.fillStyle = "#ccc";
-    ctx.fillRect(-9, -4 + bob, 2, 14);
-    ctx.fillStyle = "#eee";
-    ctx.fillRect(-9, -3 + bob, 2, 2);
-    ctx.fillStyle = "#888";
-    ctx.beginPath();
-    ctx.moveTo(-8, -6 + bob);
-    ctx.lineTo(-10, -3 + bob);
-    ctx.lineTo(-6, -3 + bob);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = "#c9a84c";
-    ctx.fillRect(-11, -4 + bob, 6, 2);
-    ctx.fillRect(-10, 10 + bob, 4, 3);
-    if (unit.centurionMeleeHits > 0) {
-      for (let hi = 0;hi < unit.centurionMeleeHits; hi++) {
-        ctx.fillStyle = hi >= 3 ? "#ff4400" : "#ffaa00";
-        ctx.fillRect(-8 + hi * 4, -24 + bob, 3, 3);
-      }
-    }
-    ctx.globalAlpha = 0.06;
-    ctx.fillStyle = "#ff2200";
-    ctx.beginPath();
-    ctx.arc(0, 0 + bob, 14, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  } else {
-    const isAttackingInRange = unit.state === 5 /* Attacking */ && (unit.attackTarget && unit.attackTarget.alive && Math.hypot(unit.attackTarget.x - unit.x, unit.attackTarget.y - unit.y) <= unit.centurionSpearRange || unit.attackBuildingTarget && unit.attackBuildingTarget.alive && Math.hypot(unit.attackBuildingTarget.x - unit.x, unit.attackBuildingTarget.y - unit.y) <= unit.centurionSpearRange + unit.attackBuildingTarget.tileW * TILE_SIZE * 0.4);
-    if (!isAttackingInRange && unit.centurionPilumCooldown <= 0) {
-      ctx.fillStyle = "#8B6914";
-      ctx.fillRect(-9, -14 + bob, 2, 28);
-      ctx.fillStyle = "#a0a8b8";
-      ctx.fillRect(-8.5, -26 + bob, 1, 12);
-      ctx.fillStyle = "#4a3a2a";
-      ctx.fillRect(-10, -15 + bob, 4, 3);
-      ctx.fillStyle = "#8a8888";
-      ctx.fillRect(-10.5, -14 + bob, 5, 1);
-      ctx.fillStyle = "#ccc";
-      ctx.beginPath();
-      ctx.moveTo(-8, -32 + bob);
-      ctx.lineTo(-10, -26 + bob);
-      ctx.lineTo(-6, -26 + bob);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(-8, -31 + bob, 0.5, 5);
-    }
-  }
-  if (age >= 4) {
-    ctx.globalAlpha = 0.07 + Math.sin(unit.animTimer * 3) * 0.04;
-    ctx.fillStyle = "#ff4444";
-    ctx.beginPath();
-    ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  if (unit.upgradeLevel > 0) {
-    ctx.fillStyle = "#ffd700";
-    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++)
-      ctx.fillRect(8, 6 + bob - i * 4, 2, 2);
-  }
-  ctx.restore();
-}
-function drawUlfhednar(unit, ctx, age, bob, moving) {
-  const legOffset = moving ? Math.sin(unit.animTimer * 22) * 4 : 0;
-  const rage = unit.ulfhednarRageActive;
-  let capeColor = rage ? "#2255cc" : "#aa2222";
-  let capeHighlight = rage ? "#3366dd" : "#cc3333";
-  if (unit.slotColor && !rage) {
-    capeColor = unit.slotColor;
-    const sc = unit.slotColor;
-    const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16);
-    capeHighlight = `rgb(${Math.min(255, r + 40)},${Math.min(255, g + 40)},${Math.min(255, b2 + 40)})`;
-  }
-  ctx.fillStyle = capeColor;
-  ctx.fillRect(-10, -6 + bob, 5, 20);
-  ctx.fillRect(6, -6 + bob, 5, 18);
-  const capeFlutter = Math.sin(unit.animTimer * 6) * 2;
-  ctx.fillRect(-11, 12 + bob + capeFlutter, 6, 4);
-  ctx.fillRect(6, 11 + bob - capeFlutter, 6, 4);
-  ctx.fillStyle = capeHighlight;
-  ctx.fillRect(-10, -6 + bob, 5, 3);
-  ctx.fillRect(6, -6 + bob, 5, 3);
-  ctx.fillStyle = "#4a4a4a";
-  ctx.fillRect(-4, 10 + bob, 4, 8 + legOffset);
-  ctx.fillRect(1, 10 + bob, 4, 8 - legOffset);
-  ctx.fillStyle = "#777";
-  ctx.fillRect(-4, 11 + bob + legOffset, 4, 3);
-  ctx.fillRect(1, 11 + bob - legOffset, 4, 3);
-  ctx.fillStyle = "#333";
-  ctx.fillRect(-5, 17 + bob + legOffset, 5, 3);
-  ctx.fillRect(0, 17 + bob - legOffset, 5, 3);
-  ctx.fillStyle = "#555";
-  ctx.fillRect(-5, 17 + bob + legOffset, 5, 1);
-  ctx.fillRect(0, 17 + bob - legOffset, 5, 1);
-  ctx.fillStyle = rage ? "#1a2a4a" : "#2a2a3a";
-  ctx.fillRect(-6, -4 + bob, 12, 15);
-  ctx.fillStyle = rage ? "#5588bb" : "#666";
-  ctx.fillRect(-6, -4 + bob, 12, 10);
-  ctx.fillStyle = rage ? "#6699cc" : "#888";
-  for (let cy = 0;cy < 4; cy++) {
-    for (let cx = 0;cx < 5; cx++) {
-      ctx.fillRect(-5 + cx * 2.5, -3 + cy * 2.5 + bob, 1, 1);
-    }
-  }
-  ctx.fillStyle = rage ? "#4477aa" : "#777";
-  ctx.fillRect(-3, -3 + bob, 6, 8);
-  ctx.fillStyle = rage ? "#5588bb" : "#888";
-  ctx.fillRect(-2, -2 + bob, 4, 6);
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(-6, 8 + bob, 12, 3);
-  ctx.fillStyle = "#dab85c";
-  ctx.fillRect(-6, 8 + bob, 12, 1);
-  ctx.fillStyle = rage ? "#88ccff" : "#ffd700";
-  ctx.fillRect(-1, 8 + bob, 2, 3);
-  ctx.fillRect(-2, 9 + bob, 1, 1);
-  ctx.fillRect(1, 9 + bob, 1, 1);
-  ctx.fillStyle = "#c4a070";
-  ctx.fillRect(-9, -3 + bob, 3, 10);
-  ctx.fillRect(6, -3 + bob, 3, 10);
-  ctx.fillStyle = rage ? "#5588bb" : "#777";
-  ctx.fillRect(-9, 2 + bob, 3, 4);
-  ctx.fillRect(6, 2 + bob, 3, 4);
-  ctx.fillStyle = rage ? "#6699cc" : "#999";
-  ctx.fillRect(-9, 2 + bob, 3, 1);
-  ctx.fillRect(6, 2 + bob, 3, 1);
-  ctx.fillStyle = rage ? "#5588bb" : "#888";
-  ctx.fillRect(-9, -4 + bob, 4, 3);
-  ctx.fillRect(6, -4 + bob, 4, 3);
-  ctx.fillStyle = rage ? "#6699cc" : "#aaa";
-  ctx.fillRect(-9, -4 + bob, 4, 1);
-  ctx.fillRect(6, -4 + bob, 4, 1);
-  ctx.fillStyle = "#c4a070";
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = rage ? "#44ddff" : age >= 4 ? "#ff6600" : "#fff";
-  ctx.fillRect(-3, -8 + bob, 2, 2);
-  ctx.fillRect(1, -8 + bob, 2, 2);
-  ctx.fillStyle = rage ? "#88eeff" : "#111";
-  ctx.fillRect(-2, -8 + bob, 1, 2);
-  ctx.fillRect(2, -8 + bob, 1, 2);
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(-3, -5 + bob, 6, 3);
-  ctx.fillRect(-2, -3 + bob, 4, 2);
-  ctx.fillRect(-1, -3 + bob, 2, 2);
-  ctx.fillStyle = "#888";
-  ctx.fillRect(-5, -16 + bob, 10, 6);
-  ctx.fillStyle = "#999";
-  ctx.fillRect(-4, -17 + bob, 8, 3);
-  ctx.fillRect(-3, -18 + bob, 6, 2);
-  ctx.fillStyle = "#777";
-  ctx.fillRect(-6, -11 + bob, 12, 2);
-  ctx.fillStyle = "#aaa";
-  ctx.fillRect(-1, -12 + bob, 2, 4);
-  const wingColor = rage ? "#44aaff" : "#ccc";
-  const wingGlow = rage ? "#88ddff" : "#ddd";
-  ctx.fillStyle = wingColor;
-  ctx.fillRect(-9, -18 + bob, 3, 2);
-  ctx.fillRect(-11, -20 + bob, 3, 3);
-  ctx.fillRect(-12, -22 + bob, 2, 3);
-  ctx.fillStyle = wingGlow;
-  ctx.fillRect(-10, -19 + bob, 2, 1);
-  ctx.fillRect(-12, -22 + bob, 1, 2);
-  ctx.fillStyle = wingColor;
-  ctx.fillRect(6, -18 + bob, 3, 2);
-  ctx.fillRect(8, -20 + bob, 3, 3);
-  ctx.fillRect(10, -22 + bob, 2, 3);
-  ctx.fillStyle = wingGlow;
-  ctx.fillRect(8, -19 + bob, 2, 1);
-  ctx.fillRect(11, -22 + bob, 1, 2);
-  const swordBob = rage ? Math.sin(unit.animTimer * 10) * 1.5 : 0;
-  ctx.fillStyle = rage ? "#88ccff" : "#ccc";
-  ctx.fillRect(9, -12 + bob + swordBob, 2, 18);
-  ctx.fillStyle = rage ? "#aaddff" : "#eee";
-  ctx.fillRect(9, -12 + bob + swordBob, 1, 18);
-  ctx.fillStyle = rage ? "#88ccff" : "#ccc";
-  ctx.beginPath();
-  ctx.moveTo(10, -14 + bob + swordBob);
-  ctx.lineTo(9, -12 + bob + swordBob);
-  ctx.lineTo(11, -12 + bob + swordBob);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(7, 5 + bob + swordBob, 6, 2);
-  ctx.fillStyle = "#5a3a1a";
-  ctx.fillRect(9, 7 + bob + swordBob, 2, 4);
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(8, 11 + bob + swordBob, 4, 2);
-  if (rage) {
-    ctx.globalAlpha = 0.7 + Math.sin(unit.animTimer * 15) * 0.3;
-    ctx.strokeStyle = "#88eeff";
-    ctx.lineWidth = 1;
-    const sx = 10, sy = -10 + bob + swordBob;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(sx - 2, sy + 4);
-    ctx.lineTo(sx + 2, sy + 7);
-    ctx.lineTo(sx - 1, sy + 12);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-  if (rage || age >= 4) {
-    const pulseSpeed = rage ? 8 : 5;
-    ctx.globalAlpha = rage ? 0.2 + Math.sin(unit.animTimer * pulseSpeed) * 0.1 : 0.1 + Math.sin(unit.animTimer * 5) * 0.06;
-    ctx.fillStyle = rage ? "#4488ff" : "#ff6600";
-    ctx.beginPath();
-    ctx.arc(0, 0 + bob, rage ? 20 : 16, 0, Math.PI * 2);
-    ctx.fill();
-    if (rage) {
-      ctx.globalAlpha = 0.7;
-      ctx.strokeStyle = "#88ccff";
-      ctx.lineWidth = 1.5;
-      for (let arc = 0;arc < 4; arc++) {
-        const arcAngle = unit.animTimer * 5 + arc * (Math.PI * 0.5);
-        const r1 = 12 + Math.sin(unit.animTimer * 14 + arc * 2) * 5;
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(arcAngle) * 4, bob + Math.sin(arcAngle) * 4);
-        ctx.lineTo(Math.cos(arcAngle + 0.2) * r1, bob + Math.sin(arcAngle + 0.2) * r1);
-        ctx.lineTo(Math.cos(arcAngle + 0.5) * (r1 + 2), bob + Math.sin(arcAngle + 0.5) * (r1 + 2));
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 0.15;
-      ctx.fillStyle = "#88ddff";
-      ctx.beginPath();
-      ctx.arc(0, -2 + bob, 10, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-  }
-  if (unit.upgradeLevel > 0) {
-    ctx.fillStyle = rage ? "#88ccff" : "#ffd700";
-    for (let i = 0;i < Math.min(unit.upgradeLevel, 3); i++)
-      ctx.fillRect(-9, 6 + bob - i * 4, 2, 2);
-  }
-}
-
-// src/entities/unit-rendering/draw-swords-finish.ts
-function drawSwordsFinish(unit, ctx, age, bob, _legOff, lvl, cv) {
-  if (lvl > 0) {
-    ctx.fillStyle = "#ffd700";
-    ctx.font = "7px sans-serif";
-    ctx.fillText("★".repeat(lvl), -lvl * 3.5, -25 + bob);
-  }
-  if (age >= 4) {
-    ctx.globalAlpha = 0.08 + Math.sin(unit.animTimer * 3) * 0.04;
-    ctx.fillStyle = cv.accent;
-    ctx.beginPath();
-    ctx.arc(0, 0 + bob, 18, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
@@ -4887,75 +5454,777 @@ function drawScout_BaTu(unit, ctx, age, bob, moving, legOffset, lvl, cv) {
   }
 }
 function drawSwords_BaTu(unit, ctx, age, bob, legOff, lvl, cv) {
-  ctx.fillStyle = age >= 3 ? cv.bodyDark : cv.bodyMid;
-  ctx.fillRect(-7, -5 + bob, 14, 16);
-  ctx.fillStyle = "rgba(201,168,76,0.15)";
-  for (let r = 0;r < 5; r++) {
-    for (let c = 0;c < 4; c++) {
-      ctx.fillRect(-5 + c * 3 + r % 2, -3 + bob + r * 3, 2, 2);
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  const attackState = unit.state === 2;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+  }
+  let bodyTilt = 0;
+  let rightArmRot = 0.2;
+  let leftArmRot = 0;
+  let swordOffsetX = 0;
+  let swordOffsetY = 0;
+  let shieldOffsetX = 0;
+  if (attackState) {
+    if (attackProgress < 0.3) {
+      const t = attackProgress / 0.3;
+      rightArmRot = 0.2 * (1 - t) + Math.PI / 1.5 * t;
+      leftArmRot = -Math.PI / 6 * t;
+      bodyTilt = -0.1 * t;
+      swordOffsetX = -3 * t;
+      swordOffsetY = 2 * t;
+      shieldOffsetX = -2 * t;
+    } else if (attackProgress < 0.6) {
+      const t = (attackProgress - 0.3) / 0.3;
+      rightArmRot = Math.PI / 1.5 * (1 - t) + -Math.PI / 4 * t;
+      leftArmRot = -Math.PI / 6 * (1 - t) + Math.PI / 10 * t;
+      bodyTilt = -0.1 * (1 - t) + 0.15 * t;
+      swordOffsetX = -3 * (1 - t) + 5 * t;
+      swordOffsetY = 2 * (1 - t) - 2 * t;
+    } else {
+      const t = (attackProgress - 0.6) / 0.4;
+      rightArmRot = -Math.PI / 4 * (1 - t) + 0.2 * t;
+      leftArmRot = Math.PI / 10 * (1 - t) + 0 * t;
+      bodyTilt = 0.15 * (1 - t) + 0 * t;
+      swordOffsetX = 5 * (1 - t);
+      swordOffsetY = -2 * (1 - t);
     }
   }
-  ctx.fillStyle = "#c9a84c";
-  ctx.fillRect(-7, 4 + bob, 14, 3);
-  if (age >= 3) {
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-7, -5 + bob, 14, 2);
-    ctx.fillRect(-7, 8 + bob, 14, 2);
+  if (bodyTilt !== 0) {
+    ctx.translate(0, 16 + bob);
+    ctx.rotate(bodyTilt);
+    ctx.translate(0, -(16 + bob));
   }
-  ctx.fillStyle = cv.skinColor;
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(1, -8 + bob, 2, 2);
-  if (age >= 3) {
-    ctx.fillStyle = age >= 4 ? "#c9a84c" : "#9a8040";
-    ctx.fillRect(-5, -15 + bob, 10, 5);
-    ctx.beginPath();
-    ctx.moveTo(-3, -15 + bob);
-    ctx.lineTo(0, -21 + bob);
-    ctx.lineTo(3, -15 + bob);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = "#7a7a78";
-    ctx.fillRect(-5, -10 + bob, 10, 4);
-    ctx.fillStyle = "rgba(120,120,120,0.3)";
-    ctx.fillRect(-5, -8 + bob, 10, 1);
-  } else if (age >= 2) {
-    ctx.fillStyle = "#9a8040";
-    ctx.fillRect(-4, -14 + bob, 8, 5);
-  } else {
-    ctx.fillStyle = "#e0d8c0";
-    ctx.fillRect(-4, -15 + bob, 8, 5);
-    ctx.fillStyle = cv.accent;
-    ctx.fillRect(-4, -15 + bob, 8, 2);
-  }
-  ctx.fillStyle = "#5a3a18";
-  ctx.fillRect(7, -2 + bob, 2, 8);
-  ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
+  const skinColor = cv.skinColor || "#a87c51";
+  const tunicColor = cv.bodyDark;
+  const armorPrimary = age >= 3 ? "#b8944d" : "#8a7044";
+  const sashColor = cv.accent;
+  ctx.fillStyle = age >= 3 ? cv.bodyLight : "#755c4d";
   ctx.beginPath();
-  ctx.moveTo(7, -14 + bob);
-  ctx.quadraticCurveTo(12, -6 + bob, 8, -2 + bob);
-  ctx.lineTo(10, -2 + bob);
-  ctx.quadraticCurveTo(14, -6 + bob, 9, -14 + bob);
-  ctx.closePath();
+  ctx.moveTo(-6, 12 + bob);
+  ctx.quadraticCurveTo(-8, 16 + legOff, -5, 20 + bob + legOff);
+  ctx.lineTo(-2, 20 + bob + legOff);
+  ctx.lineTo(-1, 12 + bob);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(1, 12 + bob);
+  ctx.quadraticCurveTo(-1, 16 - legOff, 2, 20 + bob - legOff);
+  ctx.lineTo(5, 20 + bob - legOff);
+  ctx.lineTo(6, 12 + bob);
+  ctx.fill();
+  ctx.fillStyle = "#4a3320";
+  ctx.beginPath();
+  ctx.moveTo(-6, 19 + bob + legOff);
+  ctx.lineTo(-1, 19 + bob + legOff);
+  ctx.lineTo(-1, 23 + bob + legOff);
+  ctx.lineTo(-8, 23 + bob + legOff);
+  ctx.lineTo(-8, 20 + bob + legOff);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(1, 19 + bob - legOff);
+  ctx.lineTo(6, 19 + bob - legOff);
+  ctx.lineTo(6, 23 + bob - legOff);
+  ctx.lineTo(-1, 23 + bob - legOff);
+  ctx.lineTo(-1, 20 + bob - legOff);
   ctx.fill();
   if (age >= 4) {
     ctx.fillStyle = "#ffd700";
-    ctx.fillRect(5, -2 + bob, 8, 2);
+    ctx.fillRect(-9, 21 + bob + legOff, 2, 2);
+    ctx.fillRect(-2, 21 + bob - legOff, 2, 2);
   }
+  ctx.save();
+  ctx.translate(4, -2 + bob);
+  ctx.rotate(rightArmRot);
+  ctx.translate(swordOffsetX, swordOffsetY);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 7);
+  if (age >= 3) {
+    ctx.fillStyle = armorPrimary;
+    ctx.fillRect(-2.5, 5, 5, 2);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-1.5, 7, 3, 3);
+  ctx.translate(0, 10);
+  ctx.rotate(Math.PI / 10);
+  ctx.fillStyle = "#ffd700";
+  ctx.beginPath();
+  ctx.arc(0, 6, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-1, 0, 2, 6);
+  ctx.fillStyle = armorPrimary;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-3, -1);
+  ctx.lineTo(-4, -2);
+  ctx.lineTo(-1, 1);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(3, -1);
+  ctx.lineTo(4, -2);
+  ctx.lineTo(1, 1);
+  ctx.fill();
+  ctx.fillStyle = age >= 4 ? "#f0f0f0" : "#cccccc";
+  ctx.beginPath();
+  ctx.moveTo(-1, 0);
+  ctx.lineTo(-1, -10);
+  ctx.quadraticCurveTo(-2, -20, 5, -28);
+  ctx.lineTo(3, -27);
+  ctx.quadraticCurveTo(2, -15, 1, 0);
+  ctx.fill();
+  if (age >= 4) {
+    ctx.strokeStyle = "#rgba(0,0,0,0.1)";
+    ctx.lineWidth = 0.5;
+    for (let i = 0;i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0, -2 - i * 5);
+      ctx.quadraticCurveTo(0, -10 - i * 5, 3, -15 - i * 5);
+      ctx.stroke();
+    }
+  }
+  if (attackState && attackProgress >= 0.3 && attackProgress < 0.6) {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.beginPath();
+    ctx.moveTo(3, -10);
+    ctx.quadraticCurveTo(20, -10, 10, -28);
+    ctx.lineTo(5, -28);
+    ctx.quadraticCurveTo(15, -15, 0, 0);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-7, -5 + bob, 14, 18);
+  ctx.fillStyle = age >= 3 ? armorPrimary : "#887459";
+  ctx.beginPath();
+  ctx.moveTo(-6, -4 + bob);
+  ctx.lineTo(6, -4 + bob);
+  ctx.lineTo(7, 6 + bob);
+  ctx.quadraticCurveTo(0, 10 + bob, -7, 6 + bob);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.2)";
+  for (let r = 0;r < 4; r++) {
+    for (let c = 0;c < 4; c++) {
+      ctx.beginPath();
+      ctx.arc(-4 + c * 3 + (r % 2 ? 1.5 : 0), -2 + bob + r * 2.5, 1.5, 0, Math.PI);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = sashColor;
+  ctx.fillRect(-7, 6 + bob, 14, 3);
+  ctx.fillStyle = "#ffd700";
+  ctx.fillRect(-7, 7 + bob, 14, 0.5);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-4, -12 + bob, 8, 8);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-3, -11 + bob, 6, 1);
+  ctx.fillRect(-2, -9 + bob, 4, 1);
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.moveTo(-4, -5 + bob);
+  ctx.quadraticCurveTo(0, -1 + bob, 4, -5 + bob);
+  ctx.lineTo(0, -3 + bob);
+  ctx.fill();
+  if (age >= 3) {
+    ctx.fillStyle = age >= 4 ? "#d6cba7" : "#999";
+    ctx.beginPath();
+    ctx.arc(0, -12 + bob, 5.5, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-6, -13 + bob, 12, 1.5);
+    ctx.fillStyle = "#eee";
+    ctx.beginPath();
+    ctx.moveTo(-1, -17 + bob);
+    ctx.lineTo(0, -25 + bob);
+    ctx.lineTo(1, -17 + bob);
+    ctx.fill();
+    ctx.fillStyle = "#555";
+    ctx.beginPath();
+    ctx.moveTo(-6, -12 + bob);
+    ctx.quadraticCurveTo(-8, -4 + bob, -4, 0 + bob);
+    ctx.lineTo(4, 0 + bob);
+    ctx.quadraticCurveTo(8, -4 + bob, 6, -12 + bob);
+    ctx.fill();
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(-3, -11 + bob, 6, 5);
+    ctx.fillStyle = "#111";
+    ctx.fillRect(-2, -9 + bob, 4, 1);
+    if (age >= 4) {
+      ctx.fillStyle = sashColor;
+      ctx.beginPath();
+      ctx.moveTo(-5, -14 + bob);
+      ctx.quadraticCurveTo(-10, -18 + bob, -8, -26 + bob);
+      ctx.quadraticCurveTo(-4, -18 + bob, -2, -16 + bob);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(5, -14 + bob);
+      ctx.quadraticCurveTo(10, -18 + bob, 8, -26 + bob);
+      ctx.quadraticCurveTo(4, -18 + bob, 2, -16 + bob);
+      ctx.fill();
+    }
+  } else if (age >= 2) {
+    ctx.fillStyle = "#8a6a44";
+    ctx.beginPath();
+    ctx.arc(0, -12 + bob, 5, Math.PI, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "#eee";
+    ctx.beginPath();
+    ctx.ellipse(0, -14 + bob, 5.5, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = sashColor;
+    ctx.beginPath();
+    ctx.arc(0, -14 + bob, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.save();
+  ctx.translate(-5, -1 + bob);
+  ctx.rotate(leftArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
   if (age >= 2) {
-    ctx.fillStyle = cv.accent;
+    ctx.translate(-3 + shieldOffsetX, 4);
+    const shieldR = age >= 3 ? 8 : 6;
+    ctx.fillStyle = "#222";
     ctx.beginPath();
-    ctx.arc(-8, 2 + bob, age >= 3 ? 7 : 5, 0, Math.PI * 2);
+    ctx.arc(0, 0, shieldR, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#ffd700";
+    ctx.lineWidth = age >= 4 ? 1.5 : 1;
+    ctx.strokeStyle = armorPrimary;
+    ctx.stroke();
+    if (age >= 3) {
+      ctx.fillStyle = "#ffd700";
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#eee";
+      const off = shieldR * 0.55;
+      ctx.beginPath();
+      ctx.arc(-off, -off, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(off, -off, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(-off, off, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(off, off, 1, 0, Math.PI * 2);
+      ctx.fill();
+      if (age >= 4) {
+        ctx.strokeStyle = "#ffd700";
+        ctx.lineWidth = 0.5;
+        for (let i = 0;i < 8; i++) {
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(i * Math.PI / 4) * shieldR, Math.sin(i * Math.PI / 4) * shieldR);
+          ctx.stroke();
+        }
+      }
+    }
+  } else {
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(-1.5, 6, 3, 3);
+  }
+  ctx.restore();
+  drawSwordsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawSpears_BaTu(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let attackProgress = 0;
+  if (unit.state === 5 /* Attacking */) {
+    const attackCycle = unit.animTimer % unit.attackCooldown;
+    const attackDuration = unit.civAttackSpeed * 0.4;
+    if (attackCycle < attackDuration) {
+      attackProgress = attackCycle / attackDuration;
+    }
+  }
+  let bodyRot = 0;
+  let spearAngle = 0;
+  let spearOffset = { x: 0, y: 0 };
+  let rightArmRot = 0;
+  let leftArmRot = 0;
+  if (attackProgress > 0) {
+    if (attackProgress < 0.3) {
+      const t = attackProgress / 0.3;
+      bodyRot = t * -0.1;
+      spearOffset.x = t * -4;
+      spearOffset.y = t * -1;
+      spearAngle = t * -0.1;
+      rightArmRot = t * -0.3;
+      leftArmRot = t * -0.1;
+    } else if (attackProgress < 0.6) {
+      const t = (attackProgress - 0.3) / 0.3;
+      const easeOut = 1 - Math.pow(1 - t, 3);
+      bodyRot = -0.1 + easeOut * 0.2;
+      spearOffset.x = -4 + easeOut * 12;
+      spearOffset.y = -1 + easeOut * 1;
+      spearAngle = -0.1 + easeOut * 0.2;
+      rightArmRot = -0.3 + easeOut * 0.6;
+      leftArmRot = -0.1 + easeOut * 0.1;
+    } else {
+      const t = (attackProgress - 0.6) / 0.4;
+      const easeIn = t * t;
+      bodyRot = 0.1 * (1 - easeIn);
+      spearOffset.x = 8 * (1 - easeIn);
+      spearOffset.y = 0 * (1 - easeIn);
+      spearAngle = 0.1 * (1 - easeIn);
+      rightArmRot = 0.3 * (1 - easeIn);
+      leftArmRot = 0 * (1 - easeIn);
+    }
+  } else {
+    const breath = Math.sin(unit.animTimer * 2) * 0.05;
+    bodyRot = breath;
+    spearAngle = breath * 0.2 - 0.1;
+    leftArmRot = 0;
+  }
+  ctx.rotate(bodyRot);
+  const skinColor = cv.skinColor;
+  const tunicColor = age >= 3 ? cv.bodyDark : cv.bodyMid;
+  const pantsColor = cv.accent;
+  const armorMetal = age >= 4 ? "#333333" : "#666666";
+  const goldTrim = "#d4af37";
+  ctx.save();
+  ctx.translate(2, -4 + bob);
+  ctx.rotate(Math.PI / 4 + rightArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  ctx.fillStyle = armorMetal;
+  ctx.fillRect(-2.5, 6, 5, 4);
+  if (age >= 3) {
+    ctx.fillStyle = goldTrim;
+    ctx.fillRect(-2.5, 9, 5, 1);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 11, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(spearOffset.x, spearOffset.y);
+  ctx.translate(0, -1 + bob);
+  ctx.rotate(spearAngle);
+  ctx.fillStyle = "#4a2e15";
+  const poleLength = age >= 3 ? 32 : 28;
+  ctx.fillRect(-poleLength * 0.4, -1, poleLength, 2);
+  if (age >= 3) {
+    ctx.fillStyle = goldTrim;
     ctx.beginPath();
-    ctx.arc(-8, 2 + bob, 3, 0, Math.PI * 2);
+    ctx.arc(-poleLength * 0.4 - 1, 0, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#b8860b";
+    ctx.beginPath();
+    ctx.arc(-poleLength * 0.4 - 1, 0, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "#7a5a3a";
+    ctx.fillRect(-poleLength * 0.4 - 2, -1, 2, 2);
+  }
+  const shaftEnd = poleLength * 0.6;
+  ctx.fillStyle = age >= 4 ? "#eeeeee" : "#cccccc";
+  const bladeLen = age >= 3 ? 9 : 7;
+  ctx.beginPath();
+  ctx.moveTo(shaftEnd, 0);
+  ctx.lineTo(shaftEnd + 3, -2);
+  ctx.lineTo(shaftEnd + bladeLen, 0);
+  ctx.lineTo(shaftEnd + 3, 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(shaftEnd, -0.5, bladeLen - 2, 1);
+  ctx.restore();
+  ctx.fillStyle = pantsColor;
+  ctx.fillRect(-5, 6, 5, 7 + legOff);
+  ctx.fillRect(1, 6, 5, 7 - legOff);
+  if (age >= 3) {
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fillRect(-5, 8 + legOff, 5, 1);
+    ctx.fillRect(-5, 11 + legOff, 5, 1);
+    ctx.fillRect(1, 8 - legOff, 5, 1);
+    ctx.fillRect(1, 11 - legOff, 5, 1);
+  }
+  ctx.fillStyle = "#5c3a21";
+  ctx.fillRect(-5.5, 13 + legOff, 6, 2);
+  ctx.fillRect(0.5, 13 - legOff, 6, 2);
+  if (age >= 3) {
+    ctx.fillStyle = goldTrim;
+    ctx.fillRect(-5.5, 14 + legOff, 6, 0.5);
+    ctx.fillRect(0.5, 14 - legOff, 6, 0.5);
+  }
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-6, -6 + bob, 12, 15);
+  if (age >= 2) {
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(-6, -5 + bob, 12, 11);
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    for (let r = 0;r < 5; r++) {
+      for (let c = 0;c < 4; c++) {
+        ctx.beginPath();
+        ctx.arc(-4 + c * 3 + r % 2, -4 + bob + r * 2.2, 1.2, 0, Math.PI);
+        ctx.fill();
+      }
+    }
+  } else {
+    ctx.fillStyle = "rgba(0,0,0,0.2)";
+    ctx.fillRect(-6, 2 + bob, 12, 1);
+  }
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-6, 5 + bob, 12, 2);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -12 + bob, 6, 7);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-3, -7 + bob, 6, 3);
+  ctx.fillRect(3, -9 + bob, 1, 3);
+  if (age >= 3) {
+    ctx.fillStyle = age >= 4 ? goldTrim : armorMetal;
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 4.5, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(-5, -11 + bob, 10, 1.5);
+    ctx.fillRect(-4.5, -9.5 + bob, 2, 4);
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(-2, -15 + bob, 1, 4);
+    ctx.fillRect(0, -15 + bob, 1, 4);
+    ctx.fillRect(2, -15 + bob, 1, 4);
+  } else {
+    ctx.fillStyle = age >= 2 ? goldTrim : "#888";
+    ctx.beginPath();
+    ctx.moveTo(-5, -11 + bob);
+    ctx.quadraticCurveTo(-2, -16 + bob, 4, -14 + bob);
+    ctx.lineTo(4, -11 + bob);
+    ctx.fill();
+    ctx.fillStyle = "#b31515";
+    ctx.fillRect(-5.5, -12 + bob, 11, 2);
+  }
+  ctx.save();
+  ctx.translate(-3, -2 + bob);
+  ctx.rotate(leftArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  if (age >= 2) {
+    ctx.translate(-3, 3);
+    const shieldW = 8;
+    const shieldH = age >= 3 ? 20 : 16;
+    ctx.fillStyle = "#3a2010";
+    ctx.fillRect(-shieldW / 2 - 1, -shieldH / 2 - 1, shieldW + 2, shieldH + 2);
+    ctx.fillStyle = "#cdaa7d";
+    ctx.fillRect(-shieldW / 2, -shieldH / 2, shieldW, shieldH);
+    ctx.strokeStyle = "#8b6508";
+    ctx.lineWidth = 0.5;
+    for (let y = -shieldH / 2 + 2;y < shieldH / 2; y += 3) {
+      ctx.beginPath();
+      ctx.moveTo(-shieldW / 2, y);
+      ctx.lineTo(shieldW / 2, y);
+      ctx.stroke();
+    }
+    for (let x = -shieldW / 2 + 2;x < shieldW / 2; x += 2) {
+      ctx.beginPath();
+      ctx.moveTo(x, -shieldH / 2);
+      ctx.lineTo(x, shieldH / 2);
+      ctx.stroke();
+    }
+    if (age >= 3) {
+      ctx.fillStyle = "#b31515";
+      ctx.beginPath();
+      ctx.arc(0, -shieldH / 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, shieldH / 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+      if (age >= 4) {
+        ctx.fillStyle = "rgba(255, 215, 0, 0.4)";
+        ctx.fillRect(-shieldW / 2, -shieldH / 2, shieldW, shieldH);
+      }
+    }
+  } else {
+    ctx.translate(-2, 4);
+    ctx.fillStyle = "#5c3a21";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 4, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#222";
+    ctx.beginPath();
+    ctx.arc(0, 0, 2, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.fillStyle = age >= 3 ? "#4a4a48" : "#6a5040";
-  ctx.fillRect(-5, 11, 4, 6 + legOff);
-  ctx.fillRect(1, 11, 4, 6 - legOff);
-  drawSwordsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+  drawSpearsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawArchers_BaTu(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let isAttacking = false;
+  if (unit.state === 5 /* Attacking */) {
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    if (target) {
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+      if (dist <= unit.civRange + bldgRadius + 20) {
+        isAttacking = true;
+      }
+    }
+  }
+  let pullback = 0;
+  let bowAngle = 0;
+  if (isAttacking) {
+    const maxCd = unit.civAttackSpeed;
+    const currentCd = unit.attackCooldown;
+    const pullPhase = 1 - currentCd / maxCd;
+    if (pullPhase > 0.3 && pullPhase < 0.9) {
+      pullback = (pullPhase - 0.3) / 0.6;
+    } else if (pullPhase >= 0.9) {
+      pullback = 1;
+    } else {
+      pullback = 0;
+    }
+  }
+  let bodyRot = 0;
+  if (isAttacking) {
+    bodyRot = -0.1 + pullback * 0.15;
+    bowAngle = -0.05 + pullback * 0.05;
+  } else {
+    bodyRot = Math.sin(unit.animTimer * 2) * 0.05;
+    bowAngle = 0.15;
+  }
+  ctx.rotate(bodyRot);
+  const skinColor = cv.skinColor;
+  const tunicColor = age >= 3 ? "#2c5263" : "#3a6478";
+  const armorMetal = age >= 4 ? "#d4af37" : "#c9a84c";
+  const sashColor = age >= 4 ? "#b02a2a" : "#8a2b2b";
+  ctx.save();
+  let drawArmRot = 0;
+  let drawHandX = 0;
+  let drawHandY = 0;
+  if (isAttacking) {
+    drawArmRot = -0.2 - pullback * 0.8;
+    drawHandX = 10 - pullback * 12;
+    drawHandY = -4 + pullback * 1;
+  } else {
+    drawArmRot = 0.2;
+    drawHandX = 6;
+    drawHandY = -2;
+  }
+  ctx.translate(drawHandX, drawHandY + bob);
+  ctx.rotate(drawArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, -2, 5, 7);
+  if (age >= 2) {
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(-2, -3, 5, 2);
+    ctx.fillStyle = "#aa8a3a";
+    ctx.fillRect(-2, 3, 4, 5);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(-2, 4, 4, 0.5);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 9, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-7, -1 + bob);
+  ctx.rotate(0.2);
+  ctx.fillStyle = "#8a3a20";
+  ctx.beginPath();
+  ctx.moveTo(-1, -6);
+  ctx.lineTo(3, -6);
+  ctx.lineTo(2, 8);
+  ctx.lineTo(-2, 8);
+  ctx.fill();
+  ctx.fillStyle = armorMetal;
+  ctx.fillRect(-1.5, -6, 5, 1.5);
+  ctx.fillRect(-1.5, -2, 4, 1);
+  ctx.fillRect(-1.5, 5, 3, 1);
+  ctx.fillStyle = armorMetal;
+  ctx.fillRect(0, -9, 2, 3);
+  ctx.fillRect(2, -8, 1, 2);
+  if (age >= 3) {
+    ctx.fillStyle = "#22aaff";
+    ctx.fillRect(-2, 0, 1.5, 4);
+  }
+  ctx.restore();
+  ctx.fillStyle = "#4a3a2a";
+  ctx.fillRect(-5, 6, 4, 7 + legOff);
+  ctx.fillRect(1, 6, 4, 7 - legOff);
+  ctx.fillStyle = "#5c3a21";
+  ctx.fillRect(-5.5, 12 + legOff, 6, 2);
+  ctx.fillRect(0.5, 12 - legOff, 6, 2);
+  ctx.beginPath();
+  ctx.moveTo(0.5, 14 + legOff);
+  ctx.quadraticCurveTo(-1.5, 14 + legOff, -2.5, 12 + legOff);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(6.5, 14 - legOff);
+  ctx.quadraticCurveTo(4.5, 14 - legOff, 3.5, 12 - legOff);
+  ctx.fill();
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-6, -4 + bob, 12, 14);
+  if (age >= 3) {
+    ctx.fillStyle = "rgba(201, 168, 76, 0.4)";
+    for (let r = 0;r < 4; r++) {
+      ctx.fillRect(-5 + r % 2, -2 + bob + r * 3, 2, 2);
+      ctx.fillRect(1 + r % 2, -2 + bob + r * 3, 2, 2);
+    }
+    ctx.fillStyle = armorMetal;
+    ctx.beginPath();
+    ctx.moveTo(-6, -4 + bob);
+    ctx.lineTo(6, -4 + bob);
+    ctx.lineTo(4, 5 + bob);
+    ctx.lineTo(-4, 5 + bob);
+    ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    for (let i = 0;i < 3; i++) {
+      ctx.fillRect(-4, -2 + bob + i * 3, 8, 0.5);
+      for (let j = 0;j < 4; j++)
+        ctx.fillRect(-4 + j * 2 + i % 2, -2 + bob + i * 3, 0.5, 2);
+    }
+  } else {
+    ctx.fillStyle = "rgba(201, 168, 76, 0.3)";
+    ctx.fillRect(-6, -1 + bob, 12, 1);
+    ctx.fillRect(-6, 2 + bob, 12, 1);
+  }
+  ctx.fillStyle = sashColor;
+  ctx.fillRect(-7, 6 + bob, 14, 3);
+  ctx.fillRect(-3, 9 + bob, 6, 4);
+  ctx.fillStyle = "#ffd700";
+  ctx.fillRect(-3, 13 + bob, 6, 1);
+  if (age >= 3) {
+    ctx.fillStyle = tunicColor;
+    ctx.beginPath();
+    ctx.moveTo(4, 7 + bob);
+    ctx.quadraticCurveTo(7, 9 + bob, 8, 12 + bob);
+    ctx.lineTo(6, 11 + bob);
+    ctx.fill();
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(3, 6 + bob, 2, 2);
+    ctx.fillStyle = "#ff2222";
+    ctx.fillRect(4, 5 + bob, 1, 1);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -12 + bob, 6, 8);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-3, -7 + bob, 6, 3);
+  ctx.fillRect(3, -9 + bob, 1, 3);
+  if (age >= 3) {
+    ctx.fillStyle = tunicColor;
+    ctx.fillRect(-5, -15 + bob, 10, 5);
+    ctx.beginPath();
+    ctx.moveTo(-5, -15 + bob);
+    ctx.lineTo(0, -20 + bob);
+    ctx.lineTo(5, -15 + bob);
+    ctx.fill();
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(-5, -11 + bob, 10, 1.5);
+    ctx.fillStyle = "rgba(150, 150, 150, 0.7)";
+    ctx.fillRect(-5, -10 + bob, 2, 5);
+    ctx.fillStyle = "#ffd700";
+    ctx.fillRect(-1, -16 + bob, 3, 3);
+    ctx.fillStyle = age >= 4 ? "#ff2222" : "#22ddff";
+    ctx.fillRect(0, -15 + bob, 1, 1);
+    if (age >= 4) {
+      ctx.fillStyle = "#22aa88";
+      ctx.beginPath();
+      ctx.moveTo(0, -16 + bob);
+      ctx.quadraticCurveTo(-4, -22 + bob, -2, -26 + bob);
+      ctx.quadraticCurveTo(2, -20 + bob, 1, -16 + bob);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = "#888";
+    ctx.beginPath();
+    ctx.moveTo(-5, -11 + bob);
+    ctx.quadraticCurveTo(-2, -15 + bob, 3, -13 + bob);
+    ctx.lineTo(3, -11 + bob);
+    ctx.fill();
+    ctx.fillStyle = sashColor;
+    ctx.fillRect(-5, -12 + bob, 9, 2);
+  }
+  ctx.save();
+  let bowArmRot = 0;
+  if (isAttacking) {
+    bowArmRot = -Math.PI / 2 + 0.2;
+  } else {
+    bowArmRot = -Math.PI / 6;
+  }
+  ctx.translate(-2, -4 + bob);
+  ctx.rotate(bowArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  ctx.fillStyle = armorMetal;
+  ctx.fillRect(-2, 5, 4, 5);
+  ctx.fillStyle = "rgba(0,0,0,0.2)";
+  ctx.fillRect(-1, 5, 2, 5);
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 11, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(0, 11);
+  ctx.rotate(-bowArmRot + bowAngle);
+  const bc = age >= 4 ? "#d4af37" : "#c9a84c";
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(4, 0, 11, -Math.PI * 0.45, Math.PI * 0.45);
+  ctx.stroke();
+  ctx.strokeStyle = bc;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(4, 0, 11, -Math.PI * 0.35, -Math.PI * 0.1);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(4, 0, 11, Math.PI * 0.1, Math.PI * 0.35);
+  ctx.stroke();
+  ctx.strokeStyle = "#2c5263";
+  ctx.beginPath();
+  ctx.arc(4, 0, 11, -Math.PI * 0.1, Math.PI * 0.1);
+  ctx.stroke();
+  ctx.fillStyle = age >= 4 ? "#eeeeee" : "#bbbbbb";
+  ctx.beginPath();
+  ctx.moveTo(6, -10);
+  ctx.lineTo(10, -11);
+  ctx.lineTo(9, -9);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(6, 10);
+  ctx.lineTo(10, 11);
+  ctx.lineTo(9, 9);
+  ctx.fill();
+  ctx.fillStyle = "#6a3020";
+  ctx.fillRect(-2, -2, 5, 4);
+  const bowTopY = -11;
+  const bowBotY = 11;
+  const bowTopX = 10;
+  const bowBotX = 10;
+  const maxPullDist = 14;
+  const stringMidX = bowTopX - pullback * maxPullDist;
+  const stringMidY = 0;
+  ctx.strokeStyle = "#dddddd";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(bowTopX, bowTopY);
+  ctx.lineTo(stringMidX, stringMidY);
+  ctx.lineTo(bowBotX, bowBotY);
+  ctx.stroke();
+  const hideArrow = isAttacking && pullback === 0 && unit.attackCooldown > unit.civAttackSpeed * 0.8;
+  if (!hideArrow && isAttacking) {
+    const arrowLen = 15;
+    ctx.save();
+    ctx.fillStyle = age >= 4 ? "#ddc060" : "#bb9966";
+    ctx.fillRect(stringMidX, -0.5, arrowLen, 1);
+    ctx.fillStyle = "#44aaff";
+    ctx.beginPath();
+    ctx.moveTo(stringMidX + arrowLen, -1.5);
+    ctx.lineTo(stringMidX + arrowLen + 3, 0);
+    ctx.lineTo(stringMidX + arrowLen, 1.5);
+    ctx.fill();
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(stringMidX, -1.5, 3, 3);
+    ctx.restore();
+  }
+  ctx.restore();
+  drawArchersFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
 }
 
 // src/entities/unit-rendering/civs/DaiMinhRenderer.ts
@@ -5172,63 +6441,574 @@ function drawScout_DaiMinh(unit, ctx, age, bob, moving, legOffset, lvl, cv) {
   }
 }
 function drawSwords_DaiMinh(unit, ctx, age, bob, legOff, lvl, cv) {
-  ctx.fillStyle = age >= 3 ? cv.bodyDark : cv.bodyMid;
-  ctx.fillRect(-7, -5 + bob, 14, 16);
-  ctx.fillStyle = "rgba(255,255,255,0.12)";
-  for (let i = 0;i < 6; i++) {
-    ctx.fillRect(-6, -4 + bob + i * 2.5, 12, 1);
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  const attackState = unit.state === 2;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
   }
-  ctx.fillStyle = "#cc2222";
-  ctx.fillRect(-7, 5 + bob, 14, 3);
-  if (age >= 3) {
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-7, -5 + bob, 14, 1);
+  let bodyTilt = 0;
+  let rightArmRot = -0.1;
+  let leftArmRot = 0;
+  let swordOffsetX = 0;
+  let swordOffsetY = 0;
+  let shieldOffsetX = 0;
+  if (attackState) {
+    if (attackProgress < 0.25) {
+      const t = attackProgress / 0.25;
+      rightArmRot = -0.1 * (1 - t) + Math.PI / 4 * t;
+      leftArmRot = -Math.PI / 8 * t;
+      bodyTilt = -0.15 * t;
+      swordOffsetX = -4 * t;
+      shieldOffsetX = -2 * t;
+    } else if (attackProgress < 0.5) {
+      const t = (attackProgress - 0.25) / 0.25;
+      rightArmRot = Math.PI / 4 * (1 - t) + -Math.PI / 2 * t;
+      leftArmRot = -Math.PI / 8 * (1 - t) + Math.PI / 12 * t;
+      bodyTilt = -0.15 * (1 - t) + 0.2 * t;
+      swordOffsetX = -4 * (1 - t) + 6 * t;
+      swordOffsetY = 3 * t;
+    } else {
+      const t = (attackProgress - 0.5) / 0.5;
+      rightArmRot = -Math.PI / 2 * (1 - t) + -0.1 * t;
+      leftArmRot = Math.PI / 12 * (1 - t) + 0 * t;
+      bodyTilt = 0.2 * (1 - t) + 0 * t;
+      swordOffsetX = 6 * (1 - t);
+      swordOffsetY = 3 * (1 - t);
+    }
   }
-  ctx.fillStyle = cv.skinColor;
-  ctx.fillRect(-4, -12 + bob, 8, 9);
+  if (bodyTilt !== 0) {
+    ctx.translate(0, 16 + bob);
+    ctx.rotate(bodyTilt);
+    ctx.translate(0, -(16 + bob));
+  }
+  const skinColor = cv.skinColor || "#d5a176";
+  const tunicColor = age >= 3 ? cv.bodyDark : cv.bodyMid;
+  const armorTrim = age >= 4 ? "#ffd700" : "#bbbbbb";
+  const rivetColor = age >= 4 ? "#ffd700" : "#888888";
   ctx.fillStyle = "#222";
-  ctx.fillRect(1, -11 + bob, 2, 2);
+  ctx.fillRect(-5, 12 + bob, 4, 6 + legOff);
+  ctx.fillRect(1, 12 + bob, 4, 6 - legOff);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-6, 18 + bob + legOff, 5, 3);
+  ctx.fillRect(0, 18 + bob - legOff, 5, 3);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(-6, 20 + bob + legOff, 5, 1);
+  ctx.fillRect(0, 20 + bob - legOff, 5, 1);
+  ctx.save();
+  ctx.translate(4, -2 + bob);
+  ctx.rotate(rightArmRot);
+  ctx.translate(swordOffsetX, swordOffsetY);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-1.5, 6, 3, 4);
+  ctx.translate(0, 10);
+  ctx.rotate(-Math.PI / 6);
+  ctx.fillStyle = "#5c4033";
+  ctx.fillRect(-1, -5, 2, 6);
+  ctx.strokeStyle = armorTrim;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, -6, 1.5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "#cc2222";
+  ctx.beginPath();
+  ctx.moveTo(0, -7);
+  ctx.quadraticCurveTo(-4, -10, -3, -13);
+  ctx.lineTo(-2, -13);
+  ctx.fill();
+  ctx.fillStyle = armorTrim;
+  ctx.fillRect(-2, 1, 4, 1.5);
+  ctx.fillStyle = "#e0e0e0";
+  ctx.beginPath();
+  ctx.moveTo(-1, 2.5);
+  ctx.lineTo(-1, 14);
+  ctx.quadraticCurveTo(0, 18, 2, 16);
+  ctx.lineTo(1.5, 2.5);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0.5, 3, 1, 12);
+  if (attackState && attackProgress > 0.25 && attackProgress < 0.6) {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+    ctx.beginPath();
+    ctx.moveTo(0, 2);
+    ctx.quadraticCurveTo(-15, 15, 2, 22);
+    ctx.lineTo(4, 18);
+    ctx.quadraticCurveTo(-10, 12, 1.5, 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-7, -5 + bob, 14, 14);
+  ctx.fillRect(-8, 9 + bob, 6, 5);
+  ctx.fillRect(2, 9 + bob, 6, 5);
+  ctx.fillStyle = rivetColor;
+  for (let r = 0;r < 6; r++) {
+    for (let c = 0;c < 4; c++) {
+      ctx.fillRect(-5 + c * 3, -3 + bob + r * 2.5, 1, 1);
+    }
+  }
+  for (let r = 0;r < 2; r++) {
+    for (let c = 0;c < 2; c++) {
+      ctx.fillRect(-7 + c * 3, 10 + bob + r * 3, 1, 1);
+      ctx.fillRect(3 + c * 3, 10 + bob + r * 3, 1, 1);
+    }
+  }
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-7, 6 + bob, 14, 2);
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(-6, 7 + bob, 12, 2);
+  ctx.fillRect(-4, 9 + bob, 3, 5);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -11 + bob, 6, 6);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(-1.5, -9 + bob, 1, 1);
+  ctx.fillRect(0.5, -9 + bob, 1, 1);
   if (age >= 3) {
-    ctx.fillStyle = age >= 4 ? "#8a2222" : "#6a3333";
-    ctx.fillRect(-6, -17 + bob, 12, 5);
-    ctx.fillRect(-8, -12 + bob, 16, 2);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-1, -20 + bob, 2, 4);
+    ctx.fillStyle = age >= 4 ? "#cc2222" : "#5a5a58";
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 5, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-7, -12 + bob, 14, 2);
+    ctx.fillStyle = armorTrim;
+    ctx.fillRect(-1, -18 + bob, 2, 3);
     if (age >= 4) {
       ctx.fillStyle = "#ff3333";
-      ctx.fillRect(-1, -24 + bob, 2, 5);
+      ctx.beginPath();
+      ctx.moveTo(0, -18 + bob);
+      ctx.quadraticCurveTo(-6, -22 + bob, -8, -14 + bob);
+      ctx.quadraticCurveTo(-4, -18 + bob, 0, -16 + bob);
+      ctx.fill();
     }
   } else if (age >= 2) {
-    ctx.fillStyle = "#6a3333";
-    ctx.fillRect(-5, -16 + bob, 10, 4);
+    ctx.fillStyle = "#5a5a58";
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 4.5, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-5.5, -12 + bob, 11, 1.5);
   } else {
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(-3, -18 + bob, 6, 5);
+    ctx.fillStyle = "#111";
+    ctx.fillRect(-3, -14 + bob, 6, 3);
+    ctx.fillRect(-1.5, -16 + bob, 3, 2);
   }
-  ctx.fillStyle = "#5a3a18";
-  ctx.fillRect(7, -2 + bob, 2, 8);
-  ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
-  ctx.fillRect(6, -16 + bob, 4, 16);
-  ctx.fillStyle = "rgba(255,255,255,0.35)";
-  ctx.fillRect(6, -16 + bob, 1, 14);
-  ctx.fillStyle = age >= 4 ? "#ffd700" : "#888";
-  ctx.fillRect(6, 6 + bob, 4, 2);
-  ctx.fillRect(4, -2 + bob, 8, 2);
+  ctx.save();
+  ctx.translate(-4, -1 + bob);
+  ctx.rotate(leftArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
   if (age >= 2) {
-    ctx.fillStyle = "#aa1111";
-    ctx.fillRect(-11, -4 + bob, 5, 14);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-10, 1 + bob, 3, 3);
+    ctx.translate(-4 + shieldOffsetX, 4);
+    ctx.fillStyle = age >= 3 ? "#b02a2a" : "#8b5a2b";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 4, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
     if (age >= 3) {
+      ctx.fillStyle = "#ffd700";
+      ctx.beginPath();
+      ctx.arc(0, 0, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#111";
+      ctx.fillRect(-2, -3, 4, 1);
+      ctx.fillRect(-2, 3, 4, 1);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(-1, -1, 1, 1);
+      ctx.fillRect(1, -1, 1, 1);
       ctx.strokeStyle = "#ffd700";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 4, 8, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = "#5c4033";
       ctx.lineWidth = 0.5;
-      ctx.strokeRect(-11, -4 + bob, 5, 14);
+      for (let i = -2;i <= 2; i += 2) {
+        ctx.beginPath();
+        ctx.moveTo(i, -6);
+        ctx.lineTo(i, 6);
+        ctx.stroke();
+      }
     }
   }
-  ctx.fillStyle = age >= 3 ? "#3a3a38" : "#5a4a38";
-  ctx.fillRect(-5, 11, 4, 6 + legOff);
-  ctx.fillRect(1, 11, 4, 6 - legOff);
+  ctx.restore();
   drawSwordsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawSpears_DaiMinh(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let attackProgress = 0;
+  if (unit.state === 5 /* Attacking */) {
+    const attackCycle = unit.animTimer % unit.attackCooldown;
+    const attackDuration = unit.civAttackSpeed * 0.4;
+    if (attackCycle < attackDuration) {
+      attackProgress = attackCycle / attackDuration;
+    }
+  }
+  let bodyRot = 0;
+  let spearAngle = 0;
+  let spearOffset = { x: 0, y: 0 };
+  let rightArmRot = 0;
+  let leftArmRot = 0;
+  if (attackProgress > 0) {
+    if (attackProgress < 0.3) {
+      const t = attackProgress / 0.3;
+      bodyRot = t * -0.2;
+      spearOffset.x = t * -5;
+      spearOffset.y = t * -2;
+      spearAngle = t * -0.1;
+      rightArmRot = t * -0.4;
+      leftArmRot = t * 0.2;
+    } else if (attackProgress < 0.6) {
+      const t = (attackProgress - 0.3) / 0.3;
+      const easeOut = 1 - Math.pow(1 - t, 3);
+      bodyRot = -0.2 + easeOut * 0.4;
+      spearOffset.x = -5 + easeOut * 14;
+      spearOffset.y = -2 + easeOut * 1;
+      spearAngle = -0.1 + easeOut * 0.2;
+      rightArmRot = -0.4 + easeOut * 0.8;
+      leftArmRot = 0.2 - easeOut * 0.3;
+    } else {
+      const t = (attackProgress - 0.6) / 0.4;
+      const easeIn = t * t;
+      bodyRot = 0.2 * (1 - easeIn);
+      spearOffset.x = 9 * (1 - easeIn);
+      spearOffset.y = -1 * (1 - easeIn);
+      spearAngle = 0.1 * (1 - easeIn);
+      rightArmRot = 0.4 * (1 - easeIn);
+      leftArmRot = -0.1 * (1 - easeIn);
+    }
+  } else {
+    const breath = Math.sin(unit.animTimer * 2) * 0.05;
+    bodyRot = breath;
+    spearAngle = -0.1 + breath * 0.2;
+    leftArmRot = -0.2;
+  }
+  ctx.rotate(bodyRot);
+  const skinColor = cv.skinColor;
+  const tunicColor = age >= 3 ? cv.bodyDark : cv.bodyMid;
+  const armorMetal = age >= 4 ? "#222222" : "#5a5a58";
+  const armorGold = "#ffd700";
+  ctx.save();
+  ctx.translate(3, -4 + bob);
+  ctx.rotate(Math.PI / 5 + rightArmRot * 0.5);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  ctx.fillStyle = armorMetal;
+  ctx.fillRect(-2.5, 6, 5, 4);
+  if (age >= 3) {
+    ctx.fillStyle = armorGold;
+    ctx.fillRect(-2.5, 9, 5, 1);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 11, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(spearOffset.x, spearOffset.y);
+  ctx.translate(0, -2 + bob);
+  ctx.rotate(spearAngle);
+  ctx.fillStyle = "#6a4a2a";
+  const poleLength = age >= 3 ? 36 : 32;
+  ctx.fillRect(-poleLength * 0.4, -1, poleLength, 2);
+  ctx.fillStyle = "#555";
+  ctx.beginPath();
+  ctx.moveTo(-poleLength * 0.4, -1);
+  ctx.lineTo(-poleLength * 0.4 - 2, -0.5);
+  ctx.lineTo(-poleLength * 0.4 - 2, 0.5);
+  ctx.lineTo(-poleLength * 0.4, 1);
+  ctx.fill();
+  const shaftEnd = poleLength * 0.6;
+  ctx.fillStyle = "#dd2222";
+  ctx.beginPath();
+  ctx.moveTo(shaftEnd, -1);
+  ctx.quadraticCurveTo(shaftEnd - 3, -6, shaftEnd - 1, -8);
+  ctx.quadraticCurveTo(shaftEnd + 1, -4, shaftEnd + 2, 0);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(shaftEnd, 1);
+  ctx.quadraticCurveTo(shaftEnd - 3, 6, shaftEnd - 1, 8);
+  ctx.quadraticCurveTo(shaftEnd + 1, 4, shaftEnd + 2, 0);
+  ctx.fill();
+  ctx.fillStyle = age >= 4 ? "#eeeeee" : "#cccccc";
+  const bladeLen = age >= 3 ? 8 : 6;
+  ctx.beginPath();
+  ctx.moveTo(shaftEnd, 0);
+  ctx.quadraticCurveTo(shaftEnd + 2, -2, shaftEnd + bladeLen, 0);
+  ctx.quadraticCurveTo(shaftEnd + 2, 2, shaftEnd, 0);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(shaftEnd, -0.5, bladeLen - 1, 1);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-4, -2 + bob);
+  ctx.rotate(Math.PI / 3 + leftArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  ctx.fillStyle = armorMetal;
+  ctx.fillRect(-2.5, 5, 5, 4);
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 10, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "#333";
+  ctx.fillRect(-5, 7 + bob, 4, 6 + legOff);
+  ctx.fillRect(1, 7 + bob, 4, 6 - legOff);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-5.5, 11 + legOff, 5, 3);
+  ctx.fillRect(0.5, 11 - legOff, 5, 3);
+  ctx.fillStyle = "#eee";
+  ctx.fillRect(-5.5, 13 + legOff, 5, 1);
+  ctx.fillRect(0.5, 13 - legOff, 5, 1);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-6, -6 + bob, 12, 15);
+  ctx.fillRect(-7, 9 + bob, 6, 4);
+  ctx.fillRect(1, 9 + bob, 6, 4);
+  ctx.fillStyle = age >= 4 ? armorGold : "#aaaaaa";
+  for (let r = 0;r < 5; r++) {
+    for (let c = 0;c < 3; c++) {
+      ctx.fillRect(-4 + c * 3 + r % 2, -4 + bob + r * 2.5, 1, 1);
+    }
+  }
+  for (let r = 0;r < 2; r++) {
+    ctx.fillRect(-5, 10 + bob + r * 2, 1, 1);
+    ctx.fillRect(-2, 10 + bob + r * 2, 1, 1);
+    ctx.fillRect(2, 10 + bob + r * 2, 1, 1);
+    ctx.fillRect(5, 10 + bob + r * 2, 1, 1);
+  }
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-6, 6 + bob, 12, 2);
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(-5, 7 + bob, 10, 2);
+  ctx.fillRect(-3, 9 + bob, 2, 4);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -12 + bob, 6, 7);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(-1.5, -9 + bob, 1, 1);
+  ctx.fillRect(1, -9 + bob, 1, 1);
+  if (age >= 3) {
+    ctx.fillStyle = age >= 4 ? "#cc2222" : "#5a5a58";
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 5, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-7, -12 + bob, 14, 2);
+    ctx.fillStyle = armorGold;
+    ctx.fillRect(-1, -16 + bob, 2, 4);
+    if (age >= 4) {
+      ctx.fillStyle = "#ff3333";
+      ctx.beginPath();
+      ctx.moveTo(0, -16 + bob);
+      ctx.quadraticCurveTo(-5, -20 + bob, -7, -12 + bob);
+      ctx.quadraticCurveTo(-3, -16 + bob, 0, -14 + bob);
+      ctx.fill();
+    }
+  } else if (age >= 2) {
+    ctx.fillStyle = "#5a5a58";
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 4.5, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-5.5, -12 + bob, 11, 1.5);
+  } else {
+    ctx.fillStyle = "#111";
+    ctx.fillRect(-2.5, -15 + bob, 5, 3);
+    ctx.fillRect(-1, -17 + bob, 2, 2);
+  }
+  drawSpearsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawArchers_DaiMinh(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let isAttacking = false;
+  if (unit.state === 5 /* Attacking */) {
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    if (target) {
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+      if (dist <= unit.civRange + bldgRadius + 20) {
+        isAttacking = true;
+      }
+    }
+  }
+  let pullback = 0;
+  if (isAttacking) {
+    const attackCycle = unit.animTimer % unit.attackCooldown;
+    const attackDuration = unit.civAttackSpeed * 0.8;
+    if (attackCycle < attackDuration) {
+      const t = attackCycle / attackDuration;
+      if (t < 0.8) {
+        pullback = t / 0.8;
+      } else {
+        pullback = 1 - (t - 0.8) / 0.2;
+      }
+    }
+  }
+  let bodyRot = 0;
+  if (isAttacking) {
+    bodyRot = -0.1 + pullback * 0.1;
+  } else {
+    bodyRot = Math.sin(unit.animTimer * 2) * 0.05;
+  }
+  ctx.rotate(bodyRot);
+  const skinColor = cv.skinColor;
+  const bodyBaseColor = age >= 3 ? cv.bodyDark : cv.bodyMid;
+  const armorGold = "#d4af37";
+  const armorMetal = age >= 4 ? "#5a5a58" : "#777777";
+  ctx.save();
+  let drawArmRot = 0;
+  let drawHandX = 0;
+  let drawHandY = 0;
+  if (isAttacking) {
+    drawArmRot = 0.2 + pullback * -0.6;
+    drawHandX = 10 + pullback * -4;
+    drawHandY = -9 + pullback * -3;
+  } else {
+    drawArmRot = 0.4;
+    drawHandX = 8;
+    drawHandY = -4;
+  }
+  ctx.translate(drawHandX, drawHandY + bob);
+  ctx.rotate(drawArmRot);
+  ctx.fillStyle = bodyBaseColor;
+  ctx.fillRect(-2, -2, 4, 7);
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(-2, 5, 4, 1);
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 8, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-7, 6 + bob);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-2, -3, 4, 6);
+  ctx.fillStyle = "#aa2222";
+  ctx.fillRect(-2, -3, 4, 1);
+  ctx.fillRect(-2, 2, 4, 1);
+  ctx.fillStyle = "#aaa";
+  ctx.fillRect(-1.5, -5, 1, 2);
+  ctx.fillRect(0.5, -4, 1, 1);
+  ctx.restore();
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-5, 6, 4, 7 + legOff);
+  ctx.fillRect(1, 6, 4, 7 - legOff);
+  ctx.fillStyle = "#2a2a2a";
+  ctx.fillRect(-5.5, 12 + legOff, 5, 2);
+  ctx.fillRect(0.5, 12 - legOff, 5, 2);
+  ctx.fillStyle = "#eee";
+  ctx.fillRect(-5.5, 13.5 + legOff, 5, 0.5);
+  ctx.fillRect(0.5, 13.5 - legOff, 5, 0.5);
+  ctx.fillStyle = bodyBaseColor;
+  ctx.fillRect(-6, -4 + bob, 12, 14);
+  if (age >= 2) {
+    ctx.fillStyle = age >= 4 ? armorGold : "#bbbbbb";
+    for (let r = 0;r < 4; r++) {
+      for (let c = 0;c < 3; c++) {
+        ctx.fillRect(-4 + c * 3 + r % 2, -2 + bob + r * 3, 1, 1);
+      }
+    }
+  }
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-6, 4 + bob, 12, 2);
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(-5, 6 + bob, 10, 3);
+  ctx.fillRect(-3, 9 + bob, 4, 3);
+  if (age >= 3) {
+    ctx.fillStyle = bodyBaseColor;
+    ctx.fillRect(-6, -5 + bob, 3, 4);
+    ctx.fillStyle = age >= 4 ? "#cc2222" : armorMetal;
+    ctx.fillRect(-6, -5 + bob, 3, 1);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -12 + bob, 6, 8);
+  if (age >= 3) {
+    ctx.fillStyle = "#111";
+    ctx.fillRect(-2, -9 + bob, 4, 0.5);
+    ctx.fillRect(-0.5, -6 + bob, 1, 2);
+  } else {
+    ctx.fillStyle = "#111";
+    ctx.fillRect(-3, -13 + bob, 6, 2);
+  }
+  if (age >= 3) {
+    ctx.fillStyle = age >= 4 ? "#222" : "#333";
+    ctx.fillRect(-5, -15 + bob, 10, 4);
+    ctx.fillStyle = age >= 4 ? "#cc2222" : "#222";
+    ctx.fillRect(-7, -11 + bob, 14, 1.5);
+    ctx.fillStyle = "#ff2222";
+    ctx.fillRect(-1, -17 + bob, 2, 3);
+    ctx.fillStyle = armorGold;
+    ctx.fillRect(-0.5, -19 + bob, 1, 2);
+  } else {
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-5, -14 + bob, 10, 4);
+    ctx.fillStyle = "#aa2222";
+    ctx.fillRect(-5, -11 + bob, 10, 1);
+  }
+  ctx.save();
+  let bowArmRot = 0;
+  if (isAttacking) {
+    bowArmRot = -Math.PI / 2 + 0.2;
+  } else {
+    bowArmRot = -Math.PI / 6;
+  }
+  ctx.translate(-1, -3 + bob);
+  ctx.rotate(bowArmRot);
+  ctx.fillStyle = bodyBaseColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-2, 5, 4, 5);
+  if (age >= 3) {
+    ctx.fillStyle = armorGold;
+    ctx.fillRect(-2, 6, 4, 1);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 11, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(2, 11);
+  ctx.rotate(-bowArmRot);
+  if (isAttacking) {
+    ctx.rotate(0.05);
+  } else {
+    ctx.rotate(-0.2);
+  }
+  ctx.fillStyle = age >= 4 ? "#5a1111" : "#3a2010";
+  ctx.fillRect(-3, -2, 14, 3);
+  ctx.fillStyle = age >= 3 ? "#a0a0a0" : "#888888";
+  ctx.fillRect(8, -8, 2, 16);
+  ctx.fillStyle = armorGold;
+  ctx.fillRect(7, -1, 4, 2);
+  ctx.fillStyle = "#4a2a18";
+  ctx.fillRect(-2, -7, 8, 5);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-2, -6, 8, 0.5);
+  ctx.fillRect(-2, -3, 8, 0.5);
+  ctx.save();
+  ctx.translate(4, -7);
+  ctx.rotate(pullback * -1);
+  ctx.fillStyle = "#5a3a20";
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-2, -4);
+  ctx.lineTo(-1, -4);
+  ctx.fill();
+  ctx.fillRect(-2, -6, 2, 2);
+  ctx.restore();
+  ctx.strokeStyle = "#eee";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(9, -8);
+  ctx.lineTo(9 - pullback * 6, -1);
+  ctx.lineTo(9, 8);
+  ctx.stroke();
+  if (isAttacking && pullback < 0.2 && unit.attackCooldown < unit.civAttackSpeed * 0.1) {
+    ctx.fillStyle = "#ccc";
+    ctx.fillRect(10, -2, 4, 1);
+  }
+  ctx.restore();
+  drawArchersFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
 }
 
 // src/entities/unit-rendering/civs/YamatoRenderer.ts
@@ -5327,85 +7107,636 @@ function drawScout_Yamato(unit, ctx, age, bob, moving, legOffset, lvl, cv) {
   }
 }
 function drawSwords_Yamato(unit, ctx, age, bob, legOff, lvl, cv) {
-  ctx.fillStyle = cv.bodyDark;
-  ctx.fillRect(-7, -5 + bob, 14, 16);
-  ctx.fillStyle = cv.bodyLight;
-  for (let i = 0;i < 5; i++) {
-    ctx.fillRect(-6, -3 + bob + i * 3, 12, 1);
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  const attackState = unit.state === 2;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
   }
-  if (age >= 2) {
-    ctx.fillStyle = cv.bodyDark;
-    for (let i = 0;i < 4; i++) {
-      ctx.fillRect(-6 + i * 3, 8 + bob, 3, 4);
+  let bodyTilt = 0;
+  let armRot = Math.PI / 12;
+  let swordOffsetX = 0;
+  let swordOffsetY = 0;
+  if (attackState) {
+    if (attackProgress < 0.3) {
+      const t = attackProgress / 0.3;
+      armRot = Math.PI / 12 * (1 - t) + -Math.PI / 1.5 * t;
+      bodyTilt = -0.1 * t;
+      swordOffsetY = -5 * t;
+    } else if (attackProgress < 0.6) {
+      const t = (attackProgress - 0.3) / 0.3;
+      armRot = -Math.PI / 1.5 * (1 - t) + Math.PI / 3 * t;
+      bodyTilt = -0.1 * (1 - t) + 0.15 * t;
+      swordOffsetY = -5 * (1 - t) + 2 * t;
+      swordOffsetX = 4 * t;
+    } else {
+      const t = (attackProgress - 0.6) / 0.4;
+      armRot = Math.PI / 3 * (1 - t) + Math.PI / 12 * t;
+      bodyTilt = 0.15 * (1 - t) + 0 * t;
+      swordOffsetY = 2 * (1 - t);
+      swordOffsetX = 4 * (1 - t);
     }
   }
-  if (age >= 2) {
-    ctx.fillStyle = cv.bodyDark;
-    ctx.fillRect(-9, -6 + bob, 4, 8);
-    ctx.fillRect(5, -6 + bob, 4, 8);
-    ctx.fillStyle = cv.bodyLight;
-    ctx.fillRect(-9, -6 + bob, 4, 1);
-    ctx.fillRect(5, -6 + bob, 4, 1);
+  if (bodyTilt !== 0) {
+    ctx.translate(0, 16 + bob);
+    ctx.rotate(bodyTilt);
+    ctx.translate(0, -(16 + bob));
   }
-  ctx.fillStyle = cv.skinColor;
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(1, -11 + bob, 2, 2);
+  const skinColor = cv.skinColor || "#e8cfa6";
+  const armorPrimary = age >= 3 ? "#b02a2a" : "#8a2323";
+  const armorLacing = age >= 3 ? "#111" : "#333";
+  const clothColor = "#1a1a1a";
+  ctx.fillStyle = clothColor;
+  ctx.fillRect(-6, 12 + bob, 5, 5 + legOff);
+  ctx.fillRect(1, 12 + bob, 5, 5 - legOff);
+  ctx.fillStyle = armorPrimary;
+  ctx.fillRect(-5, 17 + bob + legOff, 3, 5);
+  ctx.fillRect(2, 17 + bob - legOff, 3, 5);
+  ctx.fillStyle = armorLacing;
+  for (let i = 0;i < 3; i++) {
+    ctx.fillRect(-5, 18 + bob + legOff + i * 1.5, 3, 0.5);
+    ctx.fillRect(2, 18 + bob - legOff + i * 1.5, 3, 0.5);
+  }
+  ctx.fillStyle = "#eee";
+  ctx.fillRect(-6, 22 + bob + legOff, 5, 2);
+  ctx.fillRect(1, 22 + bob - legOff, 5, 2);
+  ctx.fillStyle = "#8b5a2b";
+  ctx.fillRect(-6, 23 + bob + legOff, 5, 1);
+  ctx.fillRect(1, 23 + bob - legOff, 5, 1);
   if (age >= 3) {
-    ctx.fillStyle = cv.bodyDark;
-    ctx.fillRect(-7, -18 + bob, 14, 6);
-    ctx.fillStyle = age >= 4 ? "#ffd700" : "#cc9944";
-    ctx.beginPath();
-    ctx.moveTo(0, -26 + bob);
-    ctx.lineTo(-4, -18 + bob);
-    ctx.lineTo(4, -18 + bob);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = cv.bodyDark;
-    ctx.fillRect(-7, -12 + bob, 14, 3);
-    ctx.fillStyle = cv.bodyLight;
-    ctx.fillRect(-7, -14 + bob, 14, 1);
+    ctx.save();
+    ctx.translate(-4, -6 + bob);
+    ctx.rotate(-0.05);
+    ctx.fillStyle = "#3a2a10";
+    ctx.fillRect(0, -20, 1.5, 30);
+    ctx.fillStyle = cv.accent;
+    ctx.fillRect(1.5, -19, 12, 18);
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(1.5, -19, 12, 18);
     if (age >= 4) {
       ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-8, -22 + bob, 2, 5);
-      ctx.fillRect(6, -22 + bob, 2, 5);
+      ctx.beginPath();
+      ctx.arc(7.5, -10, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = cv.accent;
+      ctx.beginPath();
+      ctx.arc(7.5, -10, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.fillStyle = clothColor;
+  ctx.fillRect(-4, -2 + bob, 3, 6);
+  ctx.fillStyle = clothColor;
+  ctx.fillRect(-6, -5 + bob, 12, 15);
+  ctx.fillStyle = armorPrimary;
+  ctx.fillRect(-7, -4 + bob, 14, 11);
+  ctx.fillStyle = armorLacing;
+  for (let i = 0;i < 4; i++) {
+    ctx.fillRect(-7, -2 + bob + i * 2.5, 14, 1);
+  }
+  ctx.fillStyle = armorPrimary;
+  ctx.fillRect(-8, 7 + bob, 4, 6);
+  ctx.fillRect(-2, 7 + bob, 4, 6);
+  ctx.fillRect(4, 7 + bob, 4, 6);
+  ctx.fillStyle = armorLacing;
+  for (let i = 0;i < 3; i++) {
+    ctx.fillRect(-8, 8 + bob + i * 2, 4, 0.5);
+    ctx.fillRect(-2, 8 + bob + i * 2, 4, 0.5);
+    ctx.fillRect(4, 8 + bob + i * 2, 4, 0.5);
+  }
+  ctx.fillStyle = "#eee";
+  ctx.fillRect(-7, 5 + bob, 14, 2);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -12 + bob, 7, 7);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(-1, -10 + bob, 1.5, 1.5);
+  if (age >= 3) {
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-4, -8 + bob, 8, 3.5);
+    ctx.fillStyle = "#b31515";
+    ctx.fillRect(-2, -7 + bob, 5, 1);
+    ctx.fillStyle = "#333";
+    ctx.beginPath();
+    ctx.arc(0, -12 + bob, 6, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-7, -13 + bob, 14, 1);
+    ctx.fillStyle = armorPrimary;
+    ctx.fillRect(-8, -12 + bob, 5, 6);
+    ctx.fillRect(4, -12 + bob, 4, 6);
+    ctx.fillStyle = armorLacing;
+    ctx.fillRect(-8, -10 + bob, 5, 0.5);
+    ctx.fillRect(-8, -8 + bob, 5, 0.5);
+    ctx.fillRect(4, -10 + bob, 4, 0.5);
+    ctx.fillRect(4, -8 + bob, 4, 0.5);
+    if (age >= 4) {
+      ctx.fillStyle = "#ffd700";
+      ctx.beginPath();
+      ctx.moveTo(-6, -24 + bob);
+      ctx.quadraticCurveTo(0, -12 + bob, 6, -24 + bob);
+      ctx.lineTo(4, -14 + bob);
+      ctx.lineTo(-4, -14 + bob);
+      ctx.fill();
+      ctx.fillStyle = armorPrimary;
+      ctx.beginPath();
+      ctx.arc(0, -15 + bob, 2.5, 0, Math.PI * 2);
+      ctx.fill();
     }
   } else if (age >= 2) {
-    ctx.fillStyle = "#2a2a2a";
-    ctx.fillRect(-6, -17 + bob, 12, 5);
+    ctx.fillStyle = "#222";
+    ctx.beginPath();
+    ctx.moveTo(-8, -11 + bob);
+    ctx.lineTo(8, -11 + bob);
+    ctx.lineTo(0, -17 + bob);
+    ctx.fill();
+    ctx.strokeStyle = "#ffd700";
+    ctx.lineWidth = 1;
+    ctx.stroke();
   } else {
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(-5, -15 + bob, 10, 2);
-    ctx.fillStyle = cv.bodyLight;
-    ctx.fillRect(3, -15 + bob, 2, 2);
+    ctx.fillStyle = "#111";
+    ctx.fillRect(-4, -14 + bob, 8, 2);
+    ctx.fillRect(-2, -16 + bob, 4, 2);
+    ctx.fillStyle = "#eee";
+    ctx.fillRect(-4, -13 + bob, 8, 1);
   }
-  ctx.fillStyle = "#3a2a10";
-  ctx.fillRect(7, -2 + bob, 2, 8);
-  ctx.fillStyle = cv.bodyLight;
-  ctx.fillRect(7, 5 + bob, 2, 2);
-  ctx.fillStyle = age >= 4 ? "#f0f0f0" : "#ddd";
+  ctx.save();
+  ctx.translate(4, -2 + bob);
+  ctx.rotate(armRot);
+  ctx.translate(swordOffsetX, swordOffsetY);
+  ctx.fillStyle = clothColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  if (age >= 3) {
+    ctx.fillStyle = armorPrimary;
+    ctx.fillRect(-3, -1, 6, 7);
+    ctx.fillStyle = armorLacing;
+    for (let i = 0;i < 3; i++) {
+      ctx.fillRect(-3, 1 + i * 2, 6, 0.5);
+    }
+  }
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-1.5, 6, 3, 4);
+  ctx.translate(0, 10);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-1.5, -4, 3, 10);
+  ctx.fillStyle = "#d4a373";
+  for (let i = 0;i < 5; i++) {
+    ctx.fillRect(-1.5, -3 + i * 2, 3, 1);
+  }
+  ctx.fillStyle = age >= 4 ? "#ffd700" : "#444";
+  ctx.fillRect(-3, -5, 6, 2);
+  ctx.fillStyle = "#ebebeb";
   ctx.beginPath();
-  ctx.moveTo(7, -18 + bob);
-  ctx.quadraticCurveTo(10, -10 + bob, 8, -2 + bob);
-  ctx.lineTo(10, -2 + bob);
-  ctx.quadraticCurveTo(12, -10 + bob, 9, -18 + bob);
-  ctx.closePath();
+  ctx.moveTo(0, -5);
+  ctx.quadraticCurveTo(-4, -20, 0, -42);
+  ctx.lineTo(2, -40);
+  ctx.quadraticCurveTo(-2, -20, 2, -5);
   ctx.fill();
-  ctx.fillStyle = age >= 4 ? "#ffd700" : "#666";
-  ctx.fillRect(5, -2 + bob, 6, 2);
-  ctx.fillStyle = "rgba(255,255,255,0.4)";
-  ctx.fillRect(7, -16 + bob, 1, 14);
-  ctx.fillStyle = "#2a2a2a";
-  ctx.fillRect(-9, -3 + bob, 3, 8);
-  ctx.fillStyle = cv.bodyLight;
-  ctx.fillRect(-9, -3 + bob, 3, 1);
-  ctx.fillStyle = cv.bodyDark;
-  ctx.fillRect(-5, 11, 4, 6 + legOff);
-  ctx.fillRect(1, 11, 4, 6 - legOff);
-  ctx.fillStyle = "#5a4a2a";
-  ctx.fillRect(-6, 15 + legOff, 5, 2);
-  ctx.fillRect(0, 15 - legOff, 5, 2);
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(-1, -5);
+  ctx.quadraticCurveTo(-4.5, -20, -1, -38);
+  ctx.lineTo(-0.5, -5);
+  ctx.fill();
+  if (attackState && attackProgress > 0.3 && attackProgress < 0.6) {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+    ctx.beginPath();
+    ctx.moveTo(0, -5);
+    ctx.quadraticCurveTo(15, -30, 0, -42);
+    ctx.lineTo(-2, -40);
+    ctx.quadraticCurveTo(10, -30, 0, -5);
+    ctx.fill();
+  }
+  ctx.restore();
   drawSwordsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawSpears_Yamato(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let attackProgress = 0;
+  if (unit.state === 5 /* Attacking */) {
+    const attackCycle = unit.animTimer % unit.attackCooldown;
+    const attackDuration = unit.civAttackSpeed * 0.4;
+    if (attackCycle < attackDuration) {
+      attackProgress = attackCycle / attackDuration;
+    }
+  }
+  let bodyRot = 0;
+  let spearAngle = 0;
+  let spearOffset = { x: 0, y: 0 };
+  let rightArmRot = 0;
+  let leftArmRot = 0;
+  if (attackProgress > 0) {
+    if (attackProgress < 0.3) {
+      const t = attackProgress / 0.3;
+      bodyRot = t * -0.15;
+      spearOffset.x = t * -6;
+      spearOffset.y = t * -1;
+      spearAngle = t * 0.05;
+      rightArmRot = t * 0.2;
+      leftArmRot = t * -0.2;
+    } else if (attackProgress < 0.6) {
+      const t = (attackProgress - 0.3) / 0.3;
+      const easeOut = 1 - Math.pow(1 - t, 3);
+      bodyRot = -0.15 + easeOut * 0.3;
+      spearOffset.x = -6 + easeOut * 18;
+      spearOffset.y = -1 + easeOut * 0;
+      spearAngle = 0.05 - easeOut * 0.05;
+      rightArmRot = 0.2 - easeOut * 0.8;
+      leftArmRot = -0.2 + easeOut * -0.1;
+    } else {
+      const t = (attackProgress - 0.6) / 0.4;
+      const easeIn = t * t;
+      bodyRot = 0.15 * (1 - easeIn);
+      spearOffset.x = 12 * (1 - easeIn);
+      spearAngle = 0 * (1 - easeIn);
+      rightArmRot = -0.6 * (1 - easeIn);
+      leftArmRot = -0.3 * (1 - easeIn);
+    }
+  } else {
+    const breath = Math.sin(unit.animTimer * 2) * 0.05;
+    bodyRot = breath;
+    spearAngle = -0.2 + breath * 0.3;
+    leftArmRot = -0.4;
+  }
+  ctx.rotate(bodyRot);
+  const skinColor = cv.skinColor;
+  const armorDark = age >= 3 ? "#161616" : "#2b2b2b";
+  const armorLace = "#cc3333";
+  const clothColor = age >= 4 ? "#222" : "#333";
+  ctx.save();
+  ctx.translate(3, -3 + bob);
+  ctx.rotate(Math.PI / 6 + rightArmRot);
+  ctx.fillStyle = clothColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-2.5, 6, 5, 5);
+  ctx.fillStyle = "rgba(255,255,255,0.1)";
+  ctx.fillRect(-2, 6, 4, 5);
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 12, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(spearOffset.x, spearOffset.y);
+  ctx.translate(0, -1 + bob);
+  ctx.rotate(spearAngle);
+  ctx.fillStyle = "#1a1a2a";
+  const poleLength = age >= 3 ? 42 : 36;
+  ctx.fillRect(-poleLength * 0.3, -1, poleLength, 2);
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(-poleLength * 0.3, -1.5, 2, 3);
+  ctx.fillStyle = "#555";
+  ctx.beginPath();
+  ctx.moveTo(-poleLength * 0.3, -1);
+  ctx.lineTo(-poleLength * 0.3 - 4, 0);
+  ctx.lineTo(-poleLength * 0.3, 1);
+  ctx.fill();
+  const shaftEnd = poleLength * 0.7;
+  if (age >= 3) {
+    ctx.fillStyle = "#cc2222";
+    ctx.fillRect(shaftEnd - 4, -1.5, 6, 3);
+    ctx.fillStyle = "#888";
+    ctx.fillRect(shaftEnd - 3, -1.5, 1, 3);
+    ctx.fillRect(shaftEnd - 1, -1.5, 1, 3);
+  }
+  ctx.fillStyle = age >= 4 ? "#eeeeee" : "#cccccc";
+  const bladeLen = age >= 3 ? 12 : 9;
+  ctx.beginPath();
+  ctx.moveTo(shaftEnd + 2, 0);
+  ctx.lineTo(shaftEnd + 4, -2);
+  ctx.lineTo(shaftEnd + 2 + bladeLen, 0);
+  ctx.lineTo(shaftEnd + 4, 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(shaftEnd + 3, -0.5, bladeLen - 3, 1);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-4, -2 + bob);
+  ctx.rotate(Math.PI / 4 + leftArmRot);
+  ctx.fillStyle = clothColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-2.5, 5, 5, 5);
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 11, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "#333";
+  ctx.fillRect(-5, 6, 4, 6 + legOff);
+  ctx.fillRect(1, 6, 4, 6 - legOff);
+  ctx.fillStyle = "#444";
+  ctx.fillRect(-5.5, 8 + Math.max(0, legOff), 5, 4);
+  ctx.fillRect(0.5, 8 + Math.max(0, -legOff), 5, 4);
+  ctx.fillStyle = "#dcb67a";
+  ctx.fillRect(-5, 12 + legOff, 4, 1);
+  ctx.fillRect(1, 12 - legOff, 4, 1);
+  ctx.fillStyle = clothColor;
+  ctx.fillRect(-5, -6 + bob, 10, 14);
+  ctx.fillStyle = armorDark;
+  ctx.fillRect(-5.5, -5 + bob, 11, 11);
+  if (age >= 2) {
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    for (let i = 0;i < 4; i++)
+      ctx.fillRect(-5, -3 + bob + i * 2.5, 10, 1);
+  }
+  if (age >= 2) {
+    ctx.fillStyle = "#ffd700";
+    ctx.beginPath();
+    ctx.arc(0, -1 + bob, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = cv.accent;
+    ctx.beginPath();
+    ctx.arc(0, -1 + bob, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = armorDark;
+  ctx.fillRect(-6, 6 + bob, 3, 4);
+  ctx.fillRect(-1.5, 6 + bob, 3, 4);
+  ctx.fillRect(3, 6 + bob, 3, 4);
+  ctx.fillStyle = armorLace;
+  ctx.fillRect(-6, 7 + bob, 3, 0.5);
+  ctx.fillRect(-6, 9 + bob, 3, 0.5);
+  ctx.fillRect(-1.5, 7 + bob, 3, 0.5);
+  ctx.fillRect(-1.5, 9 + bob, 3, 0.5);
+  ctx.fillRect(3, 7 + bob, 3, 0.5);
+  ctx.fillRect(3, 9 + bob, 3, 0.5);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -13 + bob, 6, 8);
+  if (age >= 3) {
+    ctx.fillStyle = armorDark;
+    ctx.beginPath();
+    ctx.arc(0, -12 + bob, 4.5, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(-6, -12 + bob, 12, 1);
+    ctx.fillStyle = armorDark;
+    ctx.fillRect(-5, -11 + bob, 10, 3);
+    ctx.fillStyle = armorLace;
+    ctx.fillRect(-5, -9 + bob, 10, 0.5);
+  } else {
+    ctx.fillStyle = armorDark;
+    ctx.beginPath();
+    ctx.moveTo(-7, -11 + bob);
+    ctx.lineTo(7, -11 + bob);
+    ctx.lineTo(0, -16 + bob);
+    ctx.fill();
+    if (age >= 2) {
+      ctx.fillStyle = "#ffd700";
+      ctx.beginPath();
+      ctx.arc(0, -13 + bob, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (age >= 2) {
+    ctx.save();
+    ctx.translate(0, -5 + bob);
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-8, -20, 1, 26);
+    const wave = Math.sin(unit.animTimer * 5) * 2;
+    ctx.fillStyle = cv.accent;
+    ctx.fillRect(-7, -19, 8 + wave * 0.3, 15);
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(-7, -19, 8 + wave * 0.3, 15);
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(-3 + wave * 0.15, -14, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  drawSpearsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawArchers_Yamato(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let isAttacking = false;
+  if (unit.state === 5 /* Attacking */) {
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    if (target) {
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+      if (dist <= unit.civRange + bldgRadius + 20) {
+        isAttacking = true;
+      }
+    }
+  }
+  let pullback = 0;
+  let bowAngle = 0;
+  if (isAttacking) {
+    const maxCd = unit.civAttackSpeed;
+    const currentCd = unit.attackCooldown;
+    const pullPhase = 1 - currentCd / maxCd;
+    if (pullPhase > 0.2 && pullPhase < 0.9) {
+      pullback = (pullPhase - 0.2) / 0.7;
+    } else if (pullPhase >= 0.9) {
+      pullback = 1;
+    } else {
+      pullback = 0;
+    }
+  }
+  let bodyRot = 0;
+  if (isAttacking) {
+    bodyRot = -0.15 + pullback * 0.15;
+    bowAngle = -0.05 + pullback * 0.05;
+  } else {
+    bodyRot = Math.sin(unit.animTimer * 2) * 0.05;
+    bowAngle = 0.1;
+  }
+  ctx.rotate(bodyRot);
+  const skinColor = cv.skinColor;
+  const kimonoColor = age >= 3 ? "#161616" : "#2b2b2b";
+  const hakamaColor = age >= 3 ? "#222" : "#333";
+  const obiColor = age >= 4 ? "#cc3333" : "#553333";
+  ctx.save();
+  let drawArmRot = 0;
+  let drawHandX = 0;
+  let drawHandY = 0;
+  if (isAttacking) {
+    drawArmRot = -0.1 - pullback * 0.7;
+    drawHandX = 10 - pullback * 11;
+    drawHandY = -3;
+  } else {
+    drawArmRot = 0.3;
+    drawHandX = 6;
+    drawHandY = 0;
+  }
+  ctx.translate(drawHandX, drawHandY + bob);
+  ctx.rotate(drawArmRot);
+  ctx.fillStyle = kimonoColor;
+  ctx.fillRect(-2, -2, 5, 8);
+  ctx.fillStyle = "#2a2a2a";
+  ctx.fillRect(-2, 6, 4, 3);
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(-2, 6, 4, 1);
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 10, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-7, 2 + bob);
+  ctx.rotate(0.3);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(-3, -2, 6, 10);
+  ctx.fillStyle = age >= 3 ? "#e0d8c0" : "#8a6a30";
+  ctx.fillRect(-2, -1, 4, 8);
+  ctx.fillStyle = "#ffffff";
+  for (let i = 0;i < 3; i++) {
+    ctx.fillRect(-2 + i * 2, -5 + i, 1, 6);
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-1.5 + i * 2, -1 + i, 0.5, 4);
+    ctx.fillStyle = "#ffffff";
+  }
+  ctx.restore();
+  ctx.fillStyle = hakamaColor;
+  ctx.beginPath();
+  ctx.moveTo(-6, 4 + bob);
+  ctx.lineTo(-8, 11 + legOff);
+  ctx.lineTo(-2, 11 + legOff);
+  ctx.lineTo(-3, 4 + bob);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(2, 4 + bob);
+  ctx.lineTo(-1, 11 - legOff);
+  ctx.lineTo(6, 11 - legOff);
+  ctx.lineTo(4, 4 + bob);
+  ctx.fill();
+  ctx.fillStyle = "#eeeeee";
+  ctx.fillRect(-6.5, 11 + legOff, 4, 3);
+  ctx.fillRect(1.5, 11 - legOff, 4, 3);
+  ctx.fillStyle = "#d4b872";
+  ctx.fillRect(-7, 13 + legOff, 5, 1);
+  ctx.fillRect(1, 13 - legOff, 5, 1);
+  ctx.fillStyle = kimonoColor;
+  ctx.fillRect(-6, -4 + bob, 12, 11);
+  ctx.fillStyle = "#eeeeee";
+  ctx.beginPath();
+  ctx.moveTo(-3, -4 + bob);
+  ctx.lineTo(0, 1 + bob);
+  ctx.lineTo(3, -4 + bob);
+  ctx.fill();
+  if (age >= 2) {
+    ctx.fillStyle = "#2a2a2a";
+    ctx.fillRect(-5, -3 + bob, 10, 8);
+    ctx.fillStyle = "#cc3333";
+    for (let r = 0;r < 3; r++) {
+      ctx.fillRect(-5, -1 + bob + r * 3, 10, 0.5);
+    }
+  }
+  ctx.fillStyle = obiColor;
+  ctx.fillRect(-6, 3 + bob, 12, 3);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -12 + bob, 6, 8);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-3, -13 + bob, 6, 2);
+  if (age >= 3) {
+    ctx.fillStyle = age >= 4 ? "#1a1a1a" : "#2a2a2a";
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 7, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "#cc3333";
+    ctx.fillRect(-7, -11 + bob, 14, 1);
+    if (age >= 4) {
+      ctx.fillStyle = "#ffd700";
+      ctx.beginPath();
+      ctx.arc(0, -13 + bob, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = "#d4b872";
+    ctx.beginPath();
+    ctx.moveTo(-8, -10 + bob);
+    ctx.lineTo(0, -16 + bob);
+    ctx.lineTo(8, -10 + bob);
+    ctx.fill();
+    ctx.strokeStyle = "#a68b4b";
+    ctx.lineWidth = 0.5;
+    for (let i = -6;i <= 6; i += 3) {
+      ctx.beginPath();
+      ctx.moveTo(0, -16 + bob);
+      ctx.lineTo(i, -10 + bob);
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(-4, -9 + bob, 8, 2);
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(-1, -9 + bob, 2, 2);
+  ctx.save();
+  let bowArmRot = 0;
+  if (isAttacking) {
+    bowArmRot = -Math.PI / 2 + 0.2;
+  } else {
+    bowArmRot = -Math.PI / 3;
+  }
+  ctx.translate(-2, -3 + bob);
+  ctx.rotate(bowArmRot);
+  ctx.fillStyle = kimonoColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  if (age >= 2) {
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-1.5, 5, 3, 5);
+    ctx.fillStyle = "#cc3333";
+    ctx.fillRect(-1.5, 7, 3, 0.5);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 11, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(0, 11);
+  ctx.rotate(-bowArmRot + bowAngle);
+  ctx.translate(0, 7);
+  ctx.strokeStyle = age >= 4 ? "#111111" : "#8a5a2a";
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(0, -2, 16, -Math.PI * 0.55, -Math.PI * 0.1);
+  ctx.arc(0, -8, 10, Math.PI * 0.1, Math.PI * 0.45);
+  ctx.stroke();
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(-1, -7, 2, 3);
+  ctx.fillStyle = "#eeeeee";
+  ctx.fillRect(-1, -14, 2, 1);
+  ctx.fillRect(-1, 0, 2, 1);
+  const bowTopY = -15.5;
+  const bowBotY = 1.5;
+  const bowTopX = 1.5;
+  const bowBotX = 0;
+  const maxPullDist = 13;
+  const stringMidX = bowTopX - pullback * maxPullDist;
+  const stringMidY = -6;
+  ctx.strokeStyle = "#dddddd";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(bowTopX, bowTopY);
+  ctx.lineTo(stringMidX, stringMidY);
+  ctx.lineTo(bowBotX, bowBotY);
+  ctx.stroke();
+  const hideArrow = isAttacking && pullback === 0 && unit.attackCooldown > unit.civAttackSpeed * 0.8;
+  if (!hideArrow && isAttacking) {
+    const arrowLen = 16;
+    ctx.save();
+    ctx.translate(stringMidX, stringMidY);
+    ctx.rotate(0.05 * (1 - pullback));
+    ctx.fillStyle = "#e8d898";
+    ctx.fillRect(0, -0.5, arrowLen, 1);
+    ctx.fillStyle = "#333333";
+    ctx.beginPath();
+    ctx.moveTo(arrowLen, -1.5);
+    ctx.lineTo(arrowLen + 4, 0);
+    ctx.lineTo(arrowLen, 1.5);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, -1.5, 3, 3);
+    ctx.fillStyle = "#222";
+    ctx.fillRect(1, -1.5, 0.5, 3);
+    ctx.restore();
+  }
+  ctx.restore();
+  drawArchersFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
 }
 
 // src/entities/unit-rendering/civs/LaMaRenderer.ts
@@ -5525,112 +7856,676 @@ function drawScout_LaMa(unit, ctx, age, bob, moving, legOffset, lvl, cv) {
   }
 }
 function drawSwords_LaMa(unit, ctx, age, bob, legOff, lvl, cv) {
-  ctx.fillStyle = cv.bodyMid;
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  const attackState = unit.state === 2;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+  }
+  let bodyTilt = 0;
+  let rightArmRot = -0.1;
+  let leftArmRot = 0;
+  let swordThrustX = 0;
+  let swordThrustY = 0;
+  if (attackState) {
+    if (attackProgress < 0.2) {
+      rightArmRot = Math.PI / 4 * (attackProgress / 0.2);
+      bodyTilt = -0.1 * (attackProgress / 0.2);
+      leftArmRot = -Math.PI / 8 * (attackProgress / 0.2);
+    } else if (attackProgress < 0.5) {
+      const t = (attackProgress - 0.2) / 0.3;
+      rightArmRot = Math.PI / 4 * (1 - t) + -Math.PI / 6 * t;
+      bodyTilt = -0.1 * (1 - t) + 0.2 * t;
+      swordThrustX = 5 * t;
+    } else {
+      const t = (attackProgress - 0.5) / 0.5;
+      rightArmRot = -Math.PI / 6 * (1 - t) + -0.1 * t;
+      bodyTilt = 0.2 * (1 - t) + 0 * t;
+      swordThrustX = 5 * (1 - t);
+    }
+  }
+  if (bodyTilt !== 0) {
+    ctx.translate(0, 16 + bob);
+    ctx.rotate(bodyTilt);
+    ctx.translate(0, -(16 + bob));
+  }
+  const skinColor = cv.skinColor || "#c28e67";
+  const tunicColor = "#9a1111";
+  const armorMetal = age >= 3 ? "#999" : "#777";
+  const armorBrass = age >= 3 ? "#e6ba17" : "#b28d15";
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-5, 12 + bob, 4, 5 + legOff);
+  ctx.fillRect(1, 12 + bob, 4, 5 - legOff);
+  ctx.fillStyle = "#4a2f1d";
+  for (let i = 0;i < 3; i++) {
+    ctx.fillRect(-5, 17 + bob + legOff + i * 2, 4, 1);
+    ctx.fillRect(1, 17 + bob - legOff + i * 2, 4, 1);
+  }
+  ctx.fillRect(-3.5, 17 + bob + legOff, 1, 5);
+  ctx.fillRect(2.5, 17 + bob - legOff, 1, 5);
+  ctx.fillStyle = "#221100";
+  ctx.fillRect(-6, 22 + bob + legOff, 6, 2);
+  ctx.fillRect(0, 22 + bob - legOff, 6, 2);
+  ctx.fillStyle = tunicColor;
   ctx.fillRect(-7, -5 + bob, 14, 16);
-  ctx.fillStyle = "rgba(255,255,255,0.12)";
-  for (let i = 0;i < 6; i++) {
-    ctx.fillRect(-6, -4 + bob + i * 2.5, 12, 1);
+  ctx.fillStyle = "#4a2f1d";
+  for (let i = 0;i < 5; i++) {
+    ctx.fillRect(-6 + i * 3, 10 + bob, 2, 4);
   }
-  ctx.fillStyle = cv.bodyDark;
-  ctx.fillRect(-5, 8 + bob, 10, 4);
-  if (age >= 2) {
-    ctx.fillStyle = "#daa520";
-    ctx.fillRect(-7, 8 + bob, 14, 2);
-    ctx.fillStyle = cv.bodyDark;
-    for (let i = 0;i < 5; i++) {
-      ctx.fillRect(-6 + i * 3, 10 + bob, 2, 3);
-    }
+  ctx.fillStyle = armorMetal;
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 0.5;
+  for (let i = 0;i < 5; i++) {
+    const yOffset = -3 + bob + i * 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-7, yOffset);
+    ctx.quadraticCurveTo(0, yOffset + 0.5, 7, yOffset);
+    ctx.lineTo(6.5, yOffset + 2);
+    ctx.quadraticCurveTo(0, yOffset + 2.5, -6.5, yOffset + 2);
+    ctx.fill();
+    ctx.stroke();
   }
-  if (age >= 3) {
-    ctx.fillStyle = age >= 4 ? "#6a6a68" : "#5a5a58";
-    ctx.fillRect(-9, -6 + bob, 5, 8);
-    ctx.fillRect(4, -6 + bob, 5, 8);
-    if (age >= 4) {
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-9, -6 + bob, 5, 1);
-      ctx.fillRect(4, -6 + bob, 5, 1);
-    }
+  ctx.fillStyle = armorBrass;
+  ctx.fillRect(-3, -4 + bob, 1.5, 12);
+  ctx.fillRect(1.5, -4 + bob, 1.5, 12);
+  ctx.fillStyle = "#221100";
+  ctx.fillRect(-7, 7 + bob, 14, 2.5);
+  ctx.fillStyle = armorBrass;
+  ctx.fillRect(-2, 7 + bob, 4, 2.5);
+  for (let i = 0;i < 3; i++) {
+    ctx.fillRect(-4 + i * 4, 9.5 + bob, 1, 4);
   }
-  ctx.fillStyle = cv.skinColor;
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(1, -11 + bob, 2, 2);
-  if (age >= 3) {
-    ctx.fillStyle = age >= 4 ? "#6a6a68" : "#5a5a58";
-    ctx.fillRect(-6, -18 + bob, 12, 6);
-    ctx.fillRect(-7, -12 + bob, 3, 5);
-    ctx.fillRect(4, -12 + bob, 3, 5);
-    ctx.fillStyle = cv.bodyLight;
-    ctx.fillRect(-1, -24 + bob, 2, 8);
-    ctx.fillRect(-3, -23 + bob, 6, 2);
-    if (age >= 4) {
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-6, -18 + bob, 12, 1);
-    }
-  } else if (age >= 2) {
-    ctx.fillStyle = "#5a5a58";
-    ctx.fillRect(-5, -16 + bob, 10, 5);
-    ctx.fillStyle = "#333";
-    ctx.fillRect(-3, -12 + bob, 6, 1);
-  } else {
-    ctx.fillStyle = "#333";
-    ctx.fillRect(-5, -15 + bob, 10, 4);
-  }
-  if (age >= 2) {
-    ctx.fillStyle = cv.bodyDark;
-    ctx.fillRect(-12, -5 + bob, 6, age >= 3 ? 18 : 14);
-    ctx.fillStyle = "#daa520";
-    ctx.fillRect(-11, 2 + bob, 4, 4);
-    if (age >= 3) {
-      ctx.fillRect(-11, -1 + bob, 4, 1);
-      ctx.fillRect(-11, 5 + bob, 4, 1);
-      ctx.strokeStyle = "#daa520";
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(-12, -5 + bob, 6, 18);
-    }
-  }
-  ctx.fillStyle = "#5a3a18";
-  ctx.fillRect(7, -1 + bob, 2, 6);
-  ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
-  ctx.fillRect(6, -12 + bob, 4, 12);
+  ctx.save();
+  ctx.translate(5, -2 + bob);
+  ctx.rotate(rightArmRot);
+  ctx.translate(swordThrustX, swordThrustY);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-1.5, 5, 3, 6);
+  ctx.translate(0, 10);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-1.5, -1, 3, 3);
+  ctx.fillStyle = "#8b5a2b";
   ctx.beginPath();
-  ctx.moveTo(8, -14 + bob);
-  ctx.lineTo(6, -12 + bob);
-  ctx.lineTo(10, -12 + bob);
-  ctx.closePath();
+  ctx.arc(0, -4, 1.5, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = age >= 4 ? "#ffd700" : "#888";
-  ctx.fillRect(4, -1 + bob, 8, 2);
-  ctx.fillStyle = "rgba(255,255,255,0.3)";
-  ctx.fillRect(6, -12 + bob, 1, 12);
-  ctx.fillStyle = age >= 3 ? "#3a3a38" : "#5a4a38";
-  ctx.fillRect(-5, 11, 4, 6 + legOff);
-  ctx.fillRect(1, 11, 4, 6 - legOff);
-  ctx.fillStyle = "#4a3a28";
-  ctx.fillRect(-6, 15 + legOff, 5, 3);
-  ctx.fillRect(0, 15 - legOff, 5, 3);
+  ctx.fillRect(-1, -4, 2, 4);
+  ctx.fillStyle = "#a67d3d";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 2.5, 1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = age >= 4 ? "#ebebeb" : "#cccccc";
+  ctx.beginPath();
+  ctx.moveTo(-1.5, 1);
+  ctx.lineTo(-1, 12);
+  ctx.lineTo(0, 16);
+  ctx.lineTo(1, 12);
+  ctx.lineTo(1.5, 1);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(0, 1);
+  ctx.lineTo(0, 16);
+  ctx.lineTo(-1, 12);
+  ctx.fill();
+  if (attackState && attackProgress > 0.4) {
+    ctx.fillStyle = "#990000";
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(0, 10);
+    ctx.lineTo(1, 12);
+    ctx.lineTo(0, 16);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3.5, -12 + bob, 7, 7);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(-1.5, -10 + bob, 1, 1);
+  ctx.fillRect(0.5, -10 + bob, 1, 1);
+  if (age >= 2) {
+    ctx.fillStyle = age >= 3 ? armorMetal : "#a67d3d";
+    ctx.beginPath();
+    ctx.arc(0, -12 + bob, 5, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-6, -12 + bob, 12, 1.5);
+    ctx.fillStyle = armorBrass;
+    ctx.fillRect(-6, -13 + bob, 12, 1);
+    ctx.fillStyle = age >= 3 ? armorMetal : "#a67d3d";
+    ctx.fillRect(-5, -11 + bob, 2, 4);
+    ctx.fillRect(3, -11 + bob, 2, 4);
+    ctx.fillRect(-6, -11 + bob, 12, 1.5);
+    if (age >= 4) {
+      ctx.fillStyle = "#cc2222";
+      ctx.beginPath();
+      ctx.moveTo(-3, -17 + bob);
+      ctx.lineTo(3, -17 + bob);
+      ctx.lineTo(5, -24 + bob);
+      ctx.lineTo(-5, -24 + bob);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-4, -14 + bob, 8, 3);
+  }
+  ctx.save();
+  ctx.translate(-5, -1 + bob);
+  ctx.rotate(leftArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  ctx.translate(-2, 3);
+  const shieldW = 9;
+  const shieldH = age >= 3 ? 22 : 18;
+  ctx.fillStyle = armorBrass;
+  ctx.beginPath();
+  ctx.roundRect(-shieldW / 2 - 1, -shieldH / 2 - 1, shieldW + 2, shieldH + 2, 1);
+  ctx.fill();
+  ctx.fillStyle = "#b31515";
+  ctx.beginPath();
+  ctx.roundRect(-shieldW / 2, -shieldH / 2, shieldW, shieldH, 1);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(shieldW / 2 - 3, -shieldH / 2, 3, shieldH);
+  ctx.fillStyle = "rgba(255,255,255,0.2)";
+  ctx.fillRect(-shieldW / 2, -shieldH / 2, 2, shieldH);
+  if (age >= 3) {
+    ctx.fillStyle = armorMetal;
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = armorBrass;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#daa520";
+    ctx.beginPath();
+    ctx.moveTo(-1, -4);
+    ctx.lineTo(-3, -8);
+    ctx.lineTo(-1, -5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(1, -4);
+    ctx.lineTo(3, -8);
+    ctx.lineTo(1, -5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-1, 4);
+    ctx.lineTo(-2, 8);
+    ctx.lineTo(-1, 5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(1, 4);
+    ctx.lineTo(2, 8);
+    ctx.lineTo(1, 5);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "#888";
+    ctx.beginPath();
+    ctx.arc(0, 0, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
   drawSwordsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawSpears_LaMa(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let attackProgress = 0;
+  if (unit.state === 5 /* Attacking */) {
+    const attackCycle = unit.animTimer % unit.attackCooldown;
+    const attackDuration = unit.civAttackSpeed * 0.4;
+    if (attackCycle < attackDuration) {
+      attackProgress = attackCycle / attackDuration;
+    }
+  }
+  let spearAngle = 0;
+  let bodyRot = 0;
+  let spearOffset = { x: 0, y: 0 };
+  let rightArmRot = 0;
+  let leftArmRot = 0;
+  if (attackProgress > 0) {
+    if (attackProgress < 0.3) {
+      const t = attackProgress / 0.3;
+      bodyRot = t * -0.2;
+      spearOffset.x = t * -4;
+      spearOffset.y = t * -2;
+      spearAngle = t * -0.1;
+      rightArmRot = t * -0.3;
+      leftArmRot = t * 0.1;
+    } else if (attackProgress < 0.6) {
+      const t = (attackProgress - 0.3) / 0.3;
+      const easeOut = 1 - Math.pow(1 - t, 3);
+      bodyRot = -0.2 + easeOut * 0.4;
+      spearOffset.x = -4 + easeOut * 12;
+      spearOffset.y = -2 + easeOut * -1;
+      spearAngle = -0.1 + easeOut * 0.2;
+      rightArmRot = -0.3 + easeOut * 0.8;
+      leftArmRot = 0.1 - easeOut * 0.2;
+    } else {
+      const t = (attackProgress - 0.6) / 0.4;
+      const easeIn = t * t;
+      bodyRot = 0.2 * (1 - easeIn);
+      spearOffset.x = 8 * (1 - easeIn);
+      spearOffset.y = -3 * (1 - easeIn);
+      spearAngle = 0.1 * (1 - easeIn);
+      rightArmRot = 0.5 * (1 - easeIn);
+      leftArmRot = -0.1 * (1 - easeIn);
+    }
+  } else {
+    const breath = Math.sin(unit.animTimer * 2) * 0.05;
+    bodyRot = breath;
+    spearAngle = breath * 0.5 - 0.1;
+  }
+  ctx.rotate(bodyRot);
+  const armorMetal = age >= 4 ? "#5a5a58" : "#7a7a72";
+  const armorBrass = age >= 3 ? "#b89947" : "#907a4a";
+  const tunicColor = "#b31515";
+  const skin = cv.skinColor;
+  const leather = "#4a2e15";
+  ctx.save();
+  ctx.translate(2, -4 + bob);
+  ctx.rotate(Math.PI / 4 + rightArmRot * 0.5);
+  ctx.fillStyle = age >= 3 ? armorMetal : tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  ctx.fillStyle = skin;
+  ctx.fillRect(-1.5, 6, 3, 5);
+  if (age >= 2) {
+    ctx.fillStyle = leather;
+    ctx.fillRect(-2, 7, 4, 3);
+  }
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  ctx.arc(0, 12, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(spearOffset.x, spearOffset.y);
+  ctx.translate(0, -1 + bob);
+  ctx.rotate(spearAngle);
+  ctx.fillStyle = "#3a2010";
+  const poleLength = age >= 3 ? 34 : 28;
+  ctx.fillRect(-poleLength * 0.4, -1, poleLength, 2);
+  ctx.fillStyle = "#555555";
+  ctx.beginPath();
+  ctx.moveTo(-poleLength * 0.4, -1);
+  ctx.lineTo(-poleLength * 0.4 - 3, 0);
+  ctx.lineTo(-poleLength * 0.4, 1);
+  ctx.fill();
+  const tipBase = poleLength * 0.6;
+  ctx.fillStyle = age >= 4 ? "#eeeeee" : "#bbbbbb";
+  ctx.fillRect(tipBase, -1.5, 3, 3);
+  ctx.beginPath();
+  ctx.moveTo(tipBase + 3, 0);
+  ctx.quadraticCurveTo(tipBase + 6, -3, tipBase + 12, 0);
+  ctx.quadraticCurveTo(tipBase + 6, 3, tipBase + 3, 0);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(tipBase + 4, -0.5, 6, 1);
+  ctx.restore();
+  ctx.fillStyle = skin;
+  ctx.fillRect(-4, 6, 3, 6 + legOff);
+  ctx.fillRect(1, 6, 3, 6 - legOff);
+  if (age >= 2) {
+    ctx.fillStyle = armorBrass;
+    ctx.fillRect(-4.5, 8 + Math.max(0, legOff), 4, 5);
+    ctx.fillRect(0.5, 8 + Math.max(0, -legOff), 4, 5);
+  }
+  ctx.fillStyle = leather;
+  ctx.fillRect(-4, 11 + legOff, 3, 1);
+  ctx.fillRect(1, 11 - legOff, 3, 1);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-5, -6 + bob, 10, 14);
+  if (age >= 2) {
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(-5, -6 + bob, 10, 11);
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    for (let r = 0;r < 5; r++) {
+      for (let c = 0;c < 3; c++) {
+        ctx.beginPath();
+        ctx.arc(-3 + c * 3 + r % 2, -4 + bob + r * 2.2, 1, 0, Math.PI);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.fillStyle = "#6a4020";
+  for (let i = 0;i < 4; i++) {
+    ctx.fillRect(-4.5 + i * 3, 5 + bob, 2, 4);
+  }
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-5, 4 + bob, 10, 2);
+  ctx.fillStyle = "#daa520";
+  for (let i = -1;i <= 1; i++)
+    ctx.fillRect(-0.5 + i * 3, 4.5 + bob, 1, 1);
+  ctx.fillStyle = skin;
+  ctx.fillRect(-3, -13 + bob, 6, 7);
+  if (age >= 2) {
+    ctx.fillStyle = armorBrass;
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 4.5, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(-5, -11 + bob, 10, 1.5);
+    ctx.fillRect(-4.5, -9.5 + bob, 2.5, 4);
+    ctx.fillRect(2, -9.5 + bob, 2.5, 4);
+    ctx.fillStyle = skin;
+    ctx.fillRect(-3.5, -9 + bob, 1.5, 2);
+    if (age >= 3) {
+      ctx.fillStyle = "#d4af37";
+      ctx.fillRect(-1, -14 + bob, 2, 3);
+      ctx.fillStyle = age === 4 ? "#111" : "#b31515";
+      ctx.beginPath();
+      ctx.moveTo(-1.5, -14 + bob);
+      ctx.lineTo(1.5, -14 + bob);
+      ctx.lineTo(4, -18 + bob);
+      ctx.lineTo(-2, -18 + bob);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-4, -14 + bob, 8, 3);
+  }
+  ctx.save();
+  ctx.translate(-3, -2 + bob);
+  ctx.rotate(leftArmRot);
+  ctx.translate(-2, 4);
+  const shieldW = 9;
+  const shieldH = age >= 3 ? 20 : 16;
+  ctx.fillStyle = armorBrass;
+  ctx.beginPath();
+  ctx.roundRect(-shieldW / 2 - 1, -shieldH / 2 - 1, shieldW + 2, shieldH + 2, 1);
+  ctx.fill();
+  ctx.fillStyle = "#b31515";
+  ctx.beginPath();
+  ctx.roundRect(-shieldW / 2, -shieldH / 2, shieldW, shieldH, 1);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(shieldW / 2 - 3, -shieldH / 2, 3, shieldH);
+  ctx.fillStyle = "rgba(255,255,255,0.2)";
+  ctx.fillRect(-shieldW / 2, -shieldH / 2, 2, shieldH);
+  if (age >= 3) {
+    ctx.fillStyle = armorMetal;
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = armorBrass;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#daa520";
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#daa520";
+    ctx.beginPath();
+    ctx.arc(0, -6, 2, Math.PI * 0.7, Math.PI * 2.3);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 6, 2, Math.PI * 0.7, Math.PI * 2.3);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = "#888";
+    ctx.beginPath();
+    ctx.arc(0, 0, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.restore();
+  drawSpearsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawArchers_LaMa(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let isAttacking = false;
+  if (unit.state === 5 /* Attacking */) {
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    if (target) {
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+      if (dist <= unit.civRange + bldgRadius + 20) {
+        isAttacking = true;
+      }
+    }
+  }
+  let pullback = 0;
+  let bowAngle = 0;
+  if (isAttacking) {
+    const maxCd = unit.civAttackSpeed;
+    const currentCd = unit.attackCooldown;
+    const pullPhase = 1 - currentCd / maxCd;
+    if (pullPhase > 0.3 && pullPhase < 0.9) {
+      pullback = (pullPhase - 0.3) / 0.6;
+    } else if (pullPhase >= 0.9) {
+      pullback = 1;
+    } else {
+      pullback = 0;
+    }
+  }
+  let bodyRot = 0;
+  if (isAttacking) {
+    bodyRot = -0.1 + pullback * 0.2;
+    bowAngle = -0.1 + pullback * 0.1;
+  } else {
+    bodyRot = Math.sin(unit.animTimer * 2) * 0.05;
+    bowAngle = 0.2;
+  }
+  ctx.rotate(bodyRot);
+  const skinColor = cv.skinColor;
+  const tunicColor = "#aa2222";
+  const armorMetal = age >= 3 ? "#5a5a58" : "#777";
+  const leatherColor = "#6a4020";
+  const brassColor = "#daa520";
+  ctx.save();
+  let drawArmRot = 0;
+  let drawHandX = 0;
+  let drawHandY = 0;
+  if (isAttacking) {
+    drawArmRot = -0.2 - pullback * 0.8;
+    drawHandX = 10 - pullback * 12;
+    drawHandY = -4 + pullback * 1;
+  } else {
+    drawArmRot = 0.2;
+    drawHandX = 6;
+    drawHandY = -2;
+  }
+  ctx.translate(drawHandX, drawHandY + bob);
+  ctx.rotate(drawArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, -2, 5, 7);
+  if (age >= 2) {
+    ctx.fillStyle = leatherColor;
+    ctx.fillRect(-2, 3, 4, 5);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 9, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-8, -2 + bob);
+  ctx.rotate(0.2);
+  ctx.fillStyle = "#8B5E3C";
+  ctx.fillRect(-2, -6, 4, 14);
+  ctx.fillStyle = brassColor;
+  ctx.fillRect(-2.5, -6, 5, 2);
+  ctx.fillRect(-2, 6, 4, 2);
+  ctx.fillStyle = "#aa2222";
+  ctx.fillRect(-1, -9, 2, 3);
+  ctx.fillRect(1, -8, 1, 2);
+  ctx.restore();
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-5, 6, 4, 7 + legOff);
+  ctx.fillRect(1, 6, 4, 7 - legOff);
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-5.5, 12 + legOff, 5, 2);
+  ctx.fillRect(0.5, 12 - legOff, 5, 2);
+  ctx.fillStyle = leatherColor;
+  ctx.fillRect(-5, 9 + legOff, 4, 1);
+  ctx.fillRect(-5, 11 + legOff, 4, 1);
+  ctx.fillRect(1, 9 - legOff, 4, 1);
+  ctx.fillRect(1, 11 - legOff, 4, 1);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-6, -4 + bob, 12, 14);
+  if (age >= 2) {
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(-6, -5 + bob, 12, 11);
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    for (let r = 0;r < 4; r++) {
+      for (let c = 0;c < 4; c++) {
+        ctx.beginPath();
+        ctx.arc(-4 + c * 3 + r % 2, -3 + bob + r * 2.5, 1, 0, Math.PI);
+        ctx.fill();
+      }
+    }
+  } else {
+    ctx.fillStyle = "#5c4033";
+    ctx.fillRect(-6, -4 + bob, 12, 10);
+  }
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-6, 5 + bob, 12, 2);
+  ctx.fillStyle = brassColor;
+  ctx.fillRect(-1, 5 + bob, 2, 2);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -13 + bob, 6, 9);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-3, -14 + bob, 6, 2);
+  ctx.fillRect(-3, -7 + bob, 6, 1.5);
+  if (age >= 3) {
+    ctx.fillStyle = age >= 4 ? "#aaaaaa" : "#a67d3d";
+    ctx.beginPath();
+    ctx.arc(0, -12 + bob, 4.5, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(-5, -12 + bob, 10, 1.5);
+    ctx.fillRect(-6, -11 + bob, 12, 1);
+    ctx.beginPath();
+    ctx.moveTo(-4.5, -10 + bob);
+    ctx.lineTo(-2.5, -5 + bob);
+    ctx.lineTo(-4.5, -5 + bob);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(4.5, -10 + bob);
+    ctx.lineTo(2.5, -5 + bob);
+    ctx.lineTo(4.5, -5 + bob);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = leatherColor;
+    ctx.beginPath();
+    ctx.arc(0, -12 + bob, 4, Math.PI, 0);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-2, -15 + bob);
+    ctx.quadraticCurveTo(4, -19 + bob, 5, -15 + bob);
+    ctx.lineTo(2, -12 + bob);
+    ctx.fill();
+  }
+  ctx.save();
+  let bowArmRot = 0;
+  if (isAttacking) {
+    bowArmRot = -Math.PI / 2 + 0.2;
+  } else {
+    bowArmRot = -Math.PI / 6;
+  }
+  ctx.translate(-2, -4 + bob);
+  ctx.rotate(bowArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-2, 5, 4, 5);
+  if (age >= 3) {
+    ctx.fillStyle = brassColor;
+    ctx.fillRect(-2, 6, 4, 1);
+    ctx.fillRect(-2, 9, 4, 1);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 11, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(0, 11);
+  ctx.rotate(-bowArmRot + bowAngle);
+  ctx.strokeStyle = age >= 4 ? "#b8860b" : "#8B5E3C";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(0, -5, 6, Math.PI * 0.6, Math.PI * 1.5, true);
+  ctx.arc(0, 5, 6, Math.PI * 0.5, Math.PI * 1.4, false);
+  ctx.stroke();
+  ctx.fillStyle = brassColor;
+  ctx.fillRect(-1.5, -2, 3, 4);
+  ctx.fillStyle = "#eeeeee";
+  ctx.beginPath();
+  ctx.arc(1.5, -11, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(1.5, 11, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  const bowTopY = -11;
+  const bowBotY = 11;
+  const bowTopX = 1.5;
+  const bowBotX = 1.5;
+  const maxPullDist = 12;
+  const stringMidX = bowTopX - pullback * maxPullDist;
+  const stringMidY = 0;
+  ctx.strokeStyle = "#dddddd";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(bowTopX, bowTopY);
+  ctx.lineTo(stringMidX, stringMidY);
+  ctx.lineTo(bowBotX, bowBotY);
+  ctx.stroke();
+  const hideArrow = isAttacking && pullback === 0 && unit.attackCooldown > unit.civAttackSpeed * 0.8;
+  if (!hideArrow && isAttacking) {
+    const arrowLen = 14;
+    ctx.save();
+    ctx.fillStyle = age >= 4 ? "#ddc060" : "#bb9966";
+    ctx.fillRect(stringMidX, -0.5, arrowLen, 1);
+    ctx.fillStyle = "#aaaaaa";
+    ctx.beginPath();
+    ctx.moveTo(stringMidX + arrowLen, -1.5);
+    ctx.lineTo(stringMidX + arrowLen + 3, 0);
+    ctx.lineTo(stringMidX + arrowLen, 1.5);
+    ctx.fill();
+    ctx.fillStyle = "#aa2222";
+    ctx.fillRect(stringMidX, -1.5, 3, 3);
+    ctx.restore();
+  }
+  ctx.restore();
+  drawArchersFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
 }
 
 // src/entities/unit-rendering/civs/VikingRenderer.ts
 function drawScout_Viking(unit, ctx, age, bob, moving, legOffset, lvl, cv) {
   if (age >= 2) {
-    ctx.fillStyle = "#5a4a2a";
-    const capeWave = moving ? Math.sin(unit.animTimer * 14) * 2 : 0;
-    ctx.fillRect(-9, -3 + bob, 4, 14 + capeWave);
-    ctx.fillStyle = "#4a3a1a";
-    ctx.fillRect(-9, -3 + bob, 4, 3);
+    ctx.fillStyle = "#4a3a2a";
+    const capeWave = moving ? Math.sin(unit.animTimer * 12) * 3 : Math.sin(unit.animTimer * 3) * 1;
+    ctx.fillRect(-10, -4 + bob, 6, 16 + capeWave);
+    ctx.fillStyle = "#6a5a3a";
+    ctx.fillRect(-11, -2 + bob, 3, 12 + capeWave * 0.8);
+    ctx.fillRect(-7, 2 + bob, 2, 10 + capeWave * 1.2);
   }
-  ctx.fillStyle = age >= 3 ? cv.bodyDark : cv.bodyMid;
-  ctx.fillRect(-6, -4 + bob, 12, 13);
-  ctx.fillStyle = "#6a5a3a";
-  ctx.fillRect(-6, -4 + bob, 12, 4);
+  if (age >= 3) {
+    ctx.fillStyle = cv.bodyDark;
+    ctx.fillRect(-7, -4 + bob, 14, 13);
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    for (let i = 0;i < 4; i++)
+      ctx.fillRect(-6, -2 + bob + i * 3, 12, 1);
+  } else {
+    ctx.fillStyle = cv.skinColor;
+    ctx.fillRect(-7, -4 + bob, 14, 13);
+    ctx.fillStyle = "rgba(0,0,0,0.1)";
+    ctx.fillRect(-6, 0 + bob, 12, 1);
+    ctx.fillRect(-1, 0 + bob, 2, 8);
+  }
   ctx.fillStyle = "#5a4a2a";
-  ctx.fillRect(-6, -1 + bob, 12, 1);
-  ctx.fillStyle = "#4a3018";
-  ctx.fillRect(-6, 5 + bob, 12, 2);
+  ctx.fillRect(-9, -6 + bob, 18, 5);
+  ctx.fillStyle = "#3a2a1a";
+  ctx.fillRect(-8, -5 + bob, 16, 2);
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-7, 6 + bob, 14, 3);
+  ctx.fillStyle = "#999";
+  ctx.fillRect(-2, 5.5 + bob, 4, 4);
   ctx.fillStyle = "#5a4a30";
-  ctx.fillRect(3, 3 + bob, 3, 3);
+  ctx.fillRect(4, 7 + bob, 4, 4);
+  ctx.fillRect(4.5, 9 + bob, 3, 2);
   if (age >= 3) {
     ctx.fillStyle = cv.accent + "44";
     ctx.fillRect(-3, -2 + bob, 2, 5);
@@ -5649,50 +8544,91 @@ function drawScout_Viking(unit, ctx, age, bob, moving, legOffset, lvl, cv) {
     ctx.fillRect(1, -4 + bob, 1, 1);
   }
   ctx.fillStyle = cv.skinColor;
-  ctx.fillRect(-4, -12 + bob, 8, 9);
+  ctx.fillRect(-4, -13 + bob, 8, 9);
+  ctx.fillStyle = moving || age >= 3 ? "#ffea00" : "#fff";
+  ctx.fillRect(-3, -10 + bob, 2, 1.5);
+  ctx.fillRect(1, -10 + bob, 2, 1.5);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-2.5, -10 + bob, 1, 1);
+  ctx.fillRect(1.5, -10 + bob, 1, 1);
   ctx.fillStyle = "#222";
-  ctx.fillRect(-2, -9 + bob, 2, 2);
-  ctx.fillRect(1, -9 + bob, 2, 2);
-  ctx.fillStyle = cv.accent + "88";
+  ctx.fillRect(-4, -11 + bob, 4, 1);
+  ctx.fillRect(0, -11 + bob, 4, 1);
+  ctx.fillStyle = age >= 3 ? "#aa1111" : cv.accent + "99";
   ctx.fillRect(-4, -8 + bob, 2, 3);
-  ctx.fillRect(3, -8 + bob, 2, 3);
-  ctx.fillStyle = "#b89050";
-  ctx.fillRect(-3, -5 + bob, 6, 3);
+  ctx.fillRect(2, -8 + bob, 2, 3);
+  ctx.fillRect(-1, -7 + bob, 2, 4);
+  ctx.fillStyle = "#c85a17";
+  ctx.fillRect(-4, -5 + bob, 8, 4);
+  ctx.fillRect(-3, -1 + bob, 6, 3);
+  ctx.fillRect(-1, 2 + bob, 2, 2);
+  ctx.fillStyle = "#a04010";
+  ctx.fillRect(-3, -4 + bob, 1, 6);
+  ctx.fillRect(1, -4 + bob, 1, 6);
   if (age >= 3) {
-    ctx.fillStyle = age >= 4 ? "#5a5a58" : "#4a4a48";
-    ctx.fillRect(-6, -16 + bob, 12, 5);
-    ctx.fillStyle = "#6a6a68";
-    ctx.fillRect(0, -13 + bob, 2, 4);
+    ctx.fillStyle = "#555";
+    ctx.fillRect(-5, -17 + bob, 10, 5);
+    ctx.fillStyle = "#333";
+    ctx.fillRect(-6, -13 + bob, 12, 1);
+    ctx.fillRect(-1, -17 + bob, 2, 5);
+    ctx.fillStyle = "#666";
+    ctx.fillRect(-5, -12 + bob, 10, 2);
+    ctx.fillRect(-1, -12 + bob, 2, 5);
+    ctx.fillRect(-4, -10 + bob, 2, 2);
+    ctx.fillRect(2, -10 + bob, 2, 2);
     if (age >= 4) {
-      ctx.fillStyle = "#ddd";
-      ctx.fillRect(-8, -17 + bob, 2, 4);
-      ctx.fillRect(6, -17 + bob, 2, 4);
+      ctx.fillStyle = "#eee";
+      ctx.beginPath();
+      ctx.moveTo(-5, -15 + bob);
+      ctx.quadraticCurveTo(-11, -18 + bob, -11, -12 + bob);
+      ctx.lineTo(-7, -15 + bob);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(5, -15 + bob);
+      ctx.quadraticCurveTo(11, -18 + bob, 11, -12 + bob);
+      ctx.lineTo(7, -15 + bob);
+      ctx.fill();
     }
   } else {
-    ctx.fillStyle = "#b89050";
-    ctx.fillRect(-5, -16 + bob, 10, 5);
-    ctx.fillRect(-6, -14 + bob, 2, 6);
-    ctx.fillRect(4, -14 + bob, 2, 6);
+    ctx.fillStyle = "#c85a17";
+    ctx.fillRect(-3, -16 + bob, 6, 4);
+    ctx.fillRect(-4, -15 + bob, 8, 2);
   }
-  ctx.fillStyle = "#5a3a18";
-  ctx.fillRect(5, -3 + bob, 2, 9);
-  ctx.fillStyle = age >= 4 ? "#eee" : age >= 3 ? "#ccc" : "#bbb";
-  ctx.fillRect(5, -7 + bob, 4, 4);
-  ctx.fillRect(7, -6 + bob, 2, 2);
-  ctx.fillStyle = "#5a3a18";
-  ctx.fillRect(-8, -2 + bob, 2, 8);
-  ctx.fillStyle = age >= 4 ? "#eee" : age >= 3 ? "#ccc" : "#bbb";
-  ctx.fillRect(-10, -5 + bob, 4, 3);
+  ctx.fillStyle = "#4a2c11";
+  ctx.fillRect(6, -4 + bob, 2.5, 12);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(6, 2 + bob, 2.5, 4);
+  ctx.fillStyle = age >= 4 ? "#e6e6e6" : age >= 3 ? "#b0b0b0" : "#888";
+  ctx.beginPath();
+  ctx.moveTo(8, -2 + bob);
+  ctx.lineTo(13, -5 + bob);
+  ctx.lineTo(14, 2 + bob);
+  ctx.quadraticCurveTo(10, 0 + bob, 8, 2 + bob);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(13, -4 + bob, 1, 6);
+  ctx.fillStyle = "#4a2c11";
+  ctx.fillRect(-9, -3 + bob, 2.5, 11);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-9, 2 + bob, 2.5, 4);
+  ctx.fillStyle = age >= 4 ? "#e6e6e6" : age >= 3 ? "#b0b0b0" : "#888";
+  ctx.beginPath();
+  ctx.moveTo(-6, -1 + bob);
+  ctx.lineTo(-12, -4 + bob);
+  ctx.lineTo(-13, 1 + bob);
+  ctx.quadraticCurveTo(-9, 0 + bob, -6, 1 + bob);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(-13, -3 + bob, 1, 4);
   if (age >= 4) {
-    ctx.globalAlpha = 0.4 + Math.sin(unit.animTimer * 5) * 0.2;
-    ctx.fillStyle = "#88ccff";
-    ctx.fillRect(6, -6 + bob, 2, 2);
-    ctx.fillRect(-9, -4 + bob, 2, 2);
+    ctx.fillStyle = "#aa0000";
+    ctx.fillRect(13, -1 + bob, 1, 4);
+    ctx.fillRect(-13, -2 + bob, 1, 3);
+    ctx.globalAlpha = 0.5 + Math.sin(unit.animTimer * 8) * 0.3;
+    ctx.fillStyle = "#ff4400";
+    ctx.fillRect(9, -3 + bob, 2, 2);
+    ctx.fillRect(-9, -2 + bob, 2, 2);
     ctx.globalAlpha = 1;
-  } else if (age >= 3) {
-    ctx.fillStyle = "rgba(255,255,255,0.2)";
-    ctx.fillRect(8, -6 + bob, 1, 2);
-    ctx.fillRect(-10, -5 + bob, 1, 2);
   }
   ctx.fillStyle = age >= 3 ? "#3a3a28" : "#4a4a38";
   ctx.fillRect(-5, 9, 4, 7 + legOffset);
@@ -5726,83 +8662,710 @@ function drawScout_Viking(unit, ctx, age, bob, moving, legOffset, lvl, cv) {
   }
 }
 function drawSwords_Viking(unit, ctx, age, bob, legOff, lvl, cv) {
-  ctx.fillStyle = cv.bodyMid;
-  ctx.fillRect(-7, -5 + bob, 14, 16);
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  for (let i = 0;i < 5; i++) {
-    ctx.fillRect(-6, -3 + bob + i * 3, 12, 1);
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  const attackState = unit.state === 2;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
   }
-  ctx.fillStyle = age >= 3 ? "#5a4a2a" : "#7a6a4a";
-  ctx.fillRect(-8, -7 + bob, 16, 4);
-  ctx.fillStyle = "#4a3a1a";
-  ctx.fillRect(-8, -6 + bob, 16, 1);
-  ctx.fillStyle = "#4a3a20";
-  ctx.fillRect(-7, 5 + bob, 14, 3);
-  ctx.fillStyle = age >= 4 ? "#c9a84c" : "#888";
-  ctx.fillRect(-1, 5 + bob, 3, 3);
-  ctx.fillStyle = cv.skinColor;
-  ctx.fillRect(-4, -12 + bob, 8, 9);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(1, -11 + bob, 2, 2);
-  ctx.fillStyle = "#8a6a3a";
-  ctx.fillRect(-3, -7 + bob, 6, 4);
-  if (age >= 3) {
-    ctx.fillStyle = age >= 4 ? "#5a5a58" : "#4a4a48";
-    ctx.fillRect(-6, -18 + bob, 12, 6);
-    ctx.fillStyle = "#6a6a68";
-    ctx.fillRect(0, -14 + bob, 2, 5);
-    ctx.fillRect(-5, -13 + bob, 3, 2);
-    ctx.fillRect(3, -13 + bob, 3, 2);
-    if (age >= 4) {
-      ctx.fillStyle = "#eee";
-      ctx.fillRect(-9, -19 + bob, 2, 5);
-      ctx.fillRect(7, -19 + bob, 2, 5);
-      ctx.fillRect(-10, -20 + bob, 2, 3);
-      ctx.fillRect(8, -20 + bob, 2, 3);
+  let bodyTilt = 0;
+  let rightArmRot = 0.1;
+  let leftArmRot = -0.1;
+  let swordOffsetX = 0;
+  let swordOffsetY = 0;
+  let shieldOffsetX = 0;
+  if (attackState) {
+    if (attackProgress < 0.3) {
+      const t = attackProgress / 0.3;
+      rightArmRot = 0.1 * (1 - t) + -Math.PI / 1.5 * t;
+      leftArmRot = -0.1 * (1 - t) + -Math.PI / 6 * t;
+      bodyTilt = -0.15 * t;
+      swordOffsetX = 2 * t;
+      swordOffsetY = 4 * t;
+      shieldOffsetX = -2 * t;
+    } else if (attackProgress < 0.6) {
+      const t = (attackProgress - 0.3) / 0.3;
+      rightArmRot = -Math.PI / 1.5 * (1 - t) + Math.PI / 3 * t;
+      leftArmRot = -Math.PI / 6 * (1 - t) + Math.PI / 12 * t;
+      bodyTilt = -0.15 * (1 - t) + 0.2 * t;
+      swordOffsetX = 2 * (1 - t) + 5 * t;
+      swordOffsetY = 4 * (1 - t) + 2 * t;
+    } else {
+      const t = (attackProgress - 0.6) / 0.4;
+      rightArmRot = Math.PI / 3 * (1 - t) + 0.1 * t;
+      leftArmRot = Math.PI / 12 * (1 - t) + -0.1 * t;
+      bodyTilt = 0.2 * (1 - t) + 0 * t;
+      swordOffsetX = 5 * (1 - t);
+      swordOffsetY = 2 * (1 - t);
     }
-  } else if (age >= 2) {
-    ctx.fillStyle = "#4a4a48";
-    ctx.fillRect(-5, -16 + bob, 10, 5);
-  } else {
-    ctx.fillStyle = "#b89050";
-    ctx.fillRect(-6, -17 + bob, 12, 6);
-    ctx.fillRect(-7, -14 + bob, 2, 5);
   }
-  ctx.fillStyle = "#5a3a18";
-  ctx.fillRect(7, -4 + bob, 2, 16);
-  ctx.fillStyle = age >= 4 ? "#ddd" : "#aaa";
+  if (bodyTilt !== 0) {
+    ctx.translate(0, 16 + bob);
+    ctx.rotate(bodyTilt);
+    ctx.translate(0, -(16 + bob));
+  }
+  const skinColor = cv.skinColor || "#f2d1aa";
+  const tunicColor = cv.bodyMid;
+  const armorPrimary = age >= 3 ? "#666" : "#5c4033";
+  ctx.fillStyle = "#3a2f26";
+  ctx.fillRect(-6, 12 + bob, 5, 5 + legOff);
+  ctx.fillRect(1, 12 + bob, 5, 5 - legOff);
+  ctx.fillStyle = "#6b4c2a";
+  ctx.fillRect(-6, 17 + bob + legOff, 5, 4);
+  ctx.fillRect(1, 17 + bob - legOff, 5, 4);
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-6, 18 + bob + legOff, 5, 0.5);
+  ctx.fillRect(-6, 20 + bob + legOff, 5, 0.5);
+  ctx.fillRect(1, 18 + bob - legOff, 5, 0.5);
+  ctx.fillRect(1, 20 + bob - legOff, 5, 0.5);
+  ctx.fillStyle = "#1e140c";
+  ctx.fillRect(-7, 21 + bob + legOff, 6, 2);
+  ctx.fillRect(0, 21 + bob - legOff, 6, 2);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-7, -5 + bob, 14, 18);
+  if (age >= 3) {
+    ctx.fillStyle = armorPrimary;
+    ctx.fillRect(-7, -5 + bob, 14, 14);
+    ctx.fillStyle = "rgba(0,0,0,0.15)";
+    for (let r = 0;r < 5; r++) {
+      ctx.fillRect(-7, -4 + bob + r * 3, 14, 1);
+    }
+  } else {
+    ctx.fillStyle = armorPrimary;
+    ctx.fillRect(-7, -2 + bob, 14, 8);
+    ctx.fillStyle = "#4a2f1d";
+    ctx.fillRect(-4, -5 + bob, 2, 8);
+    ctx.fillRect(2, -5 + bob, 2, 8);
+  }
+  ctx.fillStyle = "#221100";
+  ctx.fillRect(-7, 7 + bob, 14, 2.5);
+  ctx.fillStyle = "#999";
   ctx.beginPath();
-  ctx.moveTo(9, -8 + bob);
-  ctx.lineTo(14, -4 + bob);
-  ctx.lineTo(14, 0 + bob);
+  ctx.arc(-2, 8 + bob, 1.5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = age >= 4 ? "#3d3124" : "#5c4e3a";
+  ctx.beginPath();
+  ctx.moveTo(-9, -4 + bob);
+  ctx.lineTo(-10, 4 + bob);
+  ctx.lineTo(-7, 6 + bob);
+  ctx.lineTo(7, 6 + bob);
+  ctx.lineTo(10, 4 + bob);
   ctx.lineTo(9, -4 + bob);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,0.3)";
-  ctx.fillRect(12, -6 + bob, 1, 4);
-  if (age >= 4) {
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(9, -8 + bob, 1, 4);
-  }
-  if (age >= 2) {
-    ctx.fillStyle = "#5a4a2a";
+  ctx.save();
+  ctx.translate(5, -2 + bob);
+  ctx.rotate(rightArmRot);
+  ctx.translate(swordOffsetX, swordOffsetY);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-1.5, 6, 3, 3);
+  ctx.translate(-1, 9);
+  ctx.rotate(Math.PI / 2.5);
+  ctx.fillStyle = "#444";
+  ctx.beginPath();
+  ctx.arc(0, -6, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#312012";
+  ctx.fillRect(-1, -6, 2, 6);
+  ctx.fillStyle = "#555";
+  ctx.fillRect(-3, -1.5, 6, 1.5);
+  ctx.fillStyle = age >= 4 ? "#ebebeb" : "#cccccc";
+  ctx.beginPath();
+  ctx.moveTo(-2, 0);
+  ctx.lineTo(-1.5, 20);
+  ctx.lineTo(0, 23);
+  ctx.lineTo(1.5, 20);
+  ctx.lineTo(2, 0);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.2)";
+  ctx.fillRect(-0.5, 0, 1, 18);
+  if (attackState && attackProgress > 0.3 && attackProgress < 0.6) {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
     ctx.beginPath();
-    ctx.arc(-8, 2 + bob, age >= 3 ? 7 : 5, 0, Math.PI * 2);
+    ctx.moveTo(0, 5);
+    ctx.quadraticCurveTo(20, 10, 26, -5);
+    ctx.lineTo(26, -2);
+    ctx.quadraticCurveTo(15, 12, 0, 5);
     ctx.fill();
-    ctx.fillStyle = "#7a7a78";
+  }
+  ctx.restore();
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-4, -13 + bob, 8, 9);
+  ctx.fillStyle = "#88aacc";
+  ctx.fillRect(-2, -11 + bob, 1, 1);
+  ctx.fillRect(1, -11 + bob, 1, 1);
+  ctx.fillStyle = age >= 4 ? "#b3c6cf" : "#d48a33";
+  ctx.beginPath();
+  ctx.moveTo(-4, -6 + bob);
+  ctx.quadraticCurveTo(0, -2 + bob, 4, -6 + bob);
+  ctx.lineTo(0, -4 + bob);
+  ctx.fill();
+  if (age >= 3) {
+    ctx.fillStyle = age >= 4 ? "#555" : "#666";
     ctx.beginPath();
-    ctx.arc(-8, 2 + bob, 3, 0, Math.PI * 2);
+    ctx.arc(0, -13 + bob, 5, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-6, -14 + bob, 12, 1);
+    ctx.fillStyle = "#999";
+    ctx.fillRect(-2, -14 + bob, 4, 1);
+    ctx.fillRect(-0.5, -13 + bob, 1, 4);
+    ctx.beginPath();
+    ctx.arc(-2, -11 + bob, 1.5, Math.PI, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(2, -11 + bob, 1.5, Math.PI, 0);
+    ctx.stroke();
+    if (age >= 4) {
+      ctx.fillStyle = "#e8dcc4";
+      ctx.beginPath();
+      ctx.moveTo(-4, -15 + bob);
+      ctx.quadraticCurveTo(-10, -18 + bob, -8, -24 + bob);
+      ctx.quadraticCurveTo(-6, -18 + bob, -2, -15 + bob);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(4, -15 + bob);
+      ctx.quadraticCurveTo(10, -18 + bob, 8, -24 + bob);
+      ctx.quadraticCurveTo(6, -18 + bob, 2, -15 + bob);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = "#d48a33";
+    ctx.fillRect(-5, -15 + bob, 10, 3);
+  }
+  ctx.save();
+  ctx.translate(-5, -1 + bob);
+  ctx.rotate(leftArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  if (age >= 2) {
+    ctx.translate(-3 + shieldOffsetX, 4);
+    const shieldR = age >= 3 ? 8 : 6;
+    ctx.fillStyle = "#5c4033";
+    ctx.beginPath();
+    ctx.arc(0, 0, shieldR, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = cv.accent;
-    ctx.fillRect(-9, -1 + bob, 2, 6);
+    ctx.beginPath();
+    ctx.arc(0, 0, shieldR, Math.PI / 2, Math.PI * 1.5);
+    ctx.fill();
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = age >= 4 ? 2 : 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, shieldR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#888";
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   }
-  ctx.fillStyle = age >= 3 ? "#3a3a30" : "#5a4a38";
-  ctx.fillRect(-5, 11, 4, 6 + legOff);
-  ctx.fillRect(1, 11, 4, 6 - legOff);
-  ctx.fillStyle = "#4a3a28";
-  ctx.fillRect(-6, 15 + legOff, 5, 3);
-  ctx.fillRect(0, 15 - legOff, 5, 3);
+  ctx.restore();
   drawSwordsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawSpears_Viking(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let attackProgress = 0;
+  if (unit.state === 5 /* Attacking */) {
+    const attackCycle = unit.animTimer % unit.attackCooldown;
+    const attackDuration = unit.civAttackSpeed * 0.4;
+    if (attackCycle < attackDuration) {
+      attackProgress = attackCycle / attackDuration;
+    }
+  }
+  let bodyRot = 0;
+  let spearAngle = 0;
+  let spearOffset = { x: 0, y: 0 };
+  let rightArmRot = 0;
+  let leftArmRot = 0;
+  if (attackProgress > 0) {
+    if (attackProgress < 0.3) {
+      const t = attackProgress / 0.3;
+      bodyRot = t * -0.15;
+      spearOffset.x = t * -3;
+      spearOffset.y = t * -4;
+      spearAngle = t * 0.2;
+      rightArmRot = t * -0.6;
+      leftArmRot = t * -0.2;
+    } else if (attackProgress < 0.6) {
+      const t = (attackProgress - 0.3) / 0.3;
+      const easeOut = 1 - Math.pow(1 - t, 3);
+      bodyRot = -0.15 + easeOut * 0.3;
+      spearOffset.x = -3 + easeOut * 10;
+      spearOffset.y = -4 + easeOut * 4;
+      spearAngle = 0.2 - easeOut * 0.4;
+      rightArmRot = -0.6 + easeOut * 1;
+      leftArmRot = -0.2 + easeOut * 0.1;
+    } else {
+      const t = (attackProgress - 0.6) / 0.4;
+      const easeIn = t * t;
+      bodyRot = 0.15 * (1 - easeIn);
+      spearOffset.x = 7 * (1 - easeIn);
+      spearOffset.y = 0 * (1 - easeIn);
+      spearAngle = -0.2 * (1 - easeIn);
+      rightArmRot = 0.4 * (1 - easeIn);
+      leftArmRot = -0.1 * (1 - easeIn);
+    }
+  } else {
+    const breath = Math.sin(unit.animTimer * 2) * 0.05;
+    bodyRot = breath;
+    spearAngle = 0.1 + breath * 0.1;
+    spearOffset.y = -2;
+    rightArmRot = -0.3;
+    leftArmRot = -0.1;
+  }
+  ctx.rotate(bodyRot);
+  const skinColor = cv.skinColor;
+  const tunicColor = age >= 3 ? cv.bodyDark : cv.bodyMid;
+  const paddingColor = "#5c4a33";
+  const armorMetal = age >= 4 ? "#5a5a58" : "#777777";
+  const furColor = "#4a3a2a";
+  ctx.save();
+  ctx.translate(3, -5 + bob);
+  ctx.rotate(Math.PI / 4 + rightArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-2.5, 6, 5, 4);
+  if (age >= 3) {
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(-2.5, 7, 5, 1);
+    ctx.fillRect(-2.5, 9, 5, 1);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 11, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(spearOffset.x, spearOffset.y);
+  ctx.translate(0, -3 + bob);
+  ctx.rotate(spearAngle);
+  ctx.fillStyle = "#7c5f40";
+  const poleLength = age >= 3 ? 30 : 26;
+  ctx.fillRect(-poleLength * 0.4, -1, poleLength, 2);
+  ctx.fillStyle = "#444";
+  ctx.fillRect(-poleLength * 0.4 - 2, -0.5, 2, 1);
+  const shaftEnd = poleLength * 0.6;
+  ctx.fillStyle = age >= 4 ? "#eeeeee" : "#cccccc";
+  const bladeLen = age >= 3 ? 8 : 6;
+  ctx.fillRect(shaftEnd, -1.5, 3, 3);
+  if (age >= 3) {
+    ctx.beginPath();
+    ctx.moveTo(shaftEnd + 1, -1.5);
+    ctx.lineTo(shaftEnd + 2, -4);
+    ctx.lineTo(shaftEnd + 3, -1.5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(shaftEnd + 1, 1.5);
+    ctx.lineTo(shaftEnd + 2, 4);
+    ctx.lineTo(shaftEnd + 3, 1.5);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.moveTo(shaftEnd + 3, 0);
+  ctx.quadraticCurveTo(shaftEnd + 6, -3, shaftEnd + 3 + bladeLen, 0);
+  ctx.quadraticCurveTo(shaftEnd + 6, 3, shaftEnd + 3, 0);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(shaftEnd + 4, -0.5, bladeLen - 2, 1);
+  ctx.restore();
+  ctx.fillStyle = paddingColor;
+  ctx.fillRect(-5, 6, 4, 7 + legOff);
+  ctx.fillRect(1, 6, 4, 7 - legOff);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-5.5, 9 + Math.max(0, legOff), 5, 4);
+  ctx.fillRect(0.5, 9 + Math.max(0, -legOff), 5, 4);
+  ctx.strokeStyle = "#5a5a58";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(-5.5, 9 + legOff);
+  ctx.lineTo(-0.5, 13 + legOff);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0.5, 9 - legOff);
+  ctx.lineTo(5.5, 13 - legOff);
+  ctx.stroke();
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-5.5, 13 + legOff, 6, 2);
+  ctx.fillRect(0.5, 13 - legOff, 6, 2);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-6, -5 + bob, 12, 13);
+  if (age >= 3) {
+    ctx.fillStyle = furColor;
+    ctx.fillRect(-7, -5 + bob, 14, 5);
+    ctx.fillStyle = "#2a1a0a";
+    for (let i = -6;i <= 6; i += 3) {
+      ctx.beginPath();
+      ctx.moveTo(i, -1 + bob);
+      ctx.lineTo(i - 1, 2 + bob);
+      ctx.lineTo(i + 1, 1 + bob);
+      ctx.fill();
+    }
+  }
+  if (age >= 2) {
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(-6, -5 + bob, 12, 10);
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    for (let r = 0;r < 4; r++) {
+      for (let c = 0;c < 4; c++) {
+        ctx.beginPath();
+        ctx.arc(-5 + c * 3 + r % 2 * 1.5, -4 + bob + r * 2.5, 1.2, 0, Math.PI);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-6, 5 + bob, 12, 2);
+  ctx.fillStyle = "#a0a0a0";
+  ctx.fillRect(-1, 4.5 + bob, 3, 3);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(0, 5 + bob, 1, 2);
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -13 + bob, 6, 8);
+  ctx.fillStyle = "#b85c14";
+  ctx.beginPath();
+  ctx.moveTo(-4, -8 + bob);
+  ctx.lineTo(4, -8 + bob);
+  ctx.lineTo(2, -3 + bob);
+  ctx.lineTo(-2, -3 + bob);
+  ctx.fill();
+  if (age >= 3) {
+    ctx.fillStyle = armorMetal;
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 4.5, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-5, -12 + bob, 10, 2);
+    ctx.fillStyle = armorMetal;
+    ctx.beginPath();
+    ctx.moveTo(-4, -10 + bob);
+    ctx.quadraticCurveTo(0, -7 + bob, 4, -10 + bob);
+    ctx.lineTo(2, -11 + bob);
+    ctx.lineTo(-2, -11 + bob);
+    ctx.fill();
+    ctx.fillStyle = skinColor;
+    ctx.beginPath();
+    ctx.arc(-1.5, -9.5 + bob, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(1.5, -9.5 + bob, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(-5, -10 + bob, 2, 3);
+    ctx.fillRect(3, -10 + bob, 2, 3);
+  } else if (age >= 2) {
+    ctx.fillStyle = "#5a5a58";
+    ctx.beginPath();
+    ctx.moveTo(-5, -11 + bob);
+    ctx.lineTo(5, -11 + bob);
+    ctx.lineTo(0, -16 + bob);
+    ctx.fill();
+    ctx.fillRect(-0.5, -11 + bob, 1, 3);
+  } else {
+    ctx.fillStyle = "#b85c14";
+    ctx.fillRect(-4, -15 + bob, 8, 4);
+  }
+  ctx.save();
+  ctx.translate(-4, -1 + bob);
+  ctx.rotate(leftArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 6);
+  if (age >= 2) {
+    ctx.translate(-2, 4);
+    const shieldR = age >= 3 ? 9 : 8;
+    ctx.fillStyle = "#3a2010";
+    ctx.beginPath();
+    ctx.arc(0, 0, shieldR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = cv.accent;
+    ctx.beginPath();
+    ctx.arc(0, 0, shieldR, Math.PI * 0.75, Math.PI * 1.75);
+    ctx.fill();
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 0.5;
+    for (let x = -shieldR + 2;x < shieldR; x += 3) {
+      ctx.beginPath();
+      ctx.moveTo(x, -shieldR);
+      ctx.lineTo(x, shieldR);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "#5a5a58";
+    ctx.lineWidth = age >= 4 ? 2 : 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, shieldR, 0, Math.PI * 2);
+    ctx.stroke();
+    if (age >= 3) {
+      ctx.fillStyle = "#ccc";
+      for (let i = 0;i < 8; i++) {
+        ctx.beginPath();
+        ctx.arc(Math.cos(i * Math.PI / 4) * (shieldR - 1), Math.sin(i * Math.PI / 4) * (shieldR - 1), 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.fillStyle = "#a0a0a0";
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#555";
+    ctx.beginPath();
+    ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  drawSpearsFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
+}
+function drawArchers_Viking(unit, ctx, age, bob, legOff, lvl, cv) {
+  ctx.save();
+  let isAttacking = false;
+  if (unit.state === 5 /* Attacking */) {
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    if (target) {
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+      if (dist <= unit.civRange + bldgRadius + 20) {
+        isAttacking = true;
+      }
+    }
+  }
+  let pullback = 0;
+  let bowAngle = 0;
+  if (isAttacking) {
+    const maxCd = unit.civAttackSpeed;
+    const currentCd = unit.attackCooldown;
+    const pullPhase = 1 - currentCd / maxCd;
+    if (pullPhase > 0.3 && pullPhase < 0.9) {
+      pullback = (pullPhase - 0.3) / 0.6;
+    } else if (pullPhase >= 0.9) {
+      pullback = 1;
+    } else {
+      pullback = 0;
+    }
+  }
+  let bodyRot = 0;
+  if (isAttacking) {
+    bodyRot = -0.1 + pullback * 0.15;
+    bowAngle = -0.05 + pullback * 0.05;
+  } else {
+    bodyRot = Math.sin(unit.animTimer * 2) * 0.05;
+    bowAngle = 0.15;
+  }
+  ctx.rotate(bodyRot);
+  const skinColor = cv.skinColor;
+  const tunicColor = "#3a5a48";
+  const leatherColor = "#5c4033";
+  const armorMetal = age >= 4 ? "#5a5a58" : "#777777";
+  ctx.save();
+  let drawArmRot = 0;
+  let drawHandX = 0;
+  let drawHandY = 0;
+  if (isAttacking) {
+    drawArmRot = -0.2 - pullback * 0.8;
+    drawHandX = 3 - pullback * 14;
+    drawHandY = -1;
+  } else {
+    drawArmRot = 0.2;
+    drawHandX = 2;
+    drawHandY = 0;
+  }
+  ctx.translate(drawHandX, drawHandY + bob);
+  ctx.rotate(drawArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, -2, 5, 7);
+  if (age >= 2) {
+    ctx.fillStyle = leatherColor;
+    ctx.fillRect(-2, 3, 4, 5);
+    ctx.fillStyle = "#7a6a4a";
+    ctx.fillRect(-2.5, 3, 5, 1);
+  }
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 9, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-7, -2 + bob);
+  ctx.rotate(0.2);
+  ctx.fillStyle = "#4a3018";
+  ctx.fillRect(-2, -6, 5, 16);
+  ctx.fillStyle = "#2a1a0f";
+  ctx.fillRect(-2, 0, 5, 2);
+  ctx.fillStyle = "#aaa";
+  ctx.fillRect(-1.5, -9, 1, 3);
+  ctx.fillRect(1.5, -8, 1, 2);
+  ctx.fillStyle = "#7a3a2a";
+  ctx.fillRect(-2, -10, 4, 3);
+  ctx.fillRect(1, -9, 3, 2);
+  ctx.restore();
+  ctx.fillStyle = "#4a3a2a";
+  ctx.fillRect(-5, 6, 4, 7 + legOff);
+  ctx.fillRect(1, 6, 4, 7 - legOff);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-5.5, 9 + legOff, 5, 3);
+  ctx.fillRect(0.5, 9 - legOff, 5, 3);
+  ctx.strokeStyle = "#5c4033";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(-5.5, 9 + legOff);
+  ctx.lineTo(-0.5, 12 + legOff);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0.5, 9 - legOff);
+  ctx.lineTo(5.5, 12 - legOff);
+  ctx.stroke();
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-5.5, 12 + legOff, 5, 2);
+  ctx.fillRect(0.5, 12 - legOff, 5, 2);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-6, -4 + bob, 12, 14);
+  if (age >= 3) {
+    ctx.fillStyle = armorMetal;
+    ctx.fillRect(-6, -5 + bob, 12, 11);
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    for (let r = 0;r < 4; r++) {
+      for (let c = 0;c < 4; c++) {
+        ctx.beginPath();
+        ctx.arc(-4 + c * 3 + r % 2, -3 + bob + r * 2.5, 1, 0, Math.PI);
+        ctx.fill();
+      }
+    }
+  } else if (age >= 2) {
+    ctx.fillStyle = leatherColor;
+    ctx.fillRect(-5, -4 + bob, 10, 8);
+  }
+  if (age >= 2) {
+    ctx.fillStyle = age >= 4 ? "#3d3124" : "#7a6a4a";
+    ctx.beginPath();
+    ctx.moveTo(-7, -5 + bob);
+    ctx.lineTo(0, 0 + bob);
+    ctx.lineTo(7, -5 + bob);
+    ctx.lineTo(8, -1 + bob);
+    ctx.lineTo(0, 3 + bob);
+    ctx.lineTo(-8, -1 + bob);
+    ctx.fill();
+  }
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-6, 5 + bob, 12, 2);
+  ctx.fillStyle = "#8a8a88";
+  ctx.fillRect(-1, 5 + bob, 2, 2);
+  if (age >= 3) {
+    ctx.fillStyle = "#e0d8c0";
+    ctx.beginPath();
+    ctx.moveTo(4, 7 + bob);
+    ctx.quadraticCurveTo(7, 10 + bob, 5, 13 + bob);
+    ctx.lineTo(4, 11 + bob);
+    ctx.fill();
+  }
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-3, -12 + bob, 6, 8);
+  ctx.fillStyle = "#b85c14";
+  ctx.fillRect(-3, -7 + bob, 6, 3);
+  if (age >= 3) {
+    ctx.fillStyle = armorMetal;
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 4.5, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "#aaaaab";
+    ctx.fillRect(-2, -11 + bob, 4, 3);
+    ctx.beginPath();
+    ctx.arc(-2.5, -9 + bob, 1.5, Math.PI, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(2.5, -9 + bob, 1.5, Math.PI, 0);
+    ctx.stroke();
+    if (age >= 4) {
+      ctx.fillStyle = "#222";
+      ctx.beginPath();
+      ctx.moveTo(-4, -13 + bob);
+      ctx.lineTo(-7, -16 + bob);
+      ctx.lineTo(-5, -12 + bob);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(4, -13 + bob);
+      ctx.lineTo(7, -16 + bob);
+      ctx.lineTo(5, -12 + bob);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = "#4a3a28";
+    ctx.beginPath();
+    ctx.arc(0, -11 + bob, 4.5, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(-5, -11 + bob, 10, 4);
+    ctx.fillStyle = "#7a6a4a";
+    ctx.fillRect(-5, -12 + bob, 10, 1.5);
+  }
+  ctx.save();
+  let bowArmRot = 0;
+  if (isAttacking) {
+    bowArmRot = -Math.PI / 2 + 0.2;
+  } else {
+    bowArmRot = -Math.PI / 4;
+  }
+  ctx.translate(-2, -4 + bob);
+  ctx.rotate(bowArmRot);
+  ctx.fillStyle = tunicColor;
+  ctx.fillRect(-2, 0, 4, 5);
+  ctx.fillStyle = leatherColor;
+  ctx.fillRect(-2, 5, 4, 5);
+  ctx.fillStyle = "#7a6a4a";
+  ctx.fillRect(-2.5, 5, 5, 1);
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 11, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(0, 11);
+  ctx.rotate(-bowArmRot + bowAngle);
+  ctx.translate(-10.5, 0);
+  ctx.strokeStyle = age >= 4 ? "#2a1a0f" : "#4a3018";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, 12, -Math.PI * 0.45, Math.PI * 0.45);
+  ctx.stroke();
+  ctx.fillStyle = "#7a5a3a";
+  ctx.fillRect(10.5, -2, 3, 4);
+  if (age >= 4) {
+    ctx.globalAlpha = 0.6 + Math.sin(unit.animTimer * 5) * 0.4;
+    ctx.fillStyle = "#44aaff";
+    ctx.fillRect(8.5, -8, 1, 2);
+    ctx.fillRect(8.5, 6, 1, 2);
+    ctx.globalAlpha = 1;
+  }
+  const bowTopY = -11;
+  const bowBotY = 11;
+  const bowTopX = 8.5;
+  const bowBotX = 8.5;
+  const maxPullDist = 14;
+  const stringMidX = bowTopX - pullback * maxPullDist;
+  const stringMidY = 0;
+  ctx.strokeStyle = "#dddddd";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(bowTopX, bowTopY);
+  ctx.lineTo(stringMidX, stringMidY);
+  ctx.lineTo(bowBotX, bowBotY);
+  ctx.stroke();
+  const hideArrow = isAttacking && pullback === 0 && unit.attackCooldown > unit.civAttackSpeed * 0.8;
+  if (!hideArrow && isAttacking) {
+    const arrowLen = 16;
+    ctx.save();
+    ctx.fillStyle = "#ccaa77";
+    ctx.fillRect(stringMidX, -0.5, arrowLen, 1.5);
+    ctx.fillStyle = "#222";
+    ctx.beginPath();
+    ctx.moveTo(stringMidX + arrowLen, -1.5);
+    ctx.lineTo(stringMidX + arrowLen + 3, 0);
+    ctx.lineTo(stringMidX + arrowLen, 1.5);
+    ctx.fill();
+    ctx.fillStyle = "#aa2222";
+    ctx.fillRect(stringMidX, -1.5, 3, 3);
+    ctx.restore();
+  }
+  ctx.restore();
+  drawArchersFinish(unit, ctx, age, bob, legOff, lvl, cv);
+  ctx.restore();
 }
 
 // src/entities/unit-rendering/draw-dispatchers.ts
@@ -5852,12 +9415,2299 @@ function drawSwordsman(unit, ctx, age, bob, moving) {
       break;
   }
 }
+function drawSpearman(unit, ctx, age, bob, moving) {
+  const cv = getCivColors(unit);
+  const legOffset = moving ? Math.sin(unit.animTimer * 22) * 3 : 0;
+  const lvl = unit.upgradeLevel;
+  const civ = cv.civ;
+  switch (civ) {
+    case "baTu" /* BaTu */:
+      drawSpears_BaTu(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+    case "daiTong" /* DaiMinh */:
+      drawSpears_DaiMinh(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+    case "yamato" /* Yamato */:
+      drawSpears_Yamato(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+    case "viking" /* Viking */:
+      drawSpears_Viking(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+    default:
+      drawSpears_LaMa(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+  }
+}
+function drawArcher(unit, ctx, age, bob, moving) {
+  const cv = getCivColors(unit);
+  const legOffset = moving ? Math.sin(unit.animTimer * 22) * 3 : 0;
+  const lvl = unit.upgradeLevel;
+  const civ = cv.civ;
+  switch (civ) {
+    case "baTu" /* BaTu */:
+      drawArchers_BaTu(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+    case "daiTong" /* DaiMinh */:
+      drawArchers_DaiMinh(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+    case "yamato" /* Yamato */:
+      drawArchers_Yamato(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+    case "viking" /* Viking */:
+      drawArchers_Viking(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+    default:
+      drawArchers_LaMa(unit, ctx, age, bob, legOffset, lvl, cv);
+      break;
+  }
+}
+
+// src/entities/unit-rendering/draw-cavalry-unique.ts
+function drawBeautifulHorse(ctx, walkBob, legSwing, baseColor, maneColor, darkColor, hoofColor) {
+  const drawLeg = (xl, isFront, isBack) => {
+    ctx.fillStyle = isBack ? darkColor : baseColor;
+    const phase = isFront ? isBack ? Math.PI : 0 : isBack ? 0 : Math.PI;
+    const swing = Math.sin(legSwing * 0.5 + phase);
+    const lift = Math.max(0, -swing) * 6;
+    const kneeX = xl + swing * 4 + (isFront ? 2 : -2);
+    const kneeY = 8 - lift * 0.5;
+    const ankleX = xl + swing * 8 + (isFront ? 1 : -3);
+    const ankleY = 16 - lift;
+    const hoofX = ankleX + (isFront ? 2 : 1) + (swing > 0 ? swing * 2 : 0);
+    const hoofY = ankleY + 2;
+    ctx.beginPath();
+    if (isFront) {
+      ctx.moveTo(xl - 3, 0);
+      ctx.lineTo(xl + 6, 0);
+    } else {
+      ctx.moveTo(xl - 5, 0);
+      ctx.lineTo(xl + 5, 0);
+    }
+    ctx.lineTo(kneeX + 2, kneeY);
+    ctx.lineTo(kneeX - 2, kneeY);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(kneeX - 2, kneeY);
+    ctx.lineTo(kneeX + 2, kneeY);
+    ctx.lineTo(ankleX + 1, ankleY);
+    ctx.lineTo(ankleX - 1, ankleY);
+    ctx.fill();
+    ctx.fillStyle = hoofColor;
+    ctx.beginPath();
+    ctx.moveTo(ankleX - 1, ankleY);
+    ctx.lineTo(ankleX + 2, ankleY);
+    ctx.lineTo(hoofX + 2, hoofY);
+    ctx.lineTo(hoofX - 2, hoofY);
+    ctx.fill();
+  };
+  drawLeg(-12, false, true);
+  drawLeg(10, true, true);
+  ctx.fillStyle = baseColor;
+  ctx.beginPath();
+  ctx.moveTo(-16, -12 + walkBob);
+  ctx.quadraticCurveTo(-10, -18 + walkBob, 10, -18 + walkBob);
+  ctx.quadraticCurveTo(18, -18 + walkBob, 20, -10 + walkBob);
+  ctx.quadraticCurveTo(22, -2 + walkBob, 10, 2 + walkBob);
+  ctx.quadraticCurveTo(0, 4 + walkBob, -14, 2 + walkBob);
+  ctx.quadraticCurveTo(-22, 0 + walkBob, -16, -12 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.15)";
+  ctx.beginPath();
+  ctx.moveTo(-14, 2 + walkBob);
+  ctx.quadraticCurveTo(0, 4 + walkBob, 10, 2 + walkBob);
+  ctx.quadraticCurveTo(22, -2 + walkBob, 20, -10 + walkBob);
+  ctx.lineTo(20, -8 + walkBob);
+  ctx.quadraticCurveTo(10, 4 + walkBob, -14, 4 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.1)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-18, -6 + walkBob);
+  ctx.quadraticCurveTo(-14, 0 + walkBob, -8, -2 + walkBob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(16, -12 + walkBob);
+  ctx.quadraticCurveTo(10, -6 + walkBob, 14, 0 + walkBob);
+  ctx.stroke();
+  drawLeg(-16, false, false);
+  drawLeg(14, true, false);
+  ctx.fillStyle = baseColor;
+  ctx.beginPath();
+  ctx.moveTo(10, -16 + walkBob);
+  ctx.quadraticCurveTo(18, -26 + walkBob, 14, -34 + walkBob);
+  ctx.lineTo(22, -32 + walkBob);
+  ctx.quadraticCurveTo(26, -18 + walkBob, 16, -10 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = maneColor;
+  ctx.beginPath();
+  ctx.moveTo(10, -16 + walkBob);
+  ctx.quadraticCurveTo(18, -26 + walkBob, 14, -34 + walkBob);
+  ctx.lineTo(10, -32 + walkBob);
+  ctx.quadraticCurveTo(14, -24 + walkBob, 6, -14 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = baseColor;
+  ctx.beginPath();
+  ctx.moveTo(14, -34 + walkBob);
+  ctx.lineTo(22, -32 + walkBob);
+  ctx.lineTo(28, -20 + walkBob);
+  ctx.lineTo(30, -22 + walkBob);
+  ctx.lineTo(16, -36 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = darkColor;
+  ctx.beginPath();
+  ctx.moveTo(22, -26 + walkBob);
+  ctx.lineTo(28, -20 + walkBob);
+  ctx.lineTo(30, -22 + walkBob);
+  ctx.lineTo(26, -27 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = baseColor;
+  ctx.beginPath();
+  ctx.moveTo(14, -35 + walkBob);
+  ctx.lineTo(12, -40 + walkBob);
+  ctx.lineTo(17, -36 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = darkColor;
+  ctx.beginPath();
+  ctx.moveTo(14.5, -35.5 + walkBob);
+  ctx.lineTo(13, -39 + walkBob);
+  ctx.lineTo(16, -36 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.arc(19, -32 + walkBob, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(27, -20 + walkBob);
+  ctx.lineTo(24, -25 + walkBob);
+  ctx.lineTo(20, -32 + walkBob);
+  ctx.moveTo(18, -34 + walkBob);
+  ctx.lineTo(22, -30 + walkBob);
+  ctx.moveTo(24, -25 + walkBob);
+  ctx.quadraticCurveTo(15, -15 + walkBob, 2, -10 + walkBob);
+  ctx.stroke();
+  ctx.fillStyle = "#ffd700";
+  ctx.beginPath();
+  ctx.arc(24, -25 + walkBob, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = maneColor;
+  ctx.beginPath();
+  ctx.moveTo(-16, -14 + walkBob);
+  ctx.quadraticCurveTo(-28, -12 + walkBob, -30, 0 + walkBob);
+  ctx.quadraticCurveTo(-24, 6 + walkBob, -26, 12 + walkBob);
+  ctx.quadraticCurveTo(-20, 2 + walkBob, -16, -10 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = darkColor;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(-18, -12 + walkBob);
+  ctx.quadraticCurveTo(-26, -5 + walkBob, -26, 8 + walkBob);
+  ctx.stroke();
+}
+function drawCavalryDust(unit, ctx, isMoving) {
+  if (!isMoving)
+    return;
+  const civ = unit.civilization;
+  let dustColor;
+  let pColor;
+  switch (civ) {
+    case "baTu" /* BaTu */:
+      dustColor = "#c9a060";
+      pColor = "#e0c090";
+      break;
+    case "viking" /* Viking */:
+      dustColor = "#6a6a68";
+      pColor = "#8a8a88";
+      break;
+    default:
+      dustColor = "#8a7a60";
+      pColor = "#a89a80";
+  }
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  for (let i = 0;i < 5; i++) {
+    const lift = (unit.animTimer * 15 + i * 7) % 10;
+    const spread = Math.sin(unit.animTimer * 8 + i) * 6;
+    const dx = -16 - i * 3 + spread;
+    const dy = 16 - lift;
+    const size = 3 - lift / 5;
+    if (size > 0.5) {
+      ctx.fillStyle = i % 2 === 0 ? dustColor : pColor;
+      ctx.beginPath();
+      ctx.arc(dx, dy, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  const stomp = Math.sin(unit.animTimer * 18);
+  if (stomp > 0.8) {
+    ctx.fillStyle = dustColor;
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(10, 20, 6, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+function drawWarElephant(unit, ctx, age, totalBob, isMoving) {
+  const bodyColor = "#7a7a7a";
+  const darkSkin = "#5a5a5a";
+  const shadowColor = "rgba(0, 0, 0, 0.3)";
+  const civColor = CIVILIZATION_DATA[unit.civilization].secondaryColor;
+  const isAttacking = unit.attackCooldown > unit.civAttackSpeed * 0.8;
+  ctx.save();
+  const rearing = isAttacking && !isMoving ? -0.1 : 0;
+  ctx.translate(0, rearing ? -2 : 0);
+  ctx.rotate(rearing);
+  ctx.save();
+  ctx.scale(0.6, 0.6);
+  const walkBob = isMoving ? Math.sin(totalBob * 0.4) * 2 : 0;
+  const isStomping = isAttacking && unit.animTimer > 0;
+  const stompFactor = isStomping ? Math.sin(unit.animTimer * 15) : 0;
+  const legSwing = isMoving ? Math.sin(totalBob * 0.4) : isStomping ? stompFactor * 0.5 : 0;
+  const drawElephantLeg = (x, y, w, h, isDark, swingAngle) => {
+    ctx.save();
+    ctx.translate(x + w / 2, y);
+    ctx.rotate(swingAngle);
+    ctx.fillStyle = isDark ? darkSkin : bodyColor;
+    ctx.fillRect(-w / 2, 0, w, h);
+    if (!isDark) {
+      ctx.fillStyle = shadowColor;
+      ctx.fillRect(-w / 2, 0, w * 0.2, h);
+    }
+    ctx.fillStyle = "#cccccc";
+    const toeW = w / 3;
+    ctx.beginPath();
+    ctx.arc(-w / 2 + toeW * 0.5, h, toeW * 0.4, Math.PI, 0);
+    ctx.arc(-w / 2 + toeW * 1.5, h, toeW * 0.4, Math.PI, 0);
+    ctx.arc(-w / 2 + toeW * 2.5, h, toeW * 0.4, Math.PI, 0);
+    ctx.fill();
+    ctx.restore();
+  };
+  drawElephantLeg(-16, 2, 10, 16, true, -legSwing * 0.5);
+  drawElephantLeg(8, 2, 10, 16, true, legSwing * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(-22, -8);
+  ctx.quadraticCurveTo(-28, -2, -26, 8 + Math.sin(totalBob * 0.8) * 2);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = darkSkin;
+  ctx.stroke();
+  ctx.fillStyle = "#333";
+  ctx.beginPath();
+  ctx.arc(-26, 9 + Math.sin(totalBob * 0.8) * 2, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(0, walkBob);
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.moveTo(-10, -22);
+  ctx.quadraticCurveTo(20, -22, 25, -5);
+  ctx.quadraticCurveTo(20, 15, -5, 12);
+  ctx.quadraticCurveTo(-28, 12, -24, -5);
+  ctx.quadraticCurveTo(-20, -20, -10, -22);
+  ctx.fill();
+  ctx.fillStyle = shadowColor;
+  ctx.beginPath();
+  ctx.moveTo(25, -5);
+  ctx.quadraticCurveTo(20, 15, -5, 12);
+  ctx.quadraticCurveTo(-28, 12, -24, -5);
+  ctx.quadraticCurveTo(-5, 5, 25, -5);
+  ctx.fill();
+  ctx.fillStyle = "#778899";
+  ctx.beginPath();
+  ctx.moveTo(-10, -5);
+  ctx.quadraticCurveTo(-15, 6, -5, 10);
+  ctx.quadraticCurveTo(10, 10, 16, 0);
+  ctx.lineTo(8, -5);
+  ctx.fill();
+  ctx.fillStyle = "#silver";
+  for (let r = 0;r < 3; r++) {
+    for (let c = 0;c < 4; c++) {
+      ctx.fillRect(-6 + c * 5, -2 + r * 4, 1.5, 1.5);
+    }
+  }
+  drawElephantLeg(-22, 2, 10, 18, false, legSwing * 0.6);
+  const stompLift = isStomping ? -Math.max(0, stompFactor) * 0.5 : 0;
+  drawElephantLeg(14, 2, 10, 18, false, stompLift - legSwing * 0.6);
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.arc(22, -10, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.beginPath();
+  ctx.arc(22, -12, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(34, -5);
+  if (isAttacking) {
+    ctx.quadraticCurveTo(46, -20, 36, -30);
+  } else {
+    ctx.quadraticCurveTo(42 + legSwing * 5, 4, 32 + legSwing * 10, 16);
+  }
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = bodyColor;
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = shadowColor;
+  if (isAttacking) {
+    ctx.beginPath();
+    ctx.moveTo(34, -5);
+    ctx.quadraticCurveTo(44, -20, 35, -28);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(34, -5);
+    ctx.quadraticCurveTo(40 + legSwing * 5, 4, 30 + legSwing * 10, 14);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#778899";
+  ctx.beginPath();
+  ctx.arc(22, -12, 10.5, -Math.PI * 0.8, Math.PI * 0.3);
+  ctx.lineTo(38, -6);
+  ctx.lineTo(34, 4);
+  ctx.lineTo(26, 0);
+  ctx.fill();
+  ctx.strokeStyle = "#eebb00";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(22, -12, 10.5, -Math.PI * 0.8, Math.PI * 0.3);
+  ctx.lineTo(38, -6);
+  ctx.lineTo(34, 4);
+  ctx.lineTo(26, 0);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fillStyle = "#667788";
+  ctx.beginPath();
+  ctx.arc(22, -6, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#eebb00";
+  ctx.beginPath();
+  ctx.arc(22, -6, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ddddcc";
+  ctx.beginPath();
+  ctx.moveTo(26, -4);
+  ctx.quadraticCurveTo(40, 2, 44, -10);
+  ctx.quadraticCurveTo(38, -4, 30, -4);
+  ctx.fill();
+  ctx.fillStyle = "#fffff0";
+  ctx.beginPath();
+  ctx.moveTo(28, -2);
+  ctx.quadraticCurveTo(44, 6, 52, -10);
+  ctx.quadraticCurveTo(42, -2, 34, -2);
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "#ffd700";
+  ctx.beginPath();
+  ctx.moveTo(33, 1);
+  ctx.lineTo(36, -3);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(40, 2);
+  ctx.lineTo(43, -4);
+  ctx.stroke();
+  ctx.fillStyle = "#eeeeee";
+  ctx.beginPath();
+  ctx.moveTo(47, -3);
+  ctx.quadraticCurveTo(50, -4, 52, -10);
+  ctx.quadraticCurveTo(46, -6, 47, -3);
+  ctx.fill();
+  const earFlap = isMoving ? Math.sin(totalBob * 0.6) * 4 : 0;
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.ellipse(14 - earFlap / 2, -10, 8 + earFlap, 14, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = darkSkin;
+  ctx.beginPath();
+  ctx.ellipse(14 - earFlap / 2, -10, 5 + earFlap / 2, 10, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.arc(26, -14, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = civColor;
+  ctx.fillRect(-16, -24, 32, 16);
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-16, -24, 32, 16);
+  ctx.fillStyle = "#eebb00";
+  ctx.fillRect(-14, -22, 28, 2);
+  ctx.fillRect(-14, -12, 28, 2);
+  ctx.fillRect(-14, -22, 2, 12);
+  ctx.fillRect(12, -22, 2, 12);
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.moveTo(0, -20);
+  ctx.lineTo(6, -16);
+  ctx.lineTo(0, -12);
+  ctx.lineTo(-6, -16);
+  ctx.fill();
+  ctx.fillStyle = "#cc2222";
+  ctx.beginPath();
+  ctx.moveTo(0, -18);
+  ctx.lineTo(3, -16);
+  ctx.lineTo(0, -14);
+  ctx.lineTo(-3, -16);
+  ctx.fill();
+  ctx.fillStyle = "#eebb00";
+  for (let i = 0;i < 7; i++) {
+    ctx.fillRect(-14 + i * 4.5, -8, 2, 5);
+    ctx.fillStyle = "#cc2222";
+    ctx.fillRect(-14 + i * 4.5, -7, 2, 1);
+    ctx.fillStyle = "#eebb00";
+  }
+  ctx.fillStyle = "#3a200d";
+  ctx.fillRect(-12, -32, 24, 10);
+  ctx.fillStyle = "#2a1606";
+  ctx.fillRect(-14, -22, 28, 4);
+  ctx.strokeStyle = "#eebb00";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let col = -10;col <= 10; col += 5) {
+    ctx.moveTo(col, -32);
+    ctx.lineTo(col, -22);
+  }
+  ctx.stroke();
+  ctx.fillStyle = "#2a1606";
+  ctx.fillRect(-12, -48, 3, 16);
+  ctx.fillRect(9, -48, 3, 16);
+  ctx.fillStyle = "#eebb00";
+  ctx.fillRect(-13, -42, 5, 2);
+  ctx.fillRect(8, -42, 5, 2);
+  ctx.fillStyle = civColor;
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(-9, -44);
+  ctx.quadraticCurveTo(-2, -38, -9, -32);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(9, -44);
+  ctx.quadraticCurveTo(2, -38, 9, -32);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#2a1606";
+  ctx.fillRect(-14, -48, 28, 4);
+  ctx.fillStyle = civColor;
+  ctx.beginPath();
+  ctx.arc(0, -48, 10, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = "#eebb00";
+  ctx.fillRect(-14, -48, 28, 1);
+  ctx.beginPath();
+  ctx.moveTo(-2, -58);
+  ctx.lineTo(2, -58);
+  ctx.lineTo(0, -64);
+  ctx.fill();
+  ctx.fillRect(-1, -58, 2, 10);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(0, 10);
+  ctx.fillStyle = "#cccccc";
+  ctx.fillRect(-5, -36, 10, 8);
+  ctx.fillStyle = civColor;
+  ctx.fillRect(-3, -36, 6, 8);
+  ctx.fillStyle = "#daab2b";
+  ctx.beginPath();
+  ctx.arc(-4, -32, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#222";
+  ctx.beginPath();
+  ctx.arc(-4, -32, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#eeeeee";
+  ctx.beginPath();
+  ctx.arc(0, -40, 4.5, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = "#daab2b";
+  ctx.fillRect(-1, -48, 2, 4);
+  ctx.fillStyle = "#999999";
+  ctx.fillRect(-5, -40, 10, 4);
+  ctx.fillStyle = "#d4a373";
+  ctx.fillRect(-3, -39, 6, 3);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, -38, 1.5, 1);
+  ctx.fillRect(2, -38, 1.5, 1);
+  if (isAttacking) {
+    ctx.save();
+    ctx.translate(2, -34);
+    ctx.rotate(Math.PI / 4 + 0.3);
+    ctx.fillStyle = "#5c3a21";
+    ctx.fillRect(-1, -16, 3, 36);
+    ctx.fillStyle = "#daab2b";
+    ctx.fillRect(-1.5, -18, 4, 3);
+    ctx.fillStyle = "#eeeeee";
+    ctx.beginPath();
+    ctx.moveTo(-2, -18);
+    ctx.lineTo(3, -18);
+    ctx.lineTo(0.5, -28);
+    ctx.fill();
+    ctx.restore();
+  } else {
+    ctx.fillStyle = "#5c3a21";
+    ctx.fillRect(2, -48, 2, 26);
+    ctx.fillStyle = civColor;
+    ctx.beginPath();
+    ctx.moveTo(4, -46);
+    ctx.lineTo(14, -44);
+    ctx.lineTo(4, -40);
+    ctx.fill();
+    ctx.fillStyle = "#daab2b";
+    ctx.fillRect(1.5, -50, 3, 2);
+    ctx.fillStyle = "#eeeeee";
+    ctx.beginPath();
+    ctx.moveTo(1, -50);
+    ctx.lineTo(4, -50);
+    ctx.lineTo(2.5, -58);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.restore();
+  drawCavalryDust(unit, ctx, isMoving);
+}
+function drawFireLancer(unit, ctx, age, totalBob, isMoving) {
+  const civColor = CIVILIZATION_DATA[unit.civilization].secondaryColor;
+  const isAttacking = unit.attackCooldown > unit.civAttackSpeed * 0.8;
+  ctx.save();
+  const rearing = isAttacking && !isMoving ? -0.2 : 0;
+  ctx.translate(0, rearing ? -4 : 0);
+  ctx.rotate(rearing);
+  ctx.save();
+  ctx.scale(0.8, 0.8);
+  const walkBob = isMoving ? Math.sin(totalBob * 0.5) * 2 : 0;
+  const legSwing = isMoving ? Math.sin(totalBob * 0.5) * 4 : isAttacking ? Math.sin(unit.animTimer * 20) * 3 : 0;
+  drawBeautifulHorse(ctx, walkBob, legSwing, "#555555", "#111111", "#333333", "#000000");
+  ctx.fillStyle = civColor;
+  ctx.beginPath();
+  ctx.moveTo(10, -20 + walkBob);
+  ctx.lineTo(20, -30 + walkBob);
+  ctx.lineTo(16, -10 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = civColor;
+  ctx.beginPath();
+  ctx.moveTo(-16, -15 + walkBob);
+  ctx.quadraticCurveTo(0, -18 + walkBob, 12, -10 + walkBob);
+  ctx.quadraticCurveTo(18, -4 + walkBob, 14, 2 + walkBob);
+  ctx.quadraticCurveTo(0, 8 + walkBob, -14, 4 + walkBob);
+  ctx.lineTo(-20, -4 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 1;
+  for (let i = 0;i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-15, -12 + walkBob + i * 4);
+    ctx.quadraticCurveTo(0, -10 + walkBob + i * 4, 12, -6 + walkBob + i * 4);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#daab2b";
+  ctx.beginPath();
+  ctx.moveTo(-15, 4 + walkBob);
+  ctx.quadraticCurveTo(0, 8 + walkBob, 15, 2 + walkBob);
+  ctx.lineTo(15, 4 + walkBob);
+  ctx.quadraticCurveTo(0, 10 + walkBob, -16, 6 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#eeeeee";
+  ctx.beginPath();
+  ctx.arc(14, -2 + walkBob, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#daab2b";
+  ctx.stroke();
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(13, 0 + walkBob, 1.5, 4);
+  ctx.fillRect(15, 0 + walkBob, 1.5, 4);
+  ctx.fillStyle = "#331111";
+  ctx.fillRect(-8, -19 + walkBob, 12, 4);
+  ctx.fillStyle = "#daab2b";
+  ctx.fillRect(-8, -15 + walkBob, 12, 1);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(0, 4);
+  ctx.translate(0, -14 + walkBob);
+  ctx.rotate(-rearing * 0.8);
+  ctx.fillStyle = "#333";
+  ctx.fillRect(-4, -2, 8, 10);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-4, 6, 4, 4);
+  ctx.fillStyle = "#aa1111";
+  ctx.beginPath();
+  ctx.moveTo(-5, -13);
+  const capeWind = isMoving ? Math.sin(totalBob * 2) * 4 : 0;
+  ctx.quadraticCurveTo(-14 + capeWind, -8, -10 + capeWind, 2);
+  ctx.lineTo(-4 + capeWind * 0.5, -2);
+  ctx.fill();
+  ctx.fillStyle = civColor;
+  ctx.fillRect(-6, -14, 12, 12);
+  ctx.fillStyle = "#111";
+  for (let i = 0;i < 3; i++) {
+    for (let j = 0;j < 3; j++) {
+      ctx.fillRect(-4 + i * 4, -12 + j * 3, 1.5, 1.5);
+    }
+  }
+  ctx.fillStyle = "#daab2b";
+  ctx.fillRect(-6, -8, 12, 2);
+  ctx.fillStyle = "#eeeeee";
+  ctx.beginPath();
+  ctx.arc(0, -11, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffccaa";
+  ctx.fillRect(-4, -18, 8, 5);
+  ctx.fillStyle = "#cc2222";
+  ctx.beginPath();
+  ctx.arc(0, -23, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-6, -19);
+  ctx.quadraticCurveTo(0, -17, 6, -19);
+  ctx.lineTo(0, -25);
+  ctx.fill();
+  ctx.fillStyle = "#333";
+  ctx.beginPath();
+  ctx.arc(0, -19, 4.5, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = "#daab2b";
+  ctx.fillRect(-5, -19, 10, 1.5);
+  ctx.fillStyle = civColor;
+  ctx.fillRect(-5, -17.5, 10, 3.5);
+  ctx.save();
+  if (isAttacking) {
+    ctx.translate(6, -6);
+    ctx.rotate(Math.PI / 6);
+  } else {
+    ctx.translate(2, -6);
+    ctx.rotate(-Math.PI / 8);
+  }
+  ctx.fillStyle = "#5c3a21";
+  ctx.fillRect(0, -4, 34, 2);
+  ctx.fillStyle = "#eeeeee";
+  ctx.beginPath();
+  ctx.moveTo(34, -3);
+  ctx.lineTo(40, -3);
+  ctx.lineTo(34, -5);
+  ctx.fill();
+  ctx.fillStyle = "#d4a359";
+  ctx.fillRect(20, -7, 12, 8);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(22, -7, 2, 8);
+  ctx.fillRect(28, -7, 2, 8);
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(25, -7, 2, 8);
+  ctx.fillStyle = unit.passiveChargeReady && !isAttacking ? "#ffaa00" : "#ff4400";
+  ctx.beginPath();
+  const emberSize = unit.passiveChargeReady && !isAttacking ? 2 + Math.random() * 1.5 : 1 + Math.random();
+  ctx.arc(32.5, -3, emberSize, 0, Math.PI * 2);
+  ctx.fill();
+  if (unit.passiveChargeReady && !isAttacking) {
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(32.5, -3, 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.restore();
+  ctx.restore();
+  drawCavalryDust(unit, ctx, isMoving);
+}
+function drawYabusame(unit, ctx, age, totalBob, isMoving) {
+  const civColor = CIVILIZATION_DATA[unit.civilization].secondaryColor;
+  const isAttacking = unit.attackCooldown > unit.civAttackSpeed * 0.8;
+  ctx.save();
+  const rearing = isAttacking && !isMoving ? -0.2 : 0;
+  ctx.translate(0, rearing ? -4 : 0);
+  ctx.rotate(rearing);
+  ctx.save();
+  ctx.scale(0.8, 0.8);
+  const walkBob = isMoving ? Math.sin(totalBob * 0.4) * 2 : 0;
+  const legSwing = isMoving ? Math.sin(totalBob * 0.6) * 6 : isAttacking ? Math.sin(unit.animTimer * 18) * 4 : 0;
+  drawBeautifulHorse(ctx, walkBob, legSwing, "#6e472a", "#222222", "#4a2c11", "#111111");
+  ctx.fillStyle = civColor;
+  ctx.beginPath();
+  ctx.moveTo(27, -20 + walkBob);
+  ctx.lineTo(30, -22 + walkBob);
+  ctx.lineTo(26, -26 + walkBob);
+  ctx.lineTo(22, -26 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = "#daab2b";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = "#daab2b";
+  ctx.fillRect(24, -28 + walkBob, 1, 3);
+  ctx.fillRect(25, -28 + walkBob, 1, 3);
+  ctx.fillStyle = civColor;
+  ctx.beginPath();
+  ctx.moveTo(10, -18 + walkBob);
+  ctx.lineTo(18, -28 + walkBob);
+  ctx.lineTo(13, -10 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = civColor;
+  ctx.beginPath();
+  ctx.moveTo(-16, -14 + walkBob);
+  ctx.lineTo(-4, -18 + walkBob);
+  ctx.lineTo(12, -10 + walkBob);
+  ctx.quadraticCurveTo(18, -4 + walkBob, 16, 2 + walkBob);
+  ctx.lineTo(-14, 2 + walkBob);
+  ctx.lineTo(-20, -4 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(-12, -8 + walkBob, 26, 1);
+  ctx.fillRect(-14, -4 + walkBob, 28, 1);
+  ctx.fillRect(-16, 0 + walkBob, 30, 1);
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(-8, -19 + walkBob, 14, 5);
+  ctx.fillStyle = "#daab2b";
+  ctx.fillRect(-8, -15 + walkBob, 14, 1);
+  ctx.strokeStyle = "#881111";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-8, -18 + walkBob);
+  ctx.quadraticCurveTo(-14, -14 + walkBob, -18, -10 + walkBob);
+  ctx.stroke();
+  ctx.fillStyle = "#cc3333";
+  ctx.beginPath();
+  ctx.moveTo(-16, -12 + walkBob);
+  ctx.lineTo(-17, -8 + walkBob);
+  ctx.lineTo(-15, -8 + walkBob);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(6, -18 + walkBob);
+  ctx.quadraticCurveTo(10, -14 + walkBob, 12, -4 + walkBob);
+  ctx.stroke();
+  ctx.fillStyle = "#cc3333";
+  ctx.beginPath();
+  ctx.arc(10, -10 + walkBob, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(10, -10 + walkBob);
+  ctx.lineTo(8, -6 + walkBob);
+  ctx.lineTo(12, -6 + walkBob);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(0, 4);
+  ctx.translate(0, -14 + walkBob);
+  ctx.rotate(-rearing * 0.8);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-4, -2, 8, 10);
+  ctx.fillStyle = civColor;
+  ctx.fillRect(-5, -2, 10, 5);
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(-5, 0, 10, 1);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-2, 7, 5, 2);
+  ctx.fillStyle = "#cc3333";
+  ctx.beginPath();
+  ctx.moveTo(-4, 9);
+  ctx.lineTo(4, 9);
+  ctx.lineTo(4, 7);
+  ctx.lineTo(-1, 5);
+  ctx.lineTo(-2, 7);
+  ctx.fill();
+  ctx.fillStyle = "#3a200d";
+  ctx.fillRect(-6, -16, 5, 12);
+  ctx.fillStyle = "#eeeeee";
+  ctx.fillRect(-5, -20, 1, 4);
+  ctx.fillRect(-3, -19, 1, 3);
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(-6, -20, 3, 2);
+  ctx.fillStyle = civColor;
+  ctx.fillRect(-6, -13, 11, 11);
+  ctx.fillStyle = "#cc3333";
+  for (let i = 0;i < 3; i++) {
+    ctx.fillRect(-6, -11 + i * 3, 11, 1);
+  }
+  ctx.fillStyle = civColor;
+  ctx.fillRect(-8, -13, 3, 6);
+  ctx.fillRect(4, -13, 3, 6);
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(-8, -11, 3, 1);
+  ctx.fillRect(4, -11, 3, 1);
+  ctx.fillStyle = "#ffccaa";
+  ctx.fillRect(-4, -18, 8, 6);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-4, -15, 8, 3);
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(-2, -14, 4, 1);
+  ctx.fillStyle = "#222";
+  ctx.beginPath();
+  ctx.moveTo(-9, -16);
+  ctx.lineTo(9, -16);
+  ctx.lineTo(0, -23);
+  ctx.fill();
+  ctx.strokeStyle = "#cca84c";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.save();
+  if (isAttacking) {
+    ctx.translate(6, -8);
+    ctx.rotate(Math.PI / 8);
+  } else {
+    ctx.translate(2, -8);
+    ctx.rotate(-Math.PI / 12);
+  }
+  ctx.beginPath();
+  ctx.moveTo(0, -22);
+  ctx.quadraticCurveTo(8, -5, 0, 10);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = "#111";
+  ctx.stroke();
+  ctx.fillStyle = "#cc3333";
+  ctx.fillRect(2.5, -5, 3, 5);
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.moveTo(0, -22);
+  if (isAttacking && unit.attackCooldown > unit.civAttackSpeed * 0.2) {
+    ctx.lineTo(-6, -4);
+    ctx.lineTo(0, 10);
+    ctx.stroke();
+    ctx.strokeStyle = "#dddddd";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-6, -4);
+    ctx.lineTo(14, -4);
+    ctx.stroke();
+    ctx.fillStyle = "#888";
+    ctx.beginPath();
+    ctx.moveTo(14, -5);
+    ctx.lineTo(17, -4);
+    ctx.lineTo(14, -3);
+    ctx.fill();
+    ctx.fillStyle = "#cc3333";
+    ctx.fillRect(-6, -5, 3, 2);
+  } else {
+    ctx.lineTo(0, 10);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+  ctx.restore();
+  drawCavalryDust(unit, ctx, isMoving);
+}
+function drawBearRider(unit, ctx, age, totalBob, isMoving) {
+  const civColor = CIVILIZATION_DATA[unit.civilization].secondaryColor;
+  const isRaging = unit.hp < unit.maxHp * 0.3;
+  const isAttacking = unit.attackCooldown > unit.civAttackSpeed * 0.8;
+  const rearing = isAttacking && !isMoving ? -0.15 : 0;
+  ctx.translate(0, rearing ? -3 : 0);
+  ctx.rotate(rearing);
+  ctx.save();
+  ctx.scale(0.8, 0.8);
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  const walkBob = isMoving ? Math.sin(totalBob * 0.4) * 3 : 0;
+  const legSwing = isMoving ? Math.sin(totalBob * 0.6) * 5 : isAttacking ? Math.sin(unit.animTimer * 25) * 4 : 0;
+  const isPolar = age >= 4;
+  const bearColor = isPolar ? "#e0e5eb" : "#5c3a21";
+  const darkBearColor = isPolar ? "#a0aab5" : "#3a200d";
+  const highlightColor = isPolar ? "#ffffff" : "#7a4f2b";
+  const drawBearLeg = (x, y, sw, isDark) => {
+    ctx.fillStyle = isDark ? darkBearColor : bearColor;
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y);
+    ctx.lineTo(x + 6, y);
+    ctx.lineTo(x + 5 - sw, y + 11);
+    ctx.lineTo(x + 8 - sw, y + 13);
+    ctx.lineTo(x - 5 - sw, y + 13);
+    ctx.lineTo(x - 6 - sw, y + 8);
+    ctx.fill();
+    ctx.fillStyle = isPolar ? "#222222" : "#cccccc";
+    for (let i = 0;i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x + 2 - sw + i * 2.5, y + 13);
+      ctx.lineTo(x + 3.5 - sw + i * 2.5, y + 16);
+      ctx.lineTo(x + 1 - sw + i * 2.5, y + 13);
+      ctx.fill();
+    }
+    if (isPolar && !isDark) {
+      ctx.fillStyle = "#444444";
+      ctx.fillRect(x - 4 - sw, y + 5, 8, 4);
+      ctx.fillStyle = "#111111";
+      ctx.fillRect(x - 4 - sw, y + 7, 8, 0.5);
+    }
+  };
+  drawBearLeg(-14, 4, -legSwing, true);
+  drawBearLeg(10, 4, legSwing, true);
+  ctx.fillStyle = bearColor;
+  ctx.beginPath();
+  ctx.arc(-22, -2 + walkBob, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = darkBearColor;
+  ctx.beginPath();
+  ctx.arc(-23, -1 + walkBob, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = bearColor;
+  ctx.beginPath();
+  ctx.moveTo(-22, walkBob);
+  ctx.quadraticCurveTo(-16, -16 + walkBob, -5, -18 + walkBob);
+  ctx.lineTo(-2, -20 + walkBob);
+  ctx.lineTo(3, -17 + walkBob);
+  ctx.quadraticCurveTo(12, -21 + walkBob, 17, -16 + walkBob);
+  ctx.quadraticCurveTo(34, -5 + walkBob, 28, 5 + walkBob);
+  ctx.quadraticCurveTo(15, 16 + walkBob, 0, 12 + walkBob);
+  ctx.quadraticCurveTo(-15, 12 + walkBob, -22, walkBob);
+  ctx.fill();
+  ctx.fillStyle = darkBearColor;
+  ctx.beginPath();
+  ctx.moveTo(28, 5 + walkBob);
+  ctx.quadraticCurveTo(15, 16 + walkBob, 0, 12 + walkBob);
+  ctx.quadraticCurveTo(-15, 12 + walkBob, -22, walkBob);
+  ctx.quadraticCurveTo(-5, 8 + walkBob, 18, 0 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = highlightColor;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-16, -9 + walkBob);
+  ctx.lineTo(-10, -7 + walkBob);
+  ctx.moveTo(6, -12 + walkBob);
+  ctx.lineTo(12, -9 + walkBob);
+  ctx.moveTo(-6, 2 + walkBob);
+  ctx.lineTo(0, 4 + walkBob);
+  ctx.stroke();
+  drawBearLeg(-18, 4, legSwing, false);
+  drawBearLeg(14, 4, -legSwing, false);
+  if (isPolar) {
+    ctx.fillStyle = "#444444";
+    ctx.beginPath();
+    ctx.moveTo(10, -10 + walkBob);
+    ctx.lineTo(26, -5 + walkBob);
+    ctx.quadraticCurveTo(30, 2 + walkBob, 20, 8 + walkBob);
+    ctx.lineTo(10, -10 + walkBob);
+    ctx.fill();
+    ctx.fillStyle = "#111111";
+    ctx.beginPath();
+    ctx.arc(22, -1 + walkBob, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(17, 4 + walkBob, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(15, -4 + walkBob, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = bearColor;
+  ctx.beginPath();
+  ctx.arc(22, -9 + walkBob, 9, 0, Math.PI * 2);
+  ctx.fill();
+  if (isAttacking || isRaging) {
+    ctx.fillStyle = bearColor;
+    ctx.beginPath();
+    ctx.moveTo(26, -13 + walkBob);
+    ctx.lineTo(38, -9 + walkBob);
+    ctx.lineTo(28, -5 + walkBob);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(26, -4 + walkBob);
+    ctx.lineTo(36, -1 + walkBob);
+    ctx.lineTo(22, 1 + walkBob);
+    ctx.fill();
+    ctx.fillStyle = "#660000";
+    ctx.beginPath();
+    ctx.moveTo(28, -5 + walkBob);
+    ctx.lineTo(35, -6 + walkBob);
+    ctx.lineTo(26, -2 + walkBob);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(33, -9 + walkBob, 1.5, 3);
+    ctx.fillRect(32, -3 + walkBob, 1.5, -2.5);
+    ctx.fillStyle = "#111111";
+    ctx.beginPath();
+    ctx.arc(38, -9 + walkBob, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = bearColor;
+    ctx.beginPath();
+    ctx.ellipse(28, -6 + walkBob, 8, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#111111";
+    ctx.beginPath();
+    ctx.arc(34, -7 + walkBob, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = darkBearColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(34, -5 + walkBob);
+    ctx.lineTo(26, -3 + walkBob);
+    ctx.stroke();
+  }
+  if (isPolar) {
+    ctx.fillStyle = "#3a3a3a";
+    ctx.beginPath();
+    ctx.arc(22, -12 + walkBob, 7, Math.PI, Math.PI * 2.2);
+    ctx.lineTo(15, -12 + walkBob);
+    ctx.fill();
+    ctx.fillStyle = "#111111";
+    ctx.fillRect(14, -12 + walkBob, 14, 1.5);
+  } else {
+    ctx.fillStyle = bearColor;
+    ctx.beginPath();
+    ctx.arc(17, -17 + walkBob, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = darkBearColor;
+    ctx.beginPath();
+    ctx.arc(17, -17 + walkBob, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (isRaging) {
+    const rageColor = isPolar ? "rgba(0, 200, 255, 0.9)" : "rgba(255, 30, 0, 0.9)";
+    const eyeColor = isPolar ? "#e0ffff" : "#ffcccc";
+    ctx.fillStyle = rageColor;
+    ctx.beginPath();
+    const trailLen = 10 + Math.random() * 5;
+    ctx.moveTo(25, -11 + walkBob);
+    ctx.quadraticCurveTo(15, -13 + walkBob, 25 - trailLen, -15 + walkBob - Math.random() * 2);
+    ctx.lineTo(25, -9 + walkBob);
+    ctx.fill();
+    ctx.fillStyle = eyeColor;
+    ctx.fillRect(23, -12 + walkBob, 2.5, 2.5);
+  } else {
+    ctx.fillStyle = isPolar ? "#66ccff" : "#111111";
+    ctx.fillRect(24, -12 + walkBob, 2.5, 2.5);
+  }
+  if (!isPolar) {
+    ctx.strokeStyle = darkBearColor;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(21, -15 + walkBob);
+    ctx.lineTo(27, -12 + walkBob);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-8, -16 + walkBob, 16, 18);
+  ctx.fillStyle = civColor;
+  ctx.fillRect(-10, -12 + walkBob, 20, 8);
+  ctx.fillStyle = "#eebb00";
+  ctx.fillRect(-10, -5 + walkBob, 20, 1);
+  ctx.restore();
+  ctx.save();
+  ctx.scale(1.15, 1.15);
+  ctx.translate(-2, -12 + walkBob * 0.8);
+  ctx.rotate(-rearing * 0.8);
+  ctx.fillStyle = "#3a200d";
+  ctx.fillRect(-5, -2, 9, 11);
+  ctx.fillStyle = isPolar ? "#222222" : "#333333";
+  ctx.fillRect(-6, 6, 6, 5);
+  if (isPolar) {
+    ctx.fillStyle = "#555555";
+    ctx.fillRect(-5, 4, 4, 3);
+    ctx.fillStyle = "#111111";
+    ctx.fillRect(-5, 5, 4, 0.5);
+  }
+  ctx.save();
+  ctx.translate(-7, -10);
+  ctx.rotate(-0.3);
+  ctx.fillStyle = "#4a2c11";
+  ctx.beginPath();
+  ctx.arc(0, 0, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#222222";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, 9, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "#666666";
+  ctx.beginPath();
+  ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = civColor;
+  ctx.beginPath();
+  ctx.arc(0, 0, 8.5, 0, Math.PI / 2);
+  ctx.lineTo(0, 0);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, 0, 8.5, Math.PI, Math.PI * 1.5);
+  ctx.lineTo(0, 0);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "#555555";
+  ctx.fillRect(-6, -14, 11, 14);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+  for (let r = 0;r < 4; r++) {
+    for (let c = 0;c < 3; c++) {
+      ctx.beginPath();
+      ctx.arc(-5 + c * 3 + r % 2, -12 + r * 3, 1, 0, Math.PI);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = civColor;
+  ctx.fillRect(-4, -13, 7, 10);
+  ctx.fillStyle = "#111111";
+  ctx.fillRect(-6, -3, 11, 2);
+  ctx.fillStyle = "#ddaa00";
+  ctx.fillRect(-2, -3.5, 3, 3);
+  const capeColor = isPolar ? "#e0e5eb" : "#4a2c11";
+  const darkCapeColor = isPolar ? "#a0aab5" : "#2a1a08";
+  ctx.fillStyle = capeColor;
+  ctx.beginPath();
+  ctx.moveTo(-6, -15);
+  ctx.quadraticCurveTo(-14, -5, -9, 10);
+  ctx.quadraticCurveTo(-3, 6, -6, -4);
+  ctx.fill();
+  ctx.strokeStyle = darkCapeColor;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-10, -2);
+  ctx.lineTo(-7, 1);
+  ctx.moveTo(-11, 3);
+  ctx.lineTo(-8, 6);
+  ctx.stroke();
+  ctx.fillStyle = "#ffccaa";
+  ctx.fillRect(-3, -18, 6, 6);
+  ctx.fillStyle = "#880000";
+  ctx.fillRect(-3, -16, 6, 2);
+  ctx.fillStyle = capeColor;
+  ctx.beginPath();
+  ctx.arc(-1, -19, 6.5, Math.PI * 0.8, Math.PI * 2.2);
+  ctx.fill();
+  ctx.fillStyle = capeColor;
+  ctx.beginPath();
+  ctx.moveTo(3, -24);
+  ctx.lineTo(8, -20);
+  ctx.lineTo(5, -17);
+  ctx.fill();
+  ctx.fillStyle = "#ddddcc";
+  ctx.beginPath();
+  ctx.moveTo(-3, -21);
+  ctx.lineTo(6, -21);
+  ctx.lineTo(7, -18);
+  ctx.lineTo(3, -16);
+  ctx.lineTo(-3, -16);
+  ctx.fill();
+  ctx.fillStyle = "#111111";
+  ctx.beginPath();
+  ctx.ellipse(1.5, -19, 2, 1.5, Math.PI / 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = isPolar ? "#00ffff" : "#ff3300";
+  ctx.fillRect(1, -19.5, 1, 1);
+  ctx.save();
+  if (isAttacking) {
+    ctx.translate(6, -7);
+    ctx.rotate(Math.PI / 3);
+  } else {
+    ctx.translate(6, 2);
+    ctx.rotate(Math.PI / 12);
+  }
+  ctx.scale(0.65, 0.65);
+  ctx.fillStyle = "#3a2010";
+  ctx.fillRect(-2, -26, 4, 38);
+  ctx.fillStyle = "#111111";
+  for (let i = 0;i < 5; i++) {
+    ctx.fillRect(-2, -12 + i * 4, 4, 2);
+  }
+  ctx.fillStyle = "#888888";
+  ctx.beginPath();
+  ctx.moveTo(1, -22);
+  ctx.lineTo(12, -26);
+  ctx.quadraticCurveTo(16, -12, 12, 0);
+  ctx.lineTo(1, -6);
+  ctx.lineTo(-8, -4);
+  ctx.quadraticCurveTo(-12, -12, -9, -24);
+  ctx.lineTo(1, -22);
+  ctx.fill();
+  ctx.fillStyle = "#dddddd";
+  ctx.beginPath();
+  ctx.moveTo(9, -24);
+  ctx.quadraticCurveTo(13, -12, 10, -2);
+  ctx.lineTo(12, -2);
+  ctx.quadraticCurveTo(16, -12, 12, -26);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-6, -22);
+  ctx.quadraticCurveTo(-10, -12, -6, -6);
+  ctx.lineTo(-8, -6);
+  ctx.quadraticCurveTo(-12, -12, -9, -24);
+  ctx.fill();
+  if (age >= 4) {
+    ctx.strokeStyle = isPolar ? "#00ccff" : "#ff6600";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(4, -20);
+    ctx.lineTo(6, -16);
+    ctx.lineTo(3, -12);
+    ctx.lineTo(7, -8);
+    ctx.stroke();
+  }
+  if (isRaging) {
+    ctx.fillStyle = "rgba(180, 0, 0, 0.9)";
+    ctx.beginPath();
+    ctx.moveTo(10, -26);
+    ctx.quadraticCurveTo(16, -12, 10, -4);
+    ctx.lineTo(6, -8);
+    ctx.lineTo(6, -20);
+    ctx.fill();
+    ctx.fillRect(11, -2, 1, 3);
+    ctx.fillRect(14, -10, 1, 2);
+  }
+  ctx.restore();
+  ctx.restore();
+  ctx.restore();
+  drawCavalryDust(unit, ctx, isMoving);
+}
+function drawEquites(unit, ctx, age, totalBob, isMoving) {
+  const civColor = CIVILIZATION_DATA[unit.civilization].secondaryColor;
+  const isAttacking = unit.attackCooldown > unit.civAttackSpeed * 0.8;
+  const isBlocking = unit.centurionBlockCooldown > 11;
+  const pilumReady = unit.passiveCooldown <= 0;
+  ctx.save();
+  const rearing = isAttacking && !isMoving ? -0.2 : 0;
+  ctx.translate(0, rearing ? -4 : 0);
+  ctx.rotate(rearing);
+  ctx.save();
+  ctx.scale(0.8, 0.8);
+  const walkBob = isMoving ? Math.sin(totalBob * 0.5) * 2 : 0;
+  const legSwing = isMoving ? Math.sin(totalBob * 0.5) * 4 : isAttacking ? Math.sin(unit.animTimer * 20) * 3 : 0;
+  drawBeautifulHorse(ctx, walkBob, legSwing, "#cccccc", "#dddddd", "#999999", "#444444");
+  ctx.fillStyle = "#b71c1c";
+  ctx.beginPath();
+  ctx.moveTo(-12, -18 + walkBob);
+  ctx.lineTo(10, -18 + walkBob);
+  ctx.lineTo(14, -4 + walkBob);
+  ctx.lineTo(-14, -4 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#daab2b";
+  ctx.beginPath();
+  ctx.moveTo(-14, -4 + walkBob);
+  ctx.lineTo(14, -4 + walkBob);
+  ctx.lineTo(15, -2 + walkBob);
+  ctx.lineTo(-15, -2 + walkBob);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(0, -10 + walkBob);
+  ctx.rotate(-rearing * 0.8);
+  ctx.fillStyle = "#c9a84c";
+  ctx.fillRect(-4, -2, 8, 10);
+  ctx.fillStyle = "#cccccc";
+  ctx.fillRect(-6, -14, 12, 12);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "#444";
+  ctx.strokeRect(-6, -14, 12, 3);
+  ctx.strokeRect(-6, -11, 12, 3);
+  ctx.strokeRect(-6, -8, 12, 3);
+  ctx.strokeRect(-6, -5, 12, 3);
+  ctx.fillStyle = "#ffccaa";
+  ctx.fillRect(-3, -18, 6, 6);
+  ctx.fillStyle = "#c9a84c";
+  ctx.beginPath();
+  ctx.arc(0, -18, 5, Math.PI, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(-4, -18, 2, 4);
+  ctx.fillStyle = "#b71c1c";
+  ctx.beginPath();
+  ctx.arc(0, -22, 6, Math.PI, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  if (isBlocking) {
+    ctx.translate(-4, -14);
+    ctx.rotate(-Math.PI / 8);
+  } else {
+    ctx.translate(-6, -10);
+  }
+  ctx.fillStyle = "#b71c1c";
+  ctx.fillRect(-4, -6, 12, 18);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "#c9a84c";
+  ctx.strokeRect(-4, -6, 12, 18);
+  ctx.fillStyle = "#c9a84c";
+  ctx.beginPath();
+  ctx.arc(2, 3, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#c9a84c";
+  ctx.beginPath();
+  ctx.moveTo(2, 3);
+  ctx.lineTo(-2, -3);
+  ctx.moveTo(2, 3);
+  ctx.lineTo(-2, 9);
+  ctx.stroke();
+  if (isBlocking) {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+    ctx.fillRect(-6, -8, 16, 22);
+  }
+  ctx.restore();
+  ctx.save();
+  if (isAttacking) {
+    ctx.translate(6, -6);
+    ctx.rotate(Math.PI / (pilumReady ? 8 : 4));
+  } else {
+    ctx.translate(2, -6);
+    ctx.rotate(-Math.PI / (pilumReady ? 12 : 6));
+  }
+  if (pilumReady) {
+    ctx.fillStyle = "#5c3a21";
+    ctx.fillRect(0, -2, 20, 2);
+    ctx.fillStyle = "#999999";
+    ctx.fillRect(20, -1, 10, 1);
+    ctx.fillStyle = "#dddddd";
+    ctx.beginPath();
+    ctx.moveTo(30, -2);
+    ctx.lineTo(34, -0.5);
+    ctx.lineTo(30, 1);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "#c9a84c";
+    ctx.fillRect(-2, -2, 4, 3);
+    ctx.fillStyle = "#eeeeee";
+    ctx.beginPath();
+    ctx.moveTo(2, -2);
+    ctx.lineTo(16, -1);
+    ctx.lineTo(18, 0.5);
+    ctx.lineTo(16, 2);
+    ctx.lineTo(2, 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.restore();
+  ctx.restore();
+  drawCavalryDust(unit, ctx, isMoving);
+}
+
+// src/entities/unit-rendering/civs/heroes/draw-musashi.ts
+function drawMusashiComplete(unit, ctx, bob, moving, legSwingRaw, cv) {
+  ctx.save();
+  const attackState = unit.state === 5;
+  const walkBob = moving ? Math.sin(bob * 0.5) * 2 : 0;
+  const legSwing = moving ? Math.sin(bob * 0.7) * 4.5 : 0;
+  const windSway = Math.sin(unit.animTimer * 5) * 2.5;
+  let attackRot = 0;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+    if (attackProgress < 0.2) {
+      let t = attackProgress / 0.2;
+      attackRot = -Math.PI / 4 * (1 - t) + -Math.PI / 8 * t;
+    } else if (attackProgress < 0.7) {
+      let t = (attackProgress - 0.2) / 0.5;
+      attackRot = -Math.PI / 8 * (1 - t) + -Math.PI * 0.85 * t;
+    } else {
+      let t = (attackProgress - 0.7) / 0.3;
+      t = t * t;
+      attackRot = -Math.PI * 0.85 * (1 - t) + Math.PI / 4 * t;
+    }
+  }
+  const pulse = Math.sin(unit.animTimer * 5) * 0.15 + 0.2;
+  ctx.globalAlpha = pulse;
+  const auraGradient = ctx.createRadialGradient(0, Math.max(0, bob) - 5, 2, 0, Math.max(0, bob) - 5, 25);
+  auraGradient.addColorStop(0, "#8ab4f8");
+  auraGradient.addColorStop(1, "transparent");
+  ctx.fillStyle = auraGradient;
+  ctx.beginPath();
+  ctx.arc(0, Math.max(0, bob) - 5, 25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.translate(0, 3);
+  if (moving && !attackState) {
+    ctx.scale(1, 1 - Math.abs(walkBob) * 0.03);
+    ctx.rotate(0.2);
+    ctx.translate(0, 4);
+  } else if (attackState) {
+    ctx.rotate(0.15);
+    ctx.translate(0, 4);
+  } else {
+    ctx.rotate(0);
+    ctx.translate(0, 4 + Math.sin(unit.animTimer * 5) * 0.5);
+  }
+  const skinTone = cv.skinColor;
+  const hakamaDark = "#12121e";
+  const kimonoTorn = "#1a1a2e";
+  ctx.save();
+  ctx.fillStyle = "#f8f8f8";
+  ctx.translate(-2, -12 + walkBob);
+  ctx.rotate((moving ? 0.4 : 0.1) + Math.sin(unit.animTimer * 8) * 0.3);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(-8, -3 - windSway, -14 - windSway * 2, -5 + Math.cos(unit.animTimer * 10) * 2);
+  ctx.quadraticCurveTo(-6, 2, 0, 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(0, 1);
+  ctx.quadraticCurveTo(-5, 0 - windSway, -11 - windSway * 1.5, -2 + Math.sin(unit.animTimer * 9) * 2);
+  ctx.quadraticCurveTo(-4, 3, 0, 3);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = hakamaDark;
+  ctx.fillRect(-6.5 + legSwing, 6, 5.5, 11);
+  ctx.fillRect(1.5 - legSwing, 6, 5.5, 11);
+  ctx.fillStyle = "#1c1c2e";
+  ctx.fillRect(-5 + legSwing, 6, 1, 11);
+  ctx.fillRect(3 - legSwing, 6, 1, 11);
+  ctx.fillStyle = "#5c4033";
+  ctx.fillRect(-7.5 + legSwing, 16.5, 6.5, 2);
+  ctx.fillRect(0.5 - legSwing, 16.5, 6.5, 2);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-6 + legSwing, 15, 4, 1.5);
+  ctx.fillRect(2 - legSwing, 15, 4, 1.5);
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(-4.5 + legSwing, 16, 1, 1);
+  ctx.fillRect(3.5 - legSwing, 16, 1, 1);
+  ctx.fillStyle = skinTone;
+  ctx.beginPath();
+  ctx.moveTo(-6.5, -6 + walkBob);
+  ctx.lineTo(6.5, -6 + walkBob);
+  ctx.lineTo(5.5, 7 + walkBob);
+  ctx.lineTo(-5.5, 7 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = "#c85a5a";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-3, -4 + walkBob);
+  ctx.lineTo(3, 1 + walkBob);
+  ctx.stroke();
+  ctx.fillStyle = kimonoTorn;
+  ctx.beginPath();
+  ctx.moveTo(-6.5, -6 + walkBob);
+  ctx.lineTo(-1, -6 + walkBob);
+  ctx.lineTo(-2, 5 + walkBob);
+  ctx.lineTo(-5.5, 7 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(-6.5, 4.5 + walkBob, 13, 3.5);
+  ctx.fillStyle = "#991111";
+  ctx.fillRect(-4, 4 + walkBob, 3, 4);
+  ctx.strokeStyle = "#cc2222";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(4, 6 + walkBob);
+  ctx.quadraticCurveTo(10, 4 + walkBob + windSway, 14, 10 + walkBob - windSway);
+  ctx.stroke();
+  ctx.save();
+  ctx.translate(4, -2 + walkBob);
+  if (attackState && attackProgress < 0.5) {
+    ctx.rotate(-Math.PI / 4);
+    ctx.translate(2, -2);
+  } else {
+    const leftRot = moving ? 20 * Math.PI / 180 + Math.sin(bob * 0.8) * 0.1 : 30 * Math.PI / 180;
+    ctx.rotate(leftRot);
+  }
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(0, 0, 3.5, 8);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(0.5, 8, 2.5, 2.5);
+  ctx.translate(1, 10);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-0.5, -4, 2, 6);
+  ctx.fillStyle = "#d4af37";
+  ctx.fillRect(-1, 2, 3, 1);
+  if (!attackState || attackProgress < 0.5) {
+    ctx.fillStyle = "#d0d0d0";
+    ctx.beginPath();
+    ctx.moveTo(0, -4);
+    ctx.lineTo(-0.5, -16);
+    ctx.quadraticCurveTo(1, -18, 1.5, -4);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2.5, -9 + walkBob, 5, 4);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-3.5, -14 + walkBob, 7, 6);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(-2, -12 + walkBob, 1.5, 1);
+  ctx.fillRect(1.5, -12 + walkBob, 1.5, 1);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-1.5, -12 + walkBob, 0.5, 0.5);
+  ctx.fillRect(2, -12 + walkBob, 0.5, 0.5);
+  ctx.fillStyle = "#181818";
+  ctx.fillRect(-4.5, -18 + walkBob, 9, 5);
+  ctx.fillRect(-4.5, -14 + walkBob, 2, 8);
+  ctx.fillRect(3.5, -14 + walkBob, 2, 6);
+  ctx.beginPath();
+  ctx.moveTo(0, -17 + walkBob);
+  ctx.lineTo(-5, -23 + walkBob + windSway);
+  ctx.lineTo(2, -22 + walkBob - windSway);
+  ctx.fill();
+  ctx.fillStyle = "#f8f8f8";
+  ctx.fillRect(-4, -16 + walkBob, 8, 2);
+  ctx.fillStyle = "#cc2222";
+  ctx.beginPath();
+  ctx.arc(0, -15 + walkBob, 1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(-4.5, -2 + walkBob);
+  if (attackState) {
+    ctx.rotate(attackRot);
+    ctx.translate(-2, -2);
+  } else {
+    const walkRot = moving ? -Math.sin(bob * 0.6) * 0.5 : -0.1;
+    ctx.rotate(walkRot);
+  }
+  ctx.fillStyle = kimonoTorn;
+  ctx.fillRect(-2, 0, 3.5, 6);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2, 6, 3.5, 2);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1.5, 8, 2.5, 2.5);
+  ctx.translate(-1, 10);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-1, 0, 2, 7);
+  ctx.fillStyle = "#d4af37";
+  ctx.fillRect(-1.5, 7, 3, 1);
+  ctx.fillStyle = "#e0e0e0";
+  ctx.beginPath();
+  ctx.moveTo(-0.5, 8);
+  ctx.lineTo(-1, 28);
+  ctx.quadraticCurveTo(1, 30, 1.5, 8);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(-0.2, 8, 0.5, 18);
+  if (attackState && attackProgress > 0.4 && attackProgress < 0.9) {
+    ctx.shadowColor = "#8ab4f8";
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, 15);
+    ctx.quadraticCurveTo(15, 25, 20, 40);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, 20);
+    ctx.quadraticCurveTo(-15, 25, -20, 35);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+// src/entities/unit-rendering/civs/heroes/draw-spartacus.ts
+function drawSpartacusComplete(unit, ctx, bob, moving, legSwingRaw, cv) {
+  ctx.save();
+  ctx.translate(0, 4);
+  const attackState = unit.state === 5;
+  const walkBob = moving ? Math.sin(bob * 0.5) * 2 : 0;
+  const legSwing = moving ? Math.sin(bob * 0.7) * 4.5 : 0;
+  const capeWave = Math.cos(unit.animTimer * 6) * 3;
+  const pulse = Math.sin(unit.animTimer * 5) * 0.2 + 0.3;
+  ctx.globalAlpha = pulse;
+  const auraGradient = ctx.createRadialGradient(0, Math.max(0, bob), 5, 0, Math.max(0, bob), 25);
+  auraGradient.addColorStop(0, "#e6c200");
+  auraGradient.addColorStop(1, "transparent");
+  ctx.fillStyle = auraGradient;
+  ctx.beginPath();
+  ctx.arc(0, Math.max(0, bob), 25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.fillStyle = "#b01010";
+  ctx.beginPath();
+  ctx.moveTo(-5, -7 + walkBob);
+  ctx.quadraticCurveTo(-16, -2 + walkBob + capeWave, -14, 12 + walkBob - capeWave);
+  ctx.lineTo(-6, 9 + walkBob);
+  ctx.fill();
+  ctx.restore();
+  if (moving && !attackState) {
+    ctx.scale(1, 1 - Math.abs(walkBob) * 0.03);
+    ctx.rotate(0.1);
+  } else if (attackState) {
+    ctx.rotate(0.2);
+  }
+  let attackRot = 0;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+    if (attackProgress < 0.2) {
+      attackRot = -Math.PI / 4 * (1 - attackProgress / 0.2);
+    } else if (attackProgress < 0.6) {
+      attackRot = -Math.PI / 8;
+    } else {
+      let t = (attackProgress - 0.6) / 0.4;
+      attackRot = -Math.PI / 8 + Math.PI / 3 * t;
+    }
+  }
+  const skinTone = cv.skinColor;
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-6.5 + legSwing, 6, 5.5, 11);
+  ctx.fillRect(1.5 - legSwing, 6, 5.5, 11);
+  ctx.fillStyle = "#b8860b";
+  ctx.fillRect(-7 + legSwing, 10, 6.5, 5);
+  ctx.fillRect(1 - legSwing, 10, 6.5, 5);
+  ctx.fillStyle = "#5c3a21";
+  ctx.fillRect(-7.5 + legSwing, 15, 7.5, 1.5);
+  ctx.fillRect(0.5 - legSwing, 15, 7.5, 1.5);
+  ctx.fillRect(-5 + legSwing, 10, 1.5, 5);
+  ctx.fillRect(3 - legSwing, 10, 1.5, 5);
+  ctx.fillStyle = skinTone;
+  ctx.beginPath();
+  ctx.moveTo(-6.5, -6 + walkBob);
+  ctx.lineTo(6.5, -6 + walkBob);
+  ctx.lineTo(5.5, 7 + walkBob);
+  ctx.lineTo(-5.5, 7 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = "#5c3a21";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(-5, -5 + walkBob);
+  ctx.lineTo(5, 0 + walkBob);
+  ctx.stroke();
+  ctx.fillStyle = "#8b5a2b";
+  ctx.fillRect(-7.5, 1 + walkBob, 15, 6);
+  ctx.fillStyle = "#5c3a21";
+  for (let i = 0;i < 4; i++) {
+    ctx.fillRect(-6 + i * 4, 7 + walkBob, 2.5, 4);
+  }
+  ctx.fillStyle = "#d4af37";
+  ctx.beginPath();
+  ctx.arc(-4, -6 + walkBob, 4, Math.PI, 0);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(4, -2 + walkBob);
+  if (attackState && attackProgress < 0.5) {
+    ctx.translate(2, -2);
+  } else {
+    const leftRot = moving ? 20 * Math.PI / 180 + Math.sin(bob * 0.8) * 0.1 : 30 * Math.PI / 180;
+    ctx.rotate(leftRot);
+  }
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(0, 0, 3.5, 8);
+  ctx.translate(2, 6);
+  ctx.fillStyle = "#b8860b";
+  ctx.beginPath();
+  ctx.ellipse(-2, 0, 3, 9, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffdf00";
+  ctx.beginPath();
+  ctx.ellipse(-3, 0, 1.5, 3, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2.5, -9 + walkBob, 5, 4);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-3.5, -14 + walkBob, 7, 6);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(-2, -12 + walkBob, 1.5, 1);
+  ctx.fillRect(1.5, -12 + walkBob, 1.5, 1);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(-1.5, -12 + walkBob, 0.5, 0.5);
+  ctx.fillRect(2, -12 + walkBob, 0.5, 0.5);
+  ctx.fillStyle = "#b8860b";
+  ctx.beginPath();
+  ctx.arc(0, -13 + walkBob, 4, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(-4, -13 + walkBob, 8, 1.5);
+  ctx.fillRect(-4.5, -12 + walkBob, 1.5, 4);
+  ctx.fillRect(3, -12 + walkBob, 1.5, 4);
+  ctx.fillStyle = "#d12424";
+  ctx.beginPath();
+  ctx.moveTo(-3, -15 + walkBob);
+  ctx.quadraticCurveTo(0, -21 + walkBob, 6, -14 + walkBob);
+  ctx.lineTo(4, -13 + walkBob);
+  ctx.quadraticCurveTo(0, -18 + walkBob, -1, -15 + walkBob);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(-4.5, -2 + walkBob);
+  if (attackState) {
+    ctx.rotate(attackRot);
+    ctx.translate(-2, -2);
+  } else {
+    const walkRot = moving ? -Math.sin(bob * 0.6) * 0.5 : -0.1;
+    ctx.rotate(walkRot);
+  }
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2, 0, 3.5, 8);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1.5, 8, 2.5, 2.5);
+  ctx.translate(-0.5, 10);
+  ctx.fillStyle = "#4a2511";
+  ctx.fillRect(-1, 0, 2, 4);
+  ctx.fillStyle = "#d4af37";
+  ctx.fillRect(-2, 4, 4, 1.5);
+  ctx.fillRect(-1.5, -1, 3, 1.5);
+  ctx.fillStyle = "#e0e0e0";
+  ctx.beginPath();
+  ctx.moveTo(-1, 5.5);
+  ctx.lineTo(-1.5, 16);
+  ctx.lineTo(0, 22);
+  ctx.lineTo(1.5, 16);
+  ctx.lineTo(1, 5.5);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 5.5, 0.5, 14);
+  if (attackState && attackProgress > 0.4 && attackProgress < 0.8) {
+    ctx.strokeStyle = "#ffdf00";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(5, 12);
+    ctx.lineTo(35, 18);
+    ctx.stroke();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(8, 13);
+    ctx.lineTo(30, 16);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+// src/entities/unit-rendering/civs/heroes/draw-ragnar.ts
+function drawRagnarComplete(unit, ctx, bob, moving, legSwingRaw, cv) {
+  ctx.save();
+  ctx.translate(0, 4);
+  const attackState = unit.state === 5;
+  const walkBob = moving ? Math.sin(bob * 0.5) * 2 : 0;
+  const legSwing = moving ? Math.sin(bob * 0.7) * 4.5 : 0;
+  const windWave = Math.sin(unit.animTimer * 4) * 2;
+  const pulse = Math.sin(unit.animTimer * 6) * 0.2 + 0.3;
+  ctx.globalAlpha = pulse;
+  const auraGradient = ctx.createRadialGradient(0, Math.max(0, bob) - 2, 0, 0, Math.max(0, bob) - 2, 25);
+  auraGradient.addColorStop(0, "#a5f2f3");
+  auraGradient.addColorStop(0.5, "#4a90e2");
+  auraGradient.addColorStop(1, "transparent");
+  ctx.fillStyle = auraGradient;
+  ctx.beginPath();
+  ctx.arc(0, Math.max(0, bob) - 2, 25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  let attackRot = 0;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+    if (attackProgress < 0.2) {
+      attackRot = -Math.PI / 4 * (attackProgress / 0.2);
+    } else if (attackProgress < 0.6) {
+      attackRot = -Math.PI / 1.5;
+    } else {
+      let t = (attackProgress - 0.6) / 0.4;
+      attackRot = -Math.PI / 1.5 + (Math.PI / 1.5 + Math.PI / 4) * t;
+    }
+  }
+  ctx.fillStyle = "#3a2010";
+  ctx.beginPath();
+  ctx.moveTo(-6, -7 + walkBob);
+  ctx.quadraticCurveTo(-16, 0 + walkBob + windWave, -15, 14 + walkBob - windWave);
+  ctx.lineTo(-8, 12 + walkBob);
+  ctx.fill();
+  if (moving && !attackState) {
+    ctx.scale(1, 1 - Math.abs(walkBob) * 0.03);
+    ctx.rotate(0.2);
+  } else if (attackState) {
+    ctx.rotate(0.15);
+  }
+  const skinTone = cv.skinColor;
+  ctx.fillStyle = "#1e1a18";
+  ctx.fillRect(-6.5 + legSwing, 6, 5.5, 11);
+  ctx.fillRect(1.5 - legSwing, 6, 5.5, 11);
+  ctx.fillStyle = "#4a2c16";
+  ctx.fillRect(-7 + legSwing, 12, 6.5, 6);
+  ctx.fillRect(1 - legSwing, 12, 6.5, 6);
+  ctx.fillStyle = "#8b6f59";
+  ctx.fillRect(-7.5 + legSwing, 13, 7.5, 1.5);
+  ctx.fillRect(0.5 - legSwing, 13, 7.5, 1.5);
+  ctx.fillStyle = skinTone;
+  ctx.beginPath();
+  ctx.moveTo(-6.5, -6 + walkBob);
+  ctx.lineTo(6.5, -6 + walkBob);
+  ctx.lineTo(5.5, 7 + walkBob);
+  ctx.lineTo(-5.5, 7 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#2d5a88";
+  ctx.fillRect(-4, -4 + walkBob, 2, 5);
+  ctx.fillRect(2, -3 + walkBob, 3, 2);
+  ctx.fillRect(-2, -1 + walkBob, 4, 1.5);
+  ctx.fillStyle = "#22140a";
+  ctx.fillRect(-7.5, 5 + walkBob, 15, 3.5);
+  ctx.fillStyle = "#9e9e9e";
+  ctx.fillRect(-2.5, 5.5 + walkBob, 5, 2.5);
+  ctx.fillStyle = "#e8dcc7";
+  ctx.fillRect(-2, -3 + walkBob, 1.5, 2);
+  ctx.fillRect(2, -3 + walkBob, 1.5, 2);
+  ctx.fillRect(0, -1 + walkBob, 1.5, 2.5);
+  ctx.save();
+  ctx.translate(4, -2 + walkBob);
+  if (attackState && attackProgress < 0.5) {
+    ctx.rotate(-Math.PI / 4);
+    ctx.translate(2, -2);
+  } else {
+    const leftRot = moving ? 20 * Math.PI / 180 + Math.sin(bob * 0.8) * 0.1 : 30 * Math.PI / 180;
+    ctx.rotate(leftRot);
+  }
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(0, 0, 3.5, 8);
+  ctx.fillStyle = "#2d5a88";
+  ctx.fillRect(0.5, 2, 2.5, 2);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(0.5, 8, 2.5, 2.5);
+  ctx.translate(1, 10);
+  ctx.fillStyle = "#3d2616";
+  ctx.fillRect(-1.5, -2, 2.5, 12);
+  ctx.fillStyle = "#788496";
+  ctx.beginPath();
+  ctx.moveTo(-0.5, 6);
+  ctx.lineTo(-10, 2);
+  ctx.lineTo(-11, 12);
+  ctx.lineTo(-0.5, 10);
+  ctx.fill();
+  ctx.fillStyle = "#d12424";
+  ctx.fillRect(-4, 6, 2, 2);
+  ctx.restore();
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2.5, -9 + walkBob, 5, 4);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-3.5, -14 + walkBob, 7, 6);
+  ctx.fillStyle = "#2d5a88";
+  ctx.fillRect(-4, -12 + walkBob, 8, 2.5);
+  ctx.fillStyle = "#a5f2f3";
+  ctx.fillRect(-2.5, -11.5 + walkBob, 1.5, 1);
+  ctx.fillRect(1, -11.5 + walkBob, 1.5, 1);
+  ctx.fillStyle = "#c89a58";
+  ctx.fillRect(-4, -9 + walkBob, 8, 3.5);
+  ctx.fillRect(-2.5, -6 + walkBob, 2, 3);
+  ctx.fillRect(1, -6 + walkBob, 2, 3);
+  ctx.fillStyle = "#c89a58";
+  ctx.fillRect(-2, -15 + walkBob, 4, 3);
+  ctx.beginPath();
+  ctx.moveTo(0, -14 + walkBob);
+  ctx.quadraticCurveTo(5, -12 + walkBob, 4, -5 + walkBob + windWave * 0.5);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = "#c89a58";
+  ctx.stroke();
+  ctx.save();
+  ctx.translate(-4.5, -2 + walkBob);
+  if (attackState) {
+    ctx.rotate(attackRot);
+    ctx.translate(-2, -2);
+  } else {
+    const walkRot = moving ? -Math.sin(bob * 0.6) * 0.5 : -0.1;
+    ctx.rotate(walkRot);
+  }
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2, 0, 3.5, 8);
+  ctx.fillStyle = "#2d5a88";
+  ctx.fillRect(-1.5, 2, 2.5, 2);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1.5, 8, 2.5, 2.5);
+  ctx.translate(-0.5, 10);
+  ctx.fillStyle = "#3d2616";
+  ctx.fillRect(-1, -2, 2.5, 14);
+  ctx.fillStyle = "#788496";
+  ctx.beginPath();
+  ctx.moveTo(1, 6);
+  ctx.lineTo(10, 2);
+  ctx.lineTo(11, 12);
+  ctx.lineTo(1, 10);
+  ctx.fill();
+  ctx.fillStyle = "#a5f2f3";
+  ctx.fillRect(4, 6, 2, 2);
+  if (attackState && attackProgress > 0.4 && attackProgress < 0.8) {
+    ctx.shadowColor = "#a5f2f3";
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = "#e0ffff";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 10, 24, -Math.PI / 8, Math.PI / 2);
+    ctx.stroke();
+    ctx.shadowColor = "#d12424";
+    ctx.strokeStyle = "#ff4d4d";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 10, 22, Math.PI / 2, Math.PI + Math.PI / 8);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+// src/entities/unit-rendering/civs/heroes/draw-qijiguang.ts
+function drawQiJiguangComplete(unit, ctx, bob, moving, legSwingRaw, cv) {
+  ctx.save();
+  ctx.translate(0, 4);
+  const attackState = unit.state === 5;
+  const walkBob = moving ? Math.sin(bob * 0.5) * 2.5 : 0;
+  const legSwing = moving ? Math.sin(bob * 0.6) * 5 : 0;
+  const capeWave = Math.sin(unit.animTimer * 5) * 4;
+  const pulse = Math.sin(unit.animTimer * 4) * 0.15 + 0.25;
+  ctx.globalAlpha = pulse;
+  const auraGradient = ctx.createRadialGradient(0, Math.max(0, bob) - 5, 5, 0, Math.max(0, bob) - 5, 25);
+  auraGradient.addColorStop(0, "#ffd700");
+  auraGradient.addColorStop(1, "transparent");
+  ctx.fillStyle = auraGradient;
+  ctx.beginPath();
+  ctx.arc(0, Math.max(0, bob) - 5, 25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.fillStyle = "#9e1a1a";
+  ctx.beginPath();
+  ctx.moveTo(-6, -7 + walkBob);
+  ctx.quadraticCurveTo(-20, -2 + walkBob + capeWave, -18, 14 + walkBob - capeWave * 0.5);
+  ctx.quadraticCurveTo(-10, 16 + walkBob, -4, -2 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#730c0c";
+  ctx.beginPath();
+  ctx.moveTo(-7, -6 + walkBob);
+  ctx.quadraticCurveTo(-16, 0 + walkBob + capeWave, -15, 10 + walkBob - capeWave * 0.5);
+  ctx.quadraticCurveTo(-8, 12 + walkBob, -5, 0 + walkBob);
+  ctx.fill();
+  ctx.restore();
+  if (moving && !attackState) {
+    ctx.scale(1, 1 - Math.abs(walkBob) * 0.02);
+    ctx.rotate(0.05);
+  }
+  let attackRot = 0;
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+    if (attackProgress < 0.3) {
+      attackRot = -Math.PI / 1.5 * (attackProgress / 0.3);
+    } else if (attackProgress < 0.5) {
+      attackRot = -Math.PI / 1.2;
+    } else {
+      let t = (attackProgress - 0.5) / 0.5;
+      attackRot = -Math.PI / 1.2 + (Math.PI / 1.2 + Math.PI / 3) * t;
+    }
+  }
+  const goldArmorColor = ctx.createLinearGradient(-8, -5, 8, 5);
+  goldArmorColor.addColorStop(0, "#b8860b");
+  goldArmorColor.addColorStop(0.5, "#ffe55c");
+  goldArmorColor.addColorStop(1, "#b8860b");
+  const skinTone = cv.skinColor;
+  ctx.save();
+  ctx.translate(-2, -4 + walkBob);
+  if (attackState) {
+    ctx.rotate(attackRot);
+  } else {
+    const reachRot = 60 * Math.PI / 180 + (moving ? Math.sin(bob * 0.6) * 0.05 : 0);
+    ctx.rotate(reachRot);
+  }
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-2, 0, 4, 8);
+  ctx.fillStyle = goldArmorColor;
+  ctx.fillRect(-2.5, 0, 5, 4);
+  ctx.fillStyle = "#b8860b";
+  ctx.fillRect(-2, 4, 4, 6);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1.5, 10, 3, 3);
+  ctx.translate(0, 13);
+  ctx.fillStyle = "#4a2511";
+  ctx.fillRect(-1.5, -6, 3, 14);
+  ctx.fillStyle = goldArmorColor;
+  ctx.beginPath();
+  ctx.arc(0, -6, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(-3, 8, 6, 2);
+  ctx.fillStyle = "#e0e0e0";
+  ctx.beginPath();
+  ctx.moveTo(-1, 10);
+  ctx.lineTo(-1, 38);
+  ctx.quadraticCurveTo(0, 42, 2, 36);
+  ctx.lineTo(2, 10);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(1, 10, 1, 26);
+  if (attackState && attackProgress > 0.4 && attackProgress < 0.8) {
+    ctx.shadowColor = "#ff6600";
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = "rgba(255, 204, 0, 0.6)";
+    ctx.beginPath();
+    ctx.moveTo(1, 10);
+    ctx.quadraticCurveTo(20, 20, 10, 45);
+    ctx.lineTo(-1, 38);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-5 + legSwing, 6, 4.5, 11);
+  ctx.fillRect(1 - legSwing, 6, 4.5, 11);
+  ctx.fillStyle = goldArmorColor;
+  ctx.fillRect(-5.5 + legSwing, 10, 5.5, 6);
+  ctx.fillRect(0.5 - legSwing, 10, 5.5, 6);
+  ctx.fillStyle = "#050505";
+  ctx.beginPath();
+  ctx.ellipse(-3 + legSwing, 18, 4.5, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(3 - legSwing, 18, 4.5, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-7, -7 + walkBob, 14, 11);
+  ctx.fillStyle = goldArmorColor;
+  ctx.fillRect(-7.5, -6 + walkBob, 15, 9);
+  ctx.fillStyle = "#b8860b";
+  for (let x = -6;x <= 6; x += 3) {
+    for (let y = -4;y <= 2; y += 3) {
+      ctx.fillRect(x, y + walkBob, 2, 2);
+    }
+  }
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(-8, 2 + walkBob, 16, 4);
+  ctx.fillStyle = "#cc2222";
+  ctx.fillRect(-8, 3 + walkBob, 16, 2);
+  ctx.fillStyle = "#22cc88";
+  ctx.fillRect(-2, 2.5 + walkBob, 4, 3);
+  ctx.fillStyle = goldArmorColor;
+  ctx.beginPath();
+  ctx.moveTo(-8, 6 + walkBob);
+  ctx.lineTo(8, 6 + walkBob);
+  ctx.lineTo(10, 12 + walkBob);
+  ctx.lineTo(-10, 12 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = "#b8860b";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-9, 11 + walkBob, 18, 1);
+  ctx.save();
+  ctx.translate(4.5, -4 + walkBob);
+  const leftArmRot = moving && !attackState ? 15 * Math.PI / 180 + Math.sin(bob * 0.8) * 0.05 : 20 * Math.PI / 180;
+  ctx.rotate(leftArmRot);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-2, 0, 4, 8);
+  ctx.fillStyle = goldArmorColor;
+  ctx.fillRect(-2.5, 0, 5, 4);
+  ctx.fillStyle = "#b8860b";
+  ctx.fillRect(-2, 4, 4, 4);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1.5, 8, 3, 3);
+  ctx.restore();
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-3.5, -9 + walkBob, 7, 2.5);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-3.5, -14 + walkBob, 7, 5);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(-2.5, -12 + walkBob, 1.5, 1);
+  ctx.fillRect(1, -12 + walkBob, 1.5, 1);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(-2, -12 + walkBob, 0.5, 0.5);
+  ctx.fillRect(1.5, -12 + walkBob, 0.5, 0.5);
+  ctx.fillStyle = "#181614";
+  ctx.beginPath();
+  ctx.ellipse(0, -14 + walkBob, 6, 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = goldArmorColor;
+  ctx.beginPath();
+  ctx.arc(0, -14 + walkBob, 5, Math.PI, 0);
+  ctx.fill();
+  ctx.strokeStyle = "#e60000";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -19 + walkBob);
+  ctx.quadraticCurveTo(6, -24 + walkBob + capeWave * 0.5, 8, -16 + walkBob - capeWave * 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// src/entities/unit-rendering/civs/heroes/draw-zarathustra.ts
+function drawZarathustraComplete(unit, ctx, bob, moving, legSwingRaw, cv) {
+  ctx.save();
+  ctx.scale(0.85, 0.85);
+  ctx.translate(0, 4);
+  const yOffset = bob;
+  const legSwing = moving ? Math.sin(unit.animTimer * 12) * 4 : 0;
+  const walkBob = moving ? Math.sin(unit.animTimer * 6) * 1.5 : 0;
+  const attackState = unit.state === 5;
+  const skinTone = cv.skinColor;
+  const armorGold = "#d4af37";
+  const darkGold = "#b8860b";
+  if (moving && !attackState) {
+    ctx.rotate(0.08);
+  } else if (attackState) {
+    ctx.rotate(0.12);
+  }
+  const capeWave = moving ? Math.sin(unit.animTimer * 10) * 8 : Math.sin(unit.animTimer * 2) * 3;
+  ctx.fillStyle = "#b81111";
+  ctx.beginPath();
+  ctx.moveTo(-6, yOffset - 8);
+  ctx.quadraticCurveTo(-15 + capeWave, yOffset + 5, -12 + capeWave, yOffset + 24);
+  ctx.lineTo(-4 + capeWave, yOffset + 22);
+  ctx.lineTo(6, yOffset - 8);
+  ctx.fill();
+  ctx.strokeStyle = armorGold;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-10 + capeWave, yOffset + 21);
+  ctx.lineTo(-4 + capeWave, yOffset + 22);
+  ctx.stroke();
+  ctx.fillStyle = "#3a2a18";
+  ctx.beginPath();
+  ctx.ellipse(-4 + legSwing, yOffset + 12, 4, 6, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.ellipse(-4 + legSwing, yOffset + 18, 4, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = armorGold;
+  ctx.fillRect(-6 + legSwing, yOffset + 11, 4, 3);
+  ctx.fillStyle = "#3a2a18";
+  ctx.beginPath();
+  ctx.ellipse(4 - legSwing, yOffset + 12, 4, 6, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.ellipse(4 - legSwing, yOffset + 18, 4, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = armorGold;
+  ctx.fillRect(2 - legSwing, yOffset + 11, 4, 3);
+  ctx.fillStyle = "#8b0000";
+  ctx.fillRect(-6, yOffset + 4 + walkBob, 12, 6);
+  const goldArmorColor = ctx.createLinearGradient(-6, -5, 6, 5);
+  goldArmorColor.addColorStop(0, darkGold);
+  goldArmorColor.addColorStop(0.5, "#ffe55c");
+  goldArmorColor.addColorStop(1, darkGold);
+  ctx.fillStyle = goldArmorColor;
+  ctx.beginPath();
+  ctx.moveTo(-7, yOffset - 8 + walkBob);
+  ctx.lineTo(7, yOffset - 8 + walkBob);
+  ctx.lineTo(8, yOffset + 4 + walkBob);
+  ctx.lineTo(0, yOffset + 7 + walkBob);
+  ctx.lineTo(-8, yOffset + 4 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = "#8a6608";
+  ctx.lineWidth = 0.5;
+  for (let i = 0;i < 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-6, yOffset - 4 + i * 3 + walkBob);
+    ctx.lineTo(6, yOffset - 4 + i * 3 + walkBob);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-7, yOffset + 4 + walkBob, 14, 2);
+  ctx.fillStyle = armorGold;
+  ctx.fillRect(-2, yOffset + 3 + walkBob, 4, 4);
+  let attackProgress = 0;
+  if (attackState) {
+    attackProgress = 1 - unit.attackCooldown / unit.civAttackSpeed;
+  }
+  ctx.save();
+  ctx.translate(5, yOffset - 2 + walkBob);
+  if (attackState) {
+    const liftProgress = Math.min(attackProgress * 4, 1);
+    ctx.rotate(-25 * Math.PI / 180 * liftProgress);
+    ctx.translate(-2 * liftProgress, -6 * liftProgress);
+  } else {
+    const leftArmRot = moving ? Math.sin(unit.animTimer * 12) * 0.2 : 10 * Math.PI / 180;
+    ctx.rotate(leftArmRot);
+  }
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(0, 0, 3.5, 8);
+  ctx.fillStyle = darkGold;
+  ctx.fillRect(0.5, 4, 3, 5);
+  ctx.fillStyle = armorGold;
+  ctx.fillRect(-1, -1, 5.5, 4);
+  ctx.translate(1, 9);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1, 0, 2.5, 3);
+  ctx.strokeStyle = goldArmorColor;
+  ctx.lineWidth = 2.5;
+  let bowPull = 0;
+  if (attackState && attackProgress < 0.95) {
+    bowPull = Math.min(attackProgress * 12, 10);
+  }
+  ctx.beginPath();
+  ctx.moveTo(0, -22);
+  ctx.quadraticCurveTo(10, -10, 2, 0);
+  ctx.quadraticCurveTo(10, 10, 0, 22);
+  ctx.stroke();
+  ctx.strokeStyle = "#eee";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -22);
+  ctx.lineTo(-bowPull, 0);
+  ctx.lineTo(0, 22);
+  ctx.stroke();
+  if (attackState && attackProgress < 0.95) {
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-bowPull, -0.5, 24 + bowPull, 1.5);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(-bowPull, -2, 4, 4);
+    ctx.fillStyle = "#ff4400";
+    ctx.beginPath();
+    ctx.moveTo(24, -2.5);
+    ctx.lineTo(30, 0);
+    ctx.lineTo(24, 2.5);
+    ctx.fill();
+    ctx.fillStyle = "#ffd700";
+    ctx.beginPath();
+    ctx.moveTo(25, -1);
+    ctx.lineTo(28, 0);
+    ctx.lineTo(25, 1);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-4, yOffset - 5 + walkBob);
+  ctx.rotate(-45 * Math.PI / 180);
+  ctx.fillStyle = darkGold;
+  ctx.fillRect(-2, -5, 5, 20);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-2, -5, 5, 2);
+  ctx.fillStyle = "#eee";
+  ctx.fillRect(-1.5, -9, 1.5, 4);
+  ctx.fillRect(0.5, -8, 1.5, 3);
+  ctx.fillRect(2, -10, 1.5, 5);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-4, yOffset - 2 + walkBob);
+  if (attackState) {
+    const pullProgress = Math.min(attackProgress * 4, 1);
+    const release = attackProgress > 0.95;
+    if (release) {
+      ctx.rotate(25 * Math.PI / 180);
+      ctx.translate(3, 3);
+    } else {
+      ctx.rotate(-50 * Math.PI / 180 * pullProgress);
+      ctx.translate(-5 * pullProgress, -5 * pullProgress);
+    }
+  } else {
+    const armRot = moving ? -Math.sin(unit.animTimer * 12) * 0.2 : -0.1;
+    ctx.rotate(armRot);
+  }
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2, 0, 3.5, 8);
+  ctx.fillStyle = darkGold;
+  ctx.fillRect(-2.5, 4, 3, 5);
+  ctx.fillStyle = armorGold;
+  ctx.fillRect(-3, -2, 5.5, 4);
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-1.5, 9, 2.5, 2.5);
+  ctx.restore();
+  ctx.fillStyle = skinTone;
+  ctx.fillRect(-2.5, yOffset - 11 + walkBob, 5, 4);
+  ctx.fillStyle = armorGold;
+  ctx.beginPath();
+  ctx.moveTo(-4, yOffset - 17 + walkBob);
+  ctx.quadraticCurveTo(0, yOffset - 19 + walkBob, 4, yOffset - 17 + walkBob);
+  ctx.lineTo(4, yOffset - 9 + walkBob);
+  ctx.lineTo(0, yOffset - 6 + walkBob);
+  ctx.lineTo(-4, yOffset - 9 + walkBob);
+  ctx.fill();
+  ctx.strokeStyle = darkGold;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.shadowColor = "#ffd700";
+  ctx.shadowBlur = 5;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(-2.5, yOffset - 13 + walkBob, 1.5, 0.8);
+  ctx.fillRect(1, yOffset - 13 + walkBob, 1.5, 0.8);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#8b0000";
+  ctx.beginPath();
+  ctx.moveTo(-5, yOffset - 15 + walkBob);
+  ctx.quadraticCurveTo(0, yOffset - 22 + walkBob, 5, yOffset - 15 + walkBob);
+  ctx.lineTo(4, yOffset - 12 + walkBob);
+  ctx.lineTo(-4, yOffset - 12 + walkBob);
+  ctx.fill();
+  ctx.fillStyle = "#ffd700";
+  ctx.beginPath();
+  ctx.moveTo(0, yOffset - 21 + walkBob);
+  ctx.lineTo(-2, yOffset - 17 + walkBob);
+  ctx.lineTo(2, yOffset - 17 + walkBob);
+  ctx.fill();
+  if (unit.heroLevel > 1) {
+    ctx.fillStyle = armorGold;
+    for (let i = 0;i < Math.min(unit.heroLevel, 5); i++) {
+      ctx.beginPath();
+      ctx.arc(12, yOffset + 4 - i * 4, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
 
 // src/entities/unit-rendering/draw-knight-hero.ts
 function drawKnight(unit, ctx, age, bob, moving) {
   const cv = getCivColors(unit);
   const civ = cv.civ;
   const lvl = unit.upgradeLevel;
+  ctx.save();
+  ctx.scale(0.85, 0.85);
   let horseColor, horseDark, horseHi;
   let horseBlankColor, horseTrimColor;
   switch (civ) {
@@ -5905,188 +11755,460 @@ function drawKnight(unit, ctx, age, bob, moving) {
   }
   const hx = -2, hy = 0 + bob;
   const legBob = moving ? Math.sin(unit.animTimer * 18) * 3 : 0;
-  ctx.fillStyle = horseColor;
-  ctx.fillRect(hx - 10, hy, 20, 12);
-  ctx.fillStyle = horseHi;
-  ctx.fillRect(hx - 10, hy, 20, 3);
-  ctx.fillStyle = horseColor;
-  ctx.fillRect(hx + 8, hy - 6, 8, 10);
-  ctx.fillStyle = horseDark;
-  ctx.fillRect(hx + 14, hy - 4, 3, 4);
-  ctx.fillStyle = "#111";
-  ctx.fillRect(hx + 12, hy - 4, 2, 2);
-  ctx.fillStyle = horseDark;
-  ctx.fillRect(hx + 6, hy - 4, 4, 3);
+  ctx.save();
+  ctx.translate(hx, hy + 18);
+  ctx.scale(0.85, 0.85);
+  const legSwing = moving ? Math.sin(unit.animTimer * 18) * 5 : 0;
+  const walkBobBase = bob;
+  drawBeautifulHorse(ctx, walkBobBase, legSwing, horseColor, horseDark, horseDark, "#222");
   switch (civ) {
     case "baTu" /* BaTu */:
       if (age >= 3) {
         ctx.fillStyle = horseBlankColor;
-        ctx.fillRect(hx - 10, hy + 2, 20, 4);
+        ctx.fillRect(-12, -18 + walkBobBase, 24, 6);
         ctx.fillStyle = horseTrimColor;
-        ctx.fillRect(hx - 10, hy + 2, 20, 1);
-        ctx.fillRect(hx - 10, hy + 5, 20, 1);
-        for (let i = 0;i < 5; i++) {
-          ctx.fillStyle = "#ffd700";
-          ctx.fillRect(hx - 9 + i * 4, hy + 6, 2, 3);
+        ctx.fillRect(-12, -13 + walkBobBase, 24, 1);
+        ctx.fillStyle = "#ffd700";
+        for (let i = 0;i < 6; i++) {
+          ctx.fillRect(-10 + i * 4, -12 + walkBobBase, 2, 4);
         }
         if (age >= 4) {
-          ctx.fillStyle = "#c9a84c";
-          ctx.fillRect(hx + 8, hy - 6, 8, 3);
+          ctx.fillStyle = "#b8860b";
+          ctx.fillRect(-16, -16 + walkBobBase, 28, 7);
           ctx.fillStyle = "#ffd700";
-          ctx.fillRect(hx + 11, hy - 7, 2, 2);
+          for (let r = 0;r < 3; r++) {
+            for (let c = 0;c < 6; c++) {
+              ctx.beginPath();
+              ctx.arc(-14 + c * 5, -14 + r * 2.5 + walkBobBase, 2.5, 0, Math.PI);
+              ctx.fill();
+            }
+          }
+          ctx.fillStyle = "#b8860b";
+          ctx.beginPath();
+          ctx.moveTo(12, -18 + walkBobBase);
+          ctx.lineTo(20, -28 + walkBobBase);
+          ctx.lineTo(16, -12 + walkBobBase);
+          ctx.fill();
+          ctx.fillStyle = "#c9a84c";
+          ctx.beginPath();
+          ctx.moveTo(22, -26 + walkBobBase);
+          ctx.lineTo(28, -20 + walkBobBase);
+          ctx.lineTo(24, -28 + walkBobBase);
+          ctx.fill();
+          ctx.fillStyle = "#ffd700";
+          ctx.fillRect(26, -24 + walkBobBase, 2, 2);
         }
       }
       break;
     case "daiTong" /* DaiMinh */:
       if (age >= 3) {
         ctx.fillStyle = horseBlankColor;
-        ctx.fillRect(hx - 10, hy + 1, 20, 5);
+        ctx.beginPath();
+        ctx.moveTo(-16, -15 + walkBobBase);
+        ctx.quadraticCurveTo(0, -18 + walkBobBase, 12, -10 + walkBobBase);
+        ctx.lineTo(12, -4 + walkBobBase);
+        ctx.quadraticCurveTo(0, -8 + walkBobBase, -16, -8 + walkBobBase);
+        ctx.fill();
         ctx.fillStyle = cv.bodyLight;
-        for (let i = 0;i < 4; i++) {
-          ctx.fillRect(hx - 8 + i * 5, hy + 2, 3, 3);
+        for (let i = 0;i < 5; i++) {
+          ctx.fillRect(-10 + i * 4, -13 + walkBobBase, 2, 2);
         }
         ctx.fillStyle = horseTrimColor;
-        ctx.fillRect(hx - 10, hy + 1, 20, 1);
+        ctx.fillRect(-14, -8 + walkBobBase, 26, 1);
         if (age >= 4) {
+          ctx.fillStyle = "#111";
+          ctx.beginPath();
+          ctx.moveTo(-18, -12 + walkBobBase);
+          ctx.quadraticCurveTo(0, -14 + walkBobBase, 16, -6 + walkBobBase);
+          ctx.lineTo(14, 2 + walkBobBase);
+          ctx.quadraticCurveTo(0, 0 + walkBobBase, -18, -2 + walkBobBase);
+          ctx.fill();
+          ctx.fillStyle = "#8a2222";
+          for (let r = 0;r < 3; r++) {
+            for (let c = 0;c < 7; c++) {
+              ctx.fillRect(-16 + c * 4, -10 + walkBobBase + r * 3, 3, 2);
+            }
+          }
+          ctx.fillStyle = "#8a2222";
+          ctx.beginPath();
+          ctx.moveTo(12, -18 + walkBobBase);
+          ctx.lineTo(18, -28 + walkBobBase);
+          ctx.lineTo(16, -10 + walkBobBase);
+          ctx.fill();
+          ctx.strokeStyle = "#111";
+          ctx.lineWidth = 1;
+          ctx.stroke();
           ctx.fillStyle = cv.bodyDark;
-          ctx.fillRect(hx + 8, hy - 6, 8, 3);
-          ctx.fillStyle = "#ffd700";
-          ctx.fillRect(hx + 10, hy - 7, 4, 2);
+          ctx.beginPath();
+          ctx.moveTo(22, -26 + walkBobBase);
+          ctx.lineTo(28, -20 + walkBobBase);
+          ctx.lineTo(24, -28 + walkBobBase);
+          ctx.fill();
         }
       }
       break;
     case "yamato" /* Yamato */:
       if (age >= 3) {
         ctx.fillStyle = horseBlankColor;
-        ctx.fillRect(hx - 10, hy + 1, 20, 5);
+        ctx.fillRect(-12, -18 + walkBobBase, 22, 6);
         ctx.fillStyle = horseTrimColor;
-        for (let i = 0;i < 6; i++) {
-          ctx.fillRect(hx - 9 + i * 3, hy + 2, 1, 3);
+        for (let i = 0;i < 7; i++) {
+          ctx.fillRect(-10 + i * 3, -16 + walkBobBase, 1, 4);
         }
         if (age >= 4) {
+          ctx.fillStyle = "#1a1a2a";
+          ctx.fillRect(-14, -16 + walkBobBase, 28, 8);
+          ctx.fillStyle = "#cc3333";
+          ctx.fillRect(-14, -14 + walkBobBase, 28, 1);
+          ctx.fillRect(-14, -11 + walkBobBase, 28, 1);
+          ctx.fillStyle = "#1a1a2a";
+          ctx.beginPath();
+          ctx.moveTo(10, -16 + walkBobBase);
+          ctx.lineTo(18, -26 + walkBobBase);
+          ctx.lineTo(15, -10 + walkBobBase);
+          ctx.fill();
+          ctx.fillStyle = "#cc3333";
+          ctx.fillRect(13, -15 + walkBobBase, 4, 1);
+          ctx.fillRect(14, -20 + walkBobBase, 3, 1);
           ctx.fillStyle = cv.bodyDark;
-          ctx.fillRect(hx + 8, hy - 6, 8, 3);
-          ctx.fillStyle = cv.bodyLight;
-          ctx.fillRect(hx + 8, hy - 7, 8, 1);
+          ctx.beginPath();
+          ctx.moveTo(22, -26 + walkBobBase);
+          ctx.lineTo(28, -20 + walkBobBase);
+          ctx.lineTo(25, -28 + walkBobBase);
+          ctx.fill();
+          ctx.fillStyle = "#ffd700";
+          ctx.fillRect(25, -28 + walkBobBase, 1, 3);
         }
       }
       break;
     case "laMa" /* LaMa */:
       if (age >= 3) {
-        ctx.fillStyle = "#6a6a68";
-        ctx.fillRect(hx - 10, hy + 1, 20, 5);
-        ctx.fillStyle = "rgba(255,255,255,0.12)";
-        for (let i = 0;i < 4; i++) {
-          ctx.fillRect(hx - 9, hy + 2 + i, 18, 1);
-        }
         ctx.fillStyle = "#8b0000";
-        ctx.fillRect(hx - 10, hy + 5, 20, 2);
-        ctx.fillStyle = horseTrimColor;
-        ctx.fillRect(hx - 10, hy + 1, 20, 1);
+        ctx.fillRect(-14, -18 + walkBobBase, 26, 8);
+        ctx.fillStyle = "#6a6a68";
+        ctx.fillRect(-12, -18 + walkBobBase, 22, 6);
+        ctx.fillStyle = "rgba(255,255,255,0.12)";
+        for (let i = 0;i < 5; i++) {
+          ctx.fillRect(-11, -17 + walkBobBase + i, 20, 1);
+        }
         if (age >= 4) {
+          ctx.fillStyle = "#7a7a78";
+          ctx.beginPath();
+          ctx.moveTo(-20, -18 + walkBobBase);
+          ctx.lineTo(16, -18 + walkBobBase);
+          ctx.lineTo(12, 0 + walkBobBase);
+          ctx.lineTo(-16, 0 + walkBobBase);
+          ctx.fill();
+          ctx.strokeStyle = "#a8a8a6";
+          ctx.lineWidth = 1;
+          for (let i = 0;i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(-18 + i * 2, -16 + walkBobBase + i * 4);
+            ctx.lineTo(14 - i * 2, -16 + walkBobBase + i * 4);
+            ctx.stroke();
+          }
+          ctx.fillStyle = "#6a6a68";
+          ctx.beginPath();
+          ctx.moveTo(12, -18 + walkBobBase);
+          ctx.lineTo(18, -26 + walkBobBase);
+          ctx.lineTo(16, -10 + walkBobBase);
+          ctx.fill();
           ctx.fillStyle = "#5a5a58";
-          ctx.fillRect(hx + 8, hy - 6, 8, 3);
+          ctx.beginPath();
+          ctx.moveTo(22, -26 + walkBobBase);
+          ctx.lineTo(28, -20 + walkBobBase);
+          ctx.lineTo(24, -28 + walkBobBase);
+          ctx.fill();
           ctx.fillStyle = "#daa520";
-          ctx.fillRect(hx + 11, hy - 7, 2, 2);
+          ctx.fillRect(25, -24 + walkBobBase, 2, 2);
         }
       }
       break;
     case "viking" /* Viking */:
       if (age >= 3) {
         ctx.fillStyle = horseBlankColor;
-        ctx.fillRect(hx - 10, hy + 1, 20, 5);
+        ctx.fillRect(-14, -18 + walkBobBase, 24, 6);
         ctx.fillStyle = "#6a5a3a";
-        ctx.fillRect(hx - 10, hy + 1, 20, 2);
+        ctx.fillRect(-14, -18 + walkBobBase, 24, 2);
         ctx.fillStyle = "#4a3a1a";
-        ctx.fillRect(hx - 10, hy + 5, 20, 1);
+        ctx.fillRect(-14, -13 + walkBobBase, 24, 1);
         if (age >= 4) {
+          ctx.fillStyle = "#5a5a58";
+          ctx.fillRect(-18, -14 + walkBobBase, 30, 8);
+          ctx.fillStyle = "#3a3a38";
+          for (let i = 0;i < 3; i++) {
+            ctx.beginPath();
+            ctx.setLineDash([2, 1]);
+            ctx.moveTo(-18, -12 + walkBobBase + i * 3);
+            ctx.lineTo(12, -12 + walkBobBase + i * 3);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+          ctx.fillStyle = "#3a2a1a";
+          ctx.beginPath();
+          ctx.arc(-2, -8 + walkBobBase, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#8a8a88";
+          ctx.beginPath();
+          ctx.arc(-2, -8 + walkBobBase, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#5a5a58";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.fillStyle = "#5a5a58";
+          ctx.beginPath();
+          ctx.moveTo(10, -18 + walkBobBase);
+          ctx.lineTo(16, -26 + walkBobBase);
+          ctx.lineTo(14, -10 + walkBobBase);
+          ctx.fill();
           ctx.fillStyle = "#4a4a48";
-          ctx.fillRect(hx + 8, hy - 6, 8, 3);
+          ctx.beginPath();
+          ctx.moveTo(22, -26 + walkBobBase);
+          ctx.lineTo(28, -20 + walkBobBase);
+          ctx.lineTo(24, -28 + walkBobBase);
+          ctx.fill();
+        }
+      }
+      break;
+    default:
+      if (age >= 3) {
+        ctx.fillStyle = horseBlankColor;
+        ctx.beginPath();
+        ctx.moveTo(-18, -18 + walkBobBase);
+        ctx.lineTo(16, -18 + walkBobBase);
+        ctx.lineTo(12, -4 + walkBobBase);
+        ctx.lineTo(-14, -4 + walkBobBase);
+        ctx.fill();
+        ctx.fillStyle = horseTrimColor;
+        ctx.fillRect(-16, -6 + walkBobBase, 26, 1);
+        if (age >= 4) {
+          ctx.fillStyle = "#7a8a9a";
+          ctx.beginPath();
+          ctx.moveTo(-20, -18 + walkBobBase);
+          ctx.lineTo(-8, -18 + walkBobBase);
+          ctx.lineTo(-4, -6 + walkBobBase);
+          ctx.lineTo(-18, -6 + walkBobBase);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(8, -18 + walkBobBase);
+          ctx.lineTo(18, -18 + walkBobBase);
+          ctx.lineTo(16, -2 + walkBobBase);
+          ctx.lineTo(4, -2 + walkBobBase);
+          ctx.fill();
+          ctx.fillStyle = "#d0e0f0";
+          ctx.fillRect(-16, -10 + walkBobBase, 8, 1);
+          ctx.fillRect(8, -8 + walkBobBase, 6, 1);
+          ctx.fillStyle = "#7a8a9a";
+          ctx.beginPath();
+          ctx.moveTo(10, -18 + walkBobBase);
+          ctx.lineTo(18, -28 + walkBobBase);
+          ctx.lineTo(15, -10 + walkBobBase);
+          ctx.fill();
+          ctx.fillStyle = "#6a7a8a";
+          ctx.beginPath();
+          ctx.moveTo(22, -26 + walkBobBase);
+          ctx.lineTo(28, -20 + walkBobBase);
+          ctx.lineTo(24, -28 + walkBobBase);
+          ctx.fill();
         }
       }
       break;
   }
-  ctx.fillStyle = horseDark;
-  ctx.fillRect(hx - 8, hy + 10, 3, 7 + legBob);
-  ctx.fillRect(hx - 3, hy + 10, 3, 7 - legBob);
-  ctx.fillRect(hx + 3, hy + 10, 3, 7 + legBob);
-  ctx.fillRect(hx + 8, hy + 10, 3, 7 - legBob);
-  ctx.fillStyle = "#222";
-  ctx.fillRect(hx - 9, hy + 16 + legBob, 4, 2);
-  ctx.fillRect(hx - 4, hy + 16 - legBob, 4, 2);
-  ctx.fillRect(hx + 2, hy + 16 + legBob, 4, 2);
-  ctx.fillRect(hx + 7, hy + 16 - legBob, 4, 2);
-  ctx.fillStyle = horseDark;
-  ctx.fillRect(hx - 12, hy + 1, 4, 2);
-  ctx.fillRect(hx - 14, hy + 2, 3, 4);
-  const riderY = hy - 16;
+  ctx.restore();
+  const riderY = hy - 10;
   if (age >= 3) {
     ctx.fillStyle = cv.bodyDark;
-    const capeWave = moving ? Math.sin(unit.animTimer * 12) * 2 : 0;
-    ctx.fillRect(hx - 6, riderY + 4, 3, 14 + capeWave);
-    ctx.fillStyle = cv.accent;
-    ctx.fillRect(hx - 6, riderY + 4, 1, 14 + capeWave);
+    const capeWave = moving ? Math.sin(unit.animTimer * 12) * 3 : 0;
+    const capeWidth = age >= 4 ? 6 : 3;
+    ctx.beginPath();
+    ctx.moveTo(hx - 4, riderY + 4);
+    ctx.quadraticCurveTo(hx - 8, riderY + 10 + capeWave, hx - 6 - capeWidth, riderY + 16 + capeWave);
+    ctx.lineTo(hx - 4 - capeWidth, riderY + 16 + capeWave);
+    ctx.quadraticCurveTo(hx - 6, riderY + 10 + capeWave, hx - 1, riderY + 4);
+    ctx.fill();
+    ctx.strokeStyle = cv.accent;
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
-  ctx.fillStyle = age >= 4 ? cv.bodyDark : age >= 3 ? cv.bodyMid : cv.bodyLight;
-  ctx.fillRect(hx - 4, riderY + 2, 8, 12);
+  const armorBase = age >= 4 ? cv.bodyDark : age >= 3 ? cv.bodyMid : cv.bodyLight;
+  const armorHighlight = age >= 4 ? cv.bodyMid : cv.bodyLight;
+  ctx.fillStyle = armorBase;
+  ctx.beginPath();
+  ctx.moveTo(hx - 4, riderY + 2);
+  ctx.lineTo(hx + 4, riderY + 2);
+  ctx.lineTo(hx + 5, riderY + 8);
+  ctx.lineTo(hx + 3, riderY + 12);
+  ctx.lineTo(hx - 3, riderY + 12);
+  ctx.lineTo(hx - 5, riderY + 8);
+  ctx.fill();
+  ctx.fillStyle = armorHighlight;
+  ctx.beginPath();
+  ctx.moveTo(hx - 2, riderY + 3);
+  ctx.lineTo(hx + 2, riderY + 3);
+  ctx.lineTo(hx + 3, riderY + 8);
+  ctx.lineTo(hx - 3, riderY + 8);
+  ctx.fill();
+  ctx.fillStyle = "#222";
+  ctx.fillRect(hx - 4, riderY + 11, 8, 2);
+  ctx.fillStyle = "#ffd700";
+  ctx.fillRect(hx - 1, riderY + 11, 2, 2);
+  if (age >= 4) {
+    ctx.fillStyle = armorHighlight;
+    ctx.beginPath();
+    ctx.moveTo(hx - 5, riderY + 8);
+    ctx.lineTo(hx + 5, riderY + 8);
+    ctx.lineTo(hx + 4, riderY + 12);
+    ctx.lineTo(hx - 4, riderY + 12);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(hx - 2, riderY + 9, 4, 1);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = armorBase;
+    ctx.beginPath();
+    ctx.moveTo(hx - 6, riderY + 13);
+    ctx.lineTo(hx + 6, riderY + 13);
+    ctx.lineTo(hx + 9, riderY + 17);
+    ctx.lineTo(hx - 3, riderY + 17);
+    ctx.fill();
+    ctx.strokeStyle = "#222";
+    ctx.stroke();
+    ctx.fillStyle = armorHighlight;
+    ctx.beginPath();
+    ctx.moveTo(hx - 4, riderY + 16);
+    ctx.lineTo(hx + 7, riderY + 16);
+    ctx.lineTo(hx + 10, riderY + 20);
+    ctx.lineTo(hx - 2, riderY + 20);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = armorBase;
+    ctx.beginPath();
+    ctx.moveTo(hx - 4, riderY + 13);
+    ctx.lineTo(hx + 4, riderY + 13);
+    ctx.lineTo(hx + 8, riderY + 19);
+    ctx.lineTo(hx - 2, riderY + 19);
+    ctx.fill();
+    ctx.strokeStyle = "#222";
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#222";
+  ctx.beginPath();
+  ctx.moveTo(hx, riderY + 19);
+  ctx.lineTo(hx + 6, riderY + 19);
+  ctx.lineTo(hx + 8, riderY + 24);
+  ctx.lineTo(hx + 2, riderY + 24);
+  ctx.fill();
+  const bootColor = age >= 4 ? "#555" : "#332211";
+  ctx.fillStyle = bootColor;
+  ctx.beginPath();
+  ctx.moveTo(hx + 1, riderY + 24);
+  ctx.lineTo(hx + 9, riderY + 24);
+  ctx.lineTo(hx + 11, riderY + 28);
+  ctx.lineTo(hx + 2, riderY + 28);
+  ctx.fill();
+  ctx.fillStyle = "#bbb";
+  ctx.fillRect(hx, riderY + 26, 2, 1);
+  ctx.strokeStyle = "#111";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(hx + 6, riderY + 26);
+  ctx.lineTo(hx + 2, riderY + 13);
+  ctx.stroke();
+  if (age >= 4) {
+    ctx.fillStyle = "#ffd700";
+    ctx.fillRect(hx - 3, riderY + 2, 6, 1);
+    ctx.beginPath();
+    ctx.moveTo(hx - 1, riderY + 18);
+    ctx.lineTo(hx + 7, riderY + 18);
+    ctx.lineTo(hx + 6, riderY + 19);
+    ctx.lineTo(hx - 2, riderY + 19);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(hx + 1, riderY + 24);
+    ctx.lineTo(hx + 9, riderY + 24);
+    ctx.lineTo(hx + 9.5, riderY + 25);
+    ctx.lineTo(hx + 1.5, riderY + 25);
+    ctx.fill();
+  }
   switch (civ) {
     case "baTu" /* BaTu */:
       ctx.fillStyle = "rgba(255,215,0,0.2)";
-      for (let i = 0;i < 4; i++) {
-        ctx.fillRect(hx - 3, riderY + 3 + i * 3, 6, 1);
+      for (let i = 0;i < 3; i++) {
+        ctx.fillRect(hx - 3, riderY + 4 + i * 3, 6, 1);
       }
       ctx.fillStyle = cv.accent;
       ctx.fillRect(hx - 4, riderY + 2, 8, 2);
       break;
     case "daiTong" /* DaiMinh */:
       ctx.fillStyle = "rgba(255,255,255,0.12)";
-      for (let i = 0;i < 5; i++) {
-        ctx.fillRect(hx - 3, riderY + 3 + i * 2, 6, 1);
+      for (let i = 0;i < 4; i++) {
+        ctx.fillRect(hx - 3, riderY + 4 + i * 2, 6, 1);
       }
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(hx - 2, riderY + 6, 4, 3);
+      if (age >= 4) {
+        ctx.fillStyle = "#ffd700";
+        ctx.beginPath();
+        ctx.arc(hx, riderY + 7, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
       break;
     case "yamato" /* Yamato */:
       ctx.fillStyle = cv.accent;
-      for (let i = 0;i < 4; i++) {
-        ctx.fillRect(hx - 3, riderY + 3 + i * 3, 6, 1);
+      for (let i = 0;i < 3; i++) {
+        ctx.fillRect(hx - 3, riderY + 4 + i * 3, 6, 1);
       }
       ctx.fillStyle = cv.bodyDark;
-      ctx.fillRect(hx - 7, riderY + 1, 4, 7);
-      ctx.fillRect(hx + 3, riderY + 1, 4, 7);
+      ctx.fillRect(hx - 7, riderY + 1, 4, 8);
+      ctx.fillRect(hx + 3, riderY + 1, 4, 8);
       ctx.fillStyle = cv.accent;
       ctx.fillRect(hx - 7, riderY + 1, 4, 1);
       ctx.fillRect(hx + 3, riderY + 1, 4, 1);
       break;
     case "laMa" /* LaMa */:
       ctx.fillStyle = "rgba(255,255,255,0.15)";
-      for (let i = 0;i < 4; i++) {
-        ctx.fillRect(hx - 3, riderY + 3 + i * 3, 6, 1);
+      for (let i = 0;i < 3; i++) {
+        ctx.fillRect(hx - 3, riderY + 4 + i * 3, 6, 1);
       }
       ctx.fillStyle = cv.secondary;
       ctx.fillRect(hx - 2, riderY + 5, 4, 3);
-      ctx.fillStyle = cv.bodyLight;
-      ctx.fillRect(hx - 4, riderY + 10, 8, 2);
       break;
     case "viking" /* Viking */:
       ctx.fillStyle = "rgba(255,255,255,0.1)";
-      for (let i = 0;i < 4; i++) {
+      for (let i = 0;i < 3; i++) {
         ctx.fillRect(hx - 3, riderY + 4 + i * 3, 6, 1);
       }
       ctx.fillStyle = "#6a5a3a";
-      ctx.fillRect(hx - 5, riderY + 1, 10, 3);
+      ctx.fillRect(hx - 6, riderY + 1, 12, 4);
       ctx.fillStyle = "#5a4a2a";
-      ctx.fillRect(hx - 5, riderY + 3, 10, 1);
+      ctx.fillRect(hx - 5, riderY + 4, 10, 1);
       break;
   }
   if (civ !== "yamato" /* Yamato */) {
-    ctx.fillStyle = age >= 4 ? cv.bodyDark : cv.bodyMid;
-    ctx.fillRect(hx - 6, riderY + 1, 3, 5);
-    ctx.fillRect(hx + 3, riderY + 1, 3, 5);
+    ctx.fillStyle = armorBase;
+    ctx.beginPath();
+    ctx.arc(hx - 5, riderY + 3, age >= 4 ? 4 : 3, Math.PI, 0);
+    ctx.arc(hx + 5, riderY + 3, age >= 4 ? 4 : 3, Math.PI, 0);
+    ctx.fill();
     if (age >= 4) {
-      ctx.fillStyle = cv.accent;
-      ctx.fillRect(hx - 6, riderY + 1, 3, 1);
-      ctx.fillRect(hx + 3, riderY + 1, 3, 1);
+      ctx.fillStyle = armorHighlight;
+      ctx.beginPath();
+      ctx.moveTo(hx - 9, riderY + 3);
+      ctx.lineTo(hx - 1, riderY + 3);
+      ctx.lineTo(hx - 3, riderY + 7);
+      ctx.lineTo(hx - 7, riderY + 7);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hx + 1, riderY + 3);
+      ctx.lineTo(hx + 9, riderY + 3);
+      ctx.lineTo(hx + 7, riderY + 7);
+      ctx.lineTo(hx + 3, riderY + 7);
+      ctx.fill();
+      ctx.fillStyle = "#ffd700";
+      ctx.fillRect(hx - 8, riderY + 2, 4, 1);
+      ctx.fillRect(hx + 4, riderY + 2, 4, 1);
+      ctx.beginPath();
+      ctx.arc(hx, riderY + 10, 2, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   ctx.fillStyle = cv.skinColor;
@@ -6166,107 +12288,152 @@ function drawKnight(unit, ctx, age, bob, moving) {
       }
       break;
     default:
-      ctx.fillStyle = age >= 4 ? "#5a6a8a" : "#4a5a7a";
-      ctx.fillRect(hx - 4, riderY - 10, 8, 5);
-      ctx.fillStyle = "#1a1a18";
-      ctx.fillRect(hx - 2, riderY - 6, 4, 1);
-  }
-  switch (civ) {
-    case "baTu" /* BaTu */:
-      ctx.fillStyle = "#8a6a30";
-      ctx.fillRect(hx + 5, riderY + 2, 2, 4);
-      ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
+      ctx.fillStyle = age >= 4 ? "#7a8a9a" : "#6a7a8a";
       ctx.beginPath();
-      ctx.moveTo(hx + 5, riderY - 8);
-      ctx.quadraticCurveTo(hx + 9, riderY - 2, hx + 6, riderY + 2);
-      ctx.lineTo(hx + 8, riderY + 2);
-      ctx.quadraticCurveTo(hx + 11, riderY - 2, hx + 7, riderY - 8);
-      ctx.closePath();
+      ctx.arc(hx, riderY - 6, 5, Math.PI, 0);
       ctx.fill();
+      ctx.fillRect(hx - 5, riderY - 6, 10, 4);
+      ctx.fillStyle = age >= 4 ? "#d0e0f0" : "#b0c0d0";
+      ctx.beginPath();
+      ctx.moveTo(hx - 5, riderY - 6);
+      ctx.lineTo(hx + 6, riderY - 6);
+      ctx.lineTo(hx + 4, riderY - 1);
+      ctx.lineTo(hx - 4, riderY - 1);
+      ctx.fill();
+      ctx.fillStyle = "#111";
+      ctx.fillRect(hx - 2, riderY - 4, 6, 1);
       if (age >= 4) {
+        ctx.fillStyle = cv.accent;
+        ctx.beginPath();
+        ctx.moveTo(hx, riderY - 11);
+        ctx.quadraticCurveTo(hx - 5, riderY - 16, hx - 8, riderY - 10);
+        ctx.quadraticCurveTo(hx - 3, riderY - 12, hx, riderY - 11);
+        ctx.fill();
+        ctx.fillStyle = "#ffd700";
+        ctx.fillRect(hx + 1, riderY - 6, 2, 2);
+      }
+  }
+  if (unit.state !== 5 /* Attacking */) {
+    switch (civ) {
+      case "baTu" /* BaTu */:
+        ctx.fillStyle = "#8a6a30";
+        ctx.fillRect(hx + 5, riderY + 2, 2, 4);
+        ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
+        ctx.beginPath();
+        ctx.moveTo(hx + 5, riderY - 8);
+        ctx.quadraticCurveTo(hx + 9, riderY - 2, hx + 6, riderY + 2);
+        ctx.lineTo(hx + 8, riderY + 2);
+        ctx.quadraticCurveTo(hx + 11, riderY - 2, hx + 7, riderY - 8);
+        ctx.closePath();
+        ctx.fill();
+        if (age >= 4) {
+          ctx.fillStyle = "#ffd700";
+          ctx.fillRect(hx + 4, riderY + 1, 4, 2);
+        }
+        break;
+      case "daiTong" /* DaiMinh */:
+        ctx.fillStyle = age >= 4 ? "#6a2222" : "#5a3a20";
+        ctx.fillRect(hx + 5, riderY - 6, 2, 20);
+        ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
+        ctx.fillRect(hx + 3, riderY - 12, 6, 3);
+        ctx.beginPath();
+        ctx.moveTo(hx + 6, riderY - 14);
+        ctx.lineTo(hx + 4, riderY - 9);
+        ctx.lineTo(hx + 8, riderY - 9);
+        ctx.closePath();
+        ctx.fill();
+        if (age >= 4) {
+          ctx.fillStyle = "#ffd700";
+          ctx.fillRect(hx + 4, riderY - 6, 4, 2);
+          ctx.fillStyle = "#dd3333";
+          ctx.fillRect(hx + 3, riderY - 6, 2, 4);
+        }
+        break;
+      case "yamato" /* Yamato */:
+        ctx.fillStyle = "#333";
+        ctx.fillRect(hx + 5, riderY + 2, 2, 5);
+        ctx.fillStyle = "#cc3333";
+        ctx.fillRect(hx + 5, riderY + 3, 2, 3);
         ctx.fillStyle = "#ffd700";
         ctx.fillRect(hx + 4, riderY + 1, 4, 2);
-      }
-      break;
-    case "daiTong" /* DaiMinh */:
-      ctx.fillStyle = age >= 4 ? "#6a2222" : "#5a3a20";
-      ctx.fillRect(hx + 5, riderY - 6, 2, 20);
-      ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
-      ctx.fillRect(hx + 3, riderY - 12, 6, 3);
-      ctx.beginPath();
-      ctx.moveTo(hx + 6, riderY - 14);
-      ctx.lineTo(hx + 4, riderY - 9);
-      ctx.lineTo(hx + 8, riderY - 9);
-      ctx.closePath();
-      ctx.fill();
-      if (age >= 4) {
-        ctx.fillStyle = "#ffd700";
-        ctx.fillRect(hx + 4, riderY - 6, 4, 2);
-        ctx.fillStyle = "#dd3333";
-        ctx.fillRect(hx + 3, riderY - 6, 2, 4);
-      }
-      break;
-    case "yamato" /* Yamato */:
-      ctx.fillStyle = "#333";
-      ctx.fillRect(hx + 5, riderY + 2, 2, 5);
-      ctx.fillStyle = "#cc3333";
-      ctx.fillRect(hx + 5, riderY + 3, 2, 3);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(hx + 4, riderY + 1, 4, 2);
-      ctx.fillStyle = age >= 4 ? "#f0f0f0" : "#ddd";
-      ctx.beginPath();
-      ctx.moveTo(hx + 5, riderY - 10);
-      ctx.quadraticCurveTo(hx + 8, riderY - 4, hx + 6, riderY + 1);
-      ctx.lineTo(hx + 7, riderY + 1);
-      ctx.quadraticCurveTo(hx + 9, riderY - 4, hx + 6, riderY - 10);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case "laMa" /* LaMa */:
-      ctx.fillStyle = age >= 4 ? "#5a3a18" : "#8B5E3C";
-      ctx.fillRect(hx + 5, riderY - 4, 2, 18);
-      ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
-      ctx.beginPath();
-      ctx.moveTo(hx + 5, riderY - 12);
-      ctx.lineTo(hx + 6, riderY - 4);
-      ctx.lineTo(hx + 7, riderY - 12);
-      ctx.closePath();
-      ctx.fill();
-      if (age >= 4) {
-        ctx.fillStyle = "#ffd700";
-        ctx.fillRect(hx + 4, riderY - 4, 4, 2);
-        ctx.fillStyle = "#8b0000";
-        ctx.fillRect(hx + 7, riderY - 10, 4, 3);
-      }
-      break;
-    case "viking" /* Viking */:
-      ctx.fillStyle = "#5a3a18";
-      ctx.fillRect(hx + 5, riderY - 2, 2, 16);
-      ctx.fillStyle = age >= 4 ? "#ddd" : "#bbb";
-      ctx.beginPath();
-      ctx.moveTo(hx + 7, riderY - 8);
-      ctx.lineTo(hx + 13, riderY - 5);
-      ctx.lineTo(hx + 13, riderY + 1);
-      ctx.lineTo(hx + 7, riderY - 2);
-      ctx.closePath();
-      ctx.fill();
-      if (age >= 4) {
-        ctx.globalAlpha = 0.5 + Math.sin(unit.animTimer * 5) * 0.3;
-        ctx.fillStyle = "#88ccff";
-        ctx.fillRect(hx + 9, riderY - 5, 2, 3);
-        ctx.globalAlpha = 1;
-      }
-      break;
-    default:
-      ctx.fillStyle = age >= 4 ? "#5a3a18" : "#8B5E3C";
-      ctx.fillRect(hx + 5, riderY - 4, 2, 18);
-      ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
-      ctx.beginPath();
-      ctx.moveTo(hx + 5, riderY - 10);
-      ctx.lineTo(hx + 6, riderY - 4);
-      ctx.lineTo(hx + 7, riderY - 10);
-      ctx.closePath();
-      ctx.fill();
+        ctx.fillStyle = age >= 4 ? "#f0f0f0" : "#ddd";
+        ctx.beginPath();
+        ctx.moveTo(hx + 5, riderY - 10);
+        ctx.quadraticCurveTo(hx + 8, riderY - 4, hx + 6, riderY + 1);
+        ctx.lineTo(hx + 7, riderY + 1);
+        ctx.quadraticCurveTo(hx + 9, riderY - 4, hx + 6, riderY - 10);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      case "laMa" /* LaMa */:
+        ctx.fillStyle = age >= 4 ? "#5a3a18" : "#8B5E3C";
+        ctx.fillRect(hx + 5, riderY - 4, 2, 18);
+        ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
+        ctx.beginPath();
+        ctx.moveTo(hx + 5, riderY - 12);
+        ctx.lineTo(hx + 6, riderY - 4);
+        ctx.lineTo(hx + 7, riderY - 12);
+        ctx.closePath();
+        ctx.fill();
+        if (age >= 4) {
+          ctx.fillStyle = "#ffd700";
+          ctx.fillRect(hx + 4, riderY - 4, 4, 2);
+          ctx.fillStyle = "#8b0000";
+          ctx.fillRect(hx + 7, riderY - 10, 4, 3);
+        }
+        break;
+      case "viking" /* Viking */:
+        ctx.fillStyle = "#5a3a18";
+        ctx.fillRect(hx + 5, riderY - 2, 2, 16);
+        ctx.fillStyle = age >= 4 ? "#ddd" : "#bbb";
+        ctx.beginPath();
+        ctx.moveTo(hx + 7, riderY - 8);
+        ctx.lineTo(hx + 13, riderY - 5);
+        ctx.lineTo(hx + 13, riderY + 1);
+        ctx.lineTo(hx + 7, riderY - 2);
+        ctx.closePath();
+        ctx.fill();
+        if (age >= 4) {
+          ctx.globalAlpha = 0.5 + Math.sin(unit.animTimer * 5) * 0.3;
+          ctx.fillStyle = "#88ccff";
+          ctx.fillRect(hx + 9, riderY - 5, 2, 3);
+          ctx.globalAlpha = 1;
+        }
+        break;
+      default:
+        ctx.fillStyle = age >= 4 ? "#5a3a18" : "#8B5E3C";
+        ctx.fillRect(hx + 5, riderY + 2, 3, 6);
+        ctx.fillStyle = age >= 4 ? "#d0e0f0" : "#b0c0d0";
+        ctx.beginPath();
+        ctx.moveTo(hx + 2, riderY - 2);
+        ctx.lineTo(hx + 11, riderY - 2);
+        ctx.lineTo(hx + 7, riderY + 3);
+        ctx.lineTo(hx + 6, riderY + 3);
+        ctx.fill();
+        ctx.strokeStyle = "#222";
+        ctx.stroke();
+        ctx.fillStyle = age >= 4 ? "#6a4a28" : "#8B5E3C";
+        ctx.beginPath();
+        ctx.moveTo(hx + 5, riderY - 2);
+        ctx.lineTo(hx + 8, riderY - 2);
+        ctx.lineTo(hx + 7, riderY - 18);
+        ctx.lineTo(hx + 6, riderY - 18);
+        ctx.fill();
+        ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
+        ctx.beginPath();
+        ctx.moveTo(hx + 6, riderY - 18);
+        ctx.lineTo(hx + 7, riderY - 18);
+        ctx.lineTo(hx + 6.5, riderY - 22);
+        ctx.fill();
+        if (age >= 4) {
+          ctx.fillStyle = cv.accent;
+          ctx.beginPath();
+          ctx.moveTo(hx + 7, riderY - 16);
+          ctx.lineTo(hx + 16, riderY - 14);
+          ctx.lineTo(hx + 7, riderY - 12);
+          ctx.fill();
+        }
+    }
   }
   if (lvl > 0) {
     ctx.fillStyle = "#ffd700";
@@ -6275,22 +12442,41 @@ function drawKnight(unit, ctx, age, bob, moving) {
   }
   if (moving) {
     let dustColor;
+    let pColor;
     switch (civ) {
       case "baTu" /* BaTu */:
         dustColor = "#c9a060";
+        pColor = "#e0c090";
         break;
       case "viking" /* Viking */:
         dustColor = "#6a6a68";
+        pColor = "#8a8a88";
         break;
       default:
         dustColor = "#8a7a60";
+        pColor = "#a89a80";
     }
-    ctx.globalAlpha = 0.2;
-    ctx.fillStyle = dustColor;
-    for (let i = 0;i < 3; i++) {
-      const dx = -14 - i * 4 + Math.sin(unit.animTimer * 10 + i) * 3;
-      const dy = hy + 14 + Math.random() * 4;
-      ctx.fillRect(dx, dy, 3, 2);
+    ctx.globalAlpha = 0.4;
+    for (let i = 0;i < 5; i++) {
+      const lift = (unit.animTimer * 15 + i * 7) % 10;
+      const spread = Math.sin(unit.animTimer * 8 + i) * 6;
+      const dx = hx - 16 - i * 3 + spread;
+      const dy = hy + 16 - lift;
+      const size = 3 - lift / 5;
+      if (size > 0.5) {
+        ctx.fillStyle = i % 2 === 0 ? dustColor : pColor;
+        ctx.beginPath();
+        ctx.arc(dx, dy, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    const stomp = Math.sin(unit.animTimer * 18);
+    if (stomp > 0.8) {
+      ctx.fillStyle = dustColor;
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.ellipse(hx + 12, hy + 20, 6, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
@@ -6302,6 +12488,7 @@ function drawKnight(unit, ctx, age, bob, moving) {
     ctx.fill();
     ctx.globalAlpha = 1;
   }
+  ctx.restore();
 }
 function getCivHeroVisuals(unit) {
   const civ = unit.civilization;
@@ -6341,808 +12528,27 @@ function getCivHeroVisuals(unit) {
 }
 function drawHero(unit, ctx, age, bob, moving, color, _symbol) {
   const cv = getCivColors(unit);
-  const civ = cv.civ;
   const legSwing = moving ? Math.sin(unit.animTimer * 12) * 3 : 0;
-  const auraColor = cv.accent;
-  const pulse = Math.sin(unit.animTimer * 4) * 0.15 + 0.35;
-  ctx.globalAlpha = pulse;
-  ctx.fillStyle = auraColor;
-  ctx.beginPath();
-  ctx.arc(0, -4 + bob, 20, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  switch (civ) {
-    case "yamato" /* Yamato */:
-      ctx.fillStyle = "#1a1a3a";
-      ctx.fillRect(-6, 4 + bob, 5, 8 + legSwing);
-      ctx.fillRect(1, 4 + bob, 5, 8 - legSwing);
-      ctx.fillStyle = "#12122a";
-      ctx.fillRect(-4, 5 + bob, 1, 6 + legSwing);
-      ctx.fillRect(3, 5 + bob, 1, 6 - legSwing);
-      ctx.fillStyle = "#cc9944";
-      ctx.fillRect(-7, 3 + bob, 14, 2);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(5, 2 + bob, 3, 3);
-      ctx.fillStyle = "#6a4a20";
-      ctx.fillRect(-6, 12 + bob + legSwing, 5, 2);
-      ctx.fillRect(1, 12 + bob - legSwing, 5, 2);
-      ctx.fillStyle = "#4a3010";
-      ctx.fillRect(-5, 13 + bob + legSwing, 1, 1);
-      ctx.fillRect(3, 13 + bob - legSwing, 1, 1);
-      break;
-    case "laMa" /* LaMa */:
-      ctx.fillStyle = "#5a1a1a";
-      ctx.fillRect(-5, 4 + bob, 4, 8 + legSwing);
-      ctx.fillRect(1, 4 + bob, 4, 8 - legSwing);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-5, 10 + legSwing, 4, 2);
-      ctx.fillRect(1, 10 - legSwing, 4, 2);
-      break;
-    case "viking" /* Viking */:
-      ctx.fillStyle = "#3a3a28";
-      ctx.fillRect(-5, 4 + bob, 4, 8 + legSwing);
-      ctx.fillRect(1, 4 + bob, 4, 8 - legSwing);
-      ctx.fillStyle = "#5a4a2a";
-      ctx.fillRect(-5, 8 + legSwing, 4, 3);
-      ctx.fillRect(1, 8 - legSwing, 4, 3);
-      break;
-    case "daiTong" /* DaiMinh */:
-      ctx.fillStyle = "#4a1a1a";
-      ctx.fillRect(-5, 4 + bob, 4, 8 + legSwing);
-      ctx.fillRect(1, 4 + bob, 4, 8 - legSwing);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-5, 8 + legSwing, 4, 1);
-      ctx.fillRect(1, 8 - legSwing, 4, 1);
-      break;
-    case "baTu" /* BaTu */:
-      ctx.fillStyle = "#3a2010";
-      ctx.fillRect(-5, 4 + bob, 5, 8 + legSwing);
-      ctx.fillRect(1, 4 + bob, 5, 8 - legSwing);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-5, 8 + bob + legSwing, 5, 1);
-      ctx.fillRect(1, 8 + bob - legSwing, 5, 1);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-4, 8 + bob + legSwing, 3, 0.5);
-      ctx.fillRect(2, 8 + bob - legSwing, 3, 0.5);
-      ctx.fillStyle = "#4a2a10";
-      ctx.fillRect(-6, 12 + bob + legSwing, 6, 2);
-      ctx.fillRect(1, 12 + bob - legSwing, 6, 2);
-      ctx.fillStyle = "#5a3a18";
-      ctx.fillRect(-7, 12 + bob + legSwing, 2, 1);
-      ctx.fillRect(6, 12 + bob - legSwing, 2, 1);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-6, 12 + bob + legSwing, 6, 0.5);
-      ctx.fillRect(1, 12 + bob - legSwing, 6, 0.5);
-      break;
-    default:
-      ctx.fillStyle = "#2a2a2a";
-      ctx.fillRect(-5, 4 + bob, 4, 8 + legSwing);
-      ctx.fillRect(1, 4 + bob, 4, 8 - legSwing);
-  }
-  switch (civ) {
-    case "baTu" /* BaTu */:
-      ctx.fillStyle = "#4a4a48";
-      ctx.fillRect(-8, -7 + bob, 16, 13);
-      ctx.fillStyle = "#6a5a2a";
-      ctx.fillRect(-7, -8 + bob, 14, 14);
-      ctx.fillStyle = "#8a7030";
-      ctx.fillRect(-6, -7 + bob, 12, 2);
-      ctx.fillRect(-6, -4 + bob, 12, 2);
-      ctx.fillRect(-6, -1 + bob, 12, 2);
-      ctx.fillRect(-6, 2 + bob, 12, 2);
-      ctx.fillStyle = "#a08838";
-      ctx.fillRect(-6, -7 + bob, 12, 0.5);
-      ctx.fillRect(-6, -4 + bob, 12, 0.5);
-      ctx.fillRect(-6, -1 + bob, 12, 0.5);
-      ctx.fillRect(-6, 2 + bob, 12, 0.5);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-7, -8 + bob, 14, 1);
-      ctx.fillRect(-7, 5 + bob, 14, 1);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-6, -8 + bob, 12, 0.5);
-      ctx.fillStyle = "#ffd700";
-      ctx.beginPath();
-      ctx.arc(0, -2 + bob, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-5, -3 + bob, 3, 1);
-      ctx.fillRect(2, -3 + bob, 3, 1);
-      ctx.fillRect(-6, -2 + bob, 2, 1);
-      ctx.fillRect(4, -2 + bob, 2, 1);
-      ctx.fillStyle = "#ffeedd";
-      ctx.fillRect(-0.5, -3 + bob, 1, 2);
-      ctx.fillStyle = "#cc2222";
-      ctx.fillRect(-8, 4 + bob, 16, 2);
-      ctx.fillStyle = "#aa1818";
-      ctx.fillRect(-9, 5 + bob, 3, 4);
-      ctx.fillRect(6, 5 + bob, 3, 3);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-8, 4 + bob, 16, 0.5);
-      ctx.fillStyle = "#6a5a2a";
-      ctx.fillRect(-12, -8 + bob, 5, 10);
-      ctx.fillRect(7, -8 + bob, 5, 10);
-      ctx.fillStyle = "#8a7030";
-      ctx.fillRect(-12, -6 + bob, 5, 1);
-      ctx.fillRect(7, -6 + bob, 5, 1);
-      ctx.fillRect(-12, -3 + bob, 5, 1);
-      ctx.fillRect(7, -3 + bob, 5, 1);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-12, -8 + bob, 5, 1);
-      ctx.fillRect(7, -8 + bob, 5, 1);
-      ctx.fillStyle = "#44bbaa";
-      ctx.fillRect(-11, -5 + bob, 2, 2);
-      ctx.fillRect(9, -5 + bob, 2, 2);
-      ctx.fillStyle = "#66ddcc";
-      ctx.fillRect(-10.5, -4.5 + bob, 1, 1);
-      ctx.fillRect(9.5, -4.5 + bob, 1, 1);
-      break;
-    case "daiTong" /* DaiMinh */:
-      ctx.fillStyle = "#8a0a0a";
-      ctx.fillRect(-8, -8 + bob, 16, 14);
-      ctx.fillStyle = "#aa1111";
-      ctx.fillRect(-6, -6 + bob, 12, 10);
-      ctx.fillStyle = "rgba(255,215,0,0.15)";
-      for (let r = 0;r < 4; r++) {
-        for (let c = 0;c < 4; c++) {
-          ctx.fillRect(-5 + c * 3 + r % 2, -5 + bob + r * 3, 2, 2);
-        }
-      }
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-8, -8 + bob, 16, 2);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-3, -3 + bob, 6, 4);
-      ctx.fillStyle = "#ff4444";
-      ctx.fillRect(-2, -2 + bob, 4, 2);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-1, -1 + bob, 2, 1);
-      ctx.fillStyle = "#cc2222";
-      ctx.fillRect(-7, 4 + bob, 14, 3);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-7, 4 + bob, 14, 1);
-      ctx.fillStyle = "#8a0a0a";
-      ctx.fillRect(-10, -7 + bob, 4, 8);
-      ctx.fillRect(6, -7 + bob, 4, 8);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-10, -7 + bob, 4, 1);
-      ctx.fillRect(6, -7 + bob, 4, 1);
-      break;
-    case "yamato" /* Yamato */:
-      ctx.fillStyle = "#3a3a40";
-      ctx.fillRect(-8, -7 + bob, 16, 13);
-      ctx.fillStyle = "#2a2a35";
-      ctx.fillRect(-7, -8 + bob, 14, 14);
-      ctx.fillStyle = "#aa2222";
-      ctx.fillRect(-6, -6 + bob, 12, 1);
-      ctx.fillStyle = "#cc3333";
-      ctx.fillRect(-6, -3 + bob, 12, 1);
-      ctx.fillStyle = "#bb2828";
-      ctx.fillRect(-6, 0 + bob, 12, 1);
-      ctx.fillStyle = "#cc3333";
-      ctx.fillRect(-6, 3 + bob, 12, 1);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-7, -8 + bob, 14, 1);
-      ctx.fillRect(-7, 5 + bob, 14, 1);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-6, -8 + bob, 12, 0.5);
-      ctx.strokeStyle = "#ffd700";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(0, -2 + bob, 3, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-0.5, -3 + bob, 1, 2);
-      ctx.fillStyle = "#1a1a2a";
-      ctx.fillRect(-8, 5 + bob, 6, 4);
-      ctx.fillRect(2, 5 + bob, 6, 4);
-      ctx.fillStyle = "#cc3333";
-      ctx.fillRect(-8, 5 + bob, 6, 0.5);
-      ctx.fillRect(2, 5 + bob, 6, 0.5);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-8, 8 + bob, 6, 0.5);
-      ctx.fillRect(2, 8 + bob, 6, 0.5);
-      ctx.fillStyle = "#2a2a35";
-      ctx.fillRect(-12, -8 + bob, 5, 12);
-      ctx.fillRect(7, -8 + bob, 5, 12);
-      ctx.fillStyle = "#aa2222";
-      ctx.fillRect(-12, -6 + bob, 5, 1);
-      ctx.fillRect(7, -6 + bob, 5, 1);
-      ctx.fillStyle = "#cc3333";
-      ctx.fillRect(-12, -3 + bob, 5, 1);
-      ctx.fillRect(7, -3 + bob, 5, 1);
-      ctx.fillStyle = "#bb2828";
-      ctx.fillRect(-12, 0 + bob, 5, 1);
-      ctx.fillRect(7, 0 + bob, 5, 1);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-12, -8 + bob, 5, 1);
-      ctx.fillRect(7, -8 + bob, 5, 1);
-      ctx.fillRect(-12, 3 + bob, 5, 0.5);
-      ctx.fillRect(7, 3 + bob, 5, 0.5);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-11, -5 + bob, 1, 1);
-      ctx.fillRect(10, -5 + bob, 1, 1);
-      break;
-    case "laMa" /* LaMa */:
-      ctx.fillStyle = "#5a005a";
-      ctx.fillRect(-10, -6 + bob, 4, 14);
-      ctx.fillRect(6, -6 + bob, 4, 14);
-      ctx.fillStyle = "#6a6a68";
-      ctx.fillRect(-8, -8 + bob, 16, 14);
-      ctx.fillStyle = "rgba(255,255,255,0.15)";
-      for (let i = 0;i < 5; i++) {
-        ctx.fillRect(-7, -7 + bob + i * 3, 14, 1);
-      }
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-3, -4 + bob, 6, 4);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-2, -3 + bob, 4, 2);
-      ctx.fillStyle = "#8b0000";
-      ctx.fillRect(-8, 1 + bob, 16, 2);
-      break;
-    case "viking" /* Viking */:
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-8, -8 + bob, 16, 12);
-      ctx.fillStyle = "rgba(0,0,0,0.15)";
-      ctx.fillRect(-8, -4 + bob, 16, 1);
-      ctx.fillRect(-1, -3 + bob, 2, 6);
-      ctx.fillRect(-5, 0 + bob, 10, 1);
-      ctx.fillStyle = "#88ddff";
-      ctx.globalAlpha = 0.7 + Math.sin(unit.animTimer * 4) * 0.3;
-      ctx.fillRect(-2, -7 + bob, 4, 1);
-      ctx.fillRect(-1, -8 + bob, 2, 4);
-      ctx.fillRect(-9, -6 + bob, 2, 4);
-      ctx.fillRect(7, -6 + bob, 2, 4);
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#3a2a18";
-      ctx.fillRect(-9, 4 + bob, 18, 5);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-4, 3 + bob, 8, 6);
-      ctx.fillStyle = "#111";
-      ctx.fillRect(-2, 5 + bob, 4, 2);
-      ctx.fillStyle = "#4a4a4a";
-      ctx.fillRect(-11, -10 + bob, 22, 6);
-      ctx.fillRect(-12, -9 + bob, 2, 4);
-      ctx.fillRect(10, -9 + bob, 2, 4);
-      ctx.fillStyle = "#7a7a7a";
-      ctx.fillRect(-9, -10 + bob, 18, 2);
-      ctx.fillRect(-10, -7 + bob, 3, 2);
-      ctx.fillRect(7, -7 + bob, 3, 2);
-      ctx.fillStyle = "#5a4a3a";
-      ctx.fillRect(-8, 9 + bob, 16, 4);
-      ctx.fillStyle = "#3a2a1a";
-      ctx.fillRect(-8, 13 + bob, 16, 2);
-      break;
-    default:
-      ctx.fillStyle = cv.bodyMid;
-      ctx.fillRect(-7, -8 + bob, 14, 14);
-      ctx.fillStyle = color;
-      ctx.fillRect(-5, -6 + bob, 10, 10);
-  }
-  ctx.fillStyle = cv.skinColor;
-  ctx.fillRect(-4, -16 + bob, 8, 9);
-  ctx.fillStyle = "#000";
-  ctx.fillRect(-2, -12 + bob, 2, 2);
-  ctx.fillRect(1, -12 + bob, 2, 2);
   const ht = unit.type;
-  if (ht === "heroZarathustra" /* HeroZarathustra */) {
-    ctx.fillStyle = "#f5f5f0";
-    ctx.fillRect(-5, -24 + bob, 10, 8);
-    ctx.fillStyle = "#e0e0d8";
-    ctx.fillRect(-4, -22 + bob, 8, 2);
-    ctx.fillRect(-5, -18 + bob, 10, 2);
-    ctx.fillStyle = "#fdfdfd";
-    ctx.fillRect(-5, -10 + bob, 10, 5);
-    ctx.fillStyle = "#e8e8e8";
-    ctx.fillRect(-3, -9 + bob, 1, 4);
-    ctx.fillRect(2, -9 + bob, 1, 4);
-    ctx.fillStyle = "#aaaaaa";
-    ctx.fillRect(-4, -5 + bob, 8, 6);
-    ctx.fillStyle = "#999999";
-    ctx.fillRect(-2, -5 + bob, 4, 8);
-    ctx.fillStyle = "#ffaa00";
-    ctx.beginPath();
-    ctx.moveTo(0, -22 + bob);
-    ctx.quadraticCurveTo(-2, -19 + bob, 0, -18 + bob);
-    ctx.quadraticCurveTo(2, -19 + bob, 0, -22 + bob);
-    ctx.fill();
-  } else if (ht === "heroHuangZhong" /* HeroQiJiguang */) {
-    ctx.fillStyle = "#6a6a68";
-    ctx.fillRect(-5, -22 + bob, 10, 6);
-    ctx.fillStyle = "#aa2222";
-    ctx.fillRect(-7, -18 + bob, 2, 6);
-    ctx.fillRect(5, -18 + bob, 2, 6);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-6, -17 + bob, 12, 1);
-    ctx.fillRect(-2, -22 + bob, 4, 4);
-    ctx.fillStyle = "#dd1111";
-    ctx.fillRect(-1, -26 + bob, 2, 4);
-    ctx.fillRect(-2, -24 + bob, 4, 2);
-    ctx.fillStyle = "#222";
-    ctx.fillRect(-4, -10 + bob, 8, 3);
-  } else if (ht === "heroMusashi" /* HeroMusashi */) {
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(-5, -23 + bob, 10, 6);
-    ctx.fillStyle = "#111";
-    ctx.fillRect(-2, -26 + bob, 4, 4);
-    ctx.fillRect(0, -28 + bob, 2, 3);
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(-6, -20 + bob, 2, 5);
-    ctx.fillRect(4, -20 + bob, 2, 4);
-    ctx.fillStyle = "#222";
-    ctx.fillRect(-7, -18 + bob, 1, 3);
-    ctx.fillStyle = "#f0f0f0";
-    ctx.fillRect(-6, -20 + bob, 12, 2);
-    ctx.fillStyle = "#cc2222";
-    ctx.beginPath();
-    ctx.arc(0, -19 + bob, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#f0f0f0";
-    ctx.fillRect(5, -21 + bob, 4, 1.5);
-    ctx.fillRect(7, -20 + bob, 3, 1);
-    ctx.strokeStyle = "#aa6655";
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(-3, -14 + bob);
-    ctx.lineTo(2, -16 + bob);
-    ctx.stroke();
+  if (ht === "heroMusashi" /* HeroMusashi */) {
+    drawMusashiComplete(unit, ctx, bob, moving, legSwing, cv);
   } else if (ht === "heroSpartacus" /* HeroSpartacus */) {
-    ctx.fillStyle = "#5a5a58";
-    ctx.fillRect(-6, -21 + bob, 12, 5);
-    ctx.fillRect(-7, -16 + bob, 3, 5);
-    ctx.fillRect(4, -16 + bob, 3, 5);
-    ctx.fillStyle = "#8b0000";
-    ctx.fillRect(-4, -25 + bob, 8, 4);
-    ctx.fillStyle = "#222";
-    ctx.fillRect(-3, -16 + bob, 2, 1);
-    ctx.fillRect(1, -16 + bob, 2, 1);
+    drawSpartacusComplete(unit, ctx, bob, moving, legSwing, cv);
   } else if (ht === "heroRagnar" /* HeroRagnar */) {
-    ctx.fillStyle = "#3a3a38";
-    ctx.fillRect(-7, -22 + bob, 14, 6);
-    ctx.fillStyle = "#5a5a58";
-    ctx.fillRect(0, -18 + bob, 2, 6);
-    ctx.fillStyle = "#222";
-    ctx.fillRect(-7, -17 + bob, 14, 1);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-2, -22 + bob, 4, 1);
-    ctx.fillStyle = "#e8dec0";
-    ctx.fillRect(-11, -25 + bob, 4, 5);
-    ctx.fillRect(-13, -28 + bob, 3, 4);
-    ctx.fillRect(-14, -31 + bob, 2, 4);
-    ctx.fillRect(7, -25 + bob, 4, 5);
-    ctx.fillRect(10, -28 + bob, 3, 4);
-    ctx.fillRect(12, -31 + bob, 2, 4);
-    ctx.fillStyle = "#3a2a1a";
-    ctx.fillRect(-8, -21 + bob, 2, 2);
-    ctx.fillRect(6, -21 + bob, 2, 2);
-    ctx.fillStyle = "#d0c0a0";
-    ctx.fillRect(-14, -31 + bob, 1, 2);
-    ctx.fillRect(13, -31 + bob, 1, 2);
-    ctx.fillStyle = "#88ddff";
-    ctx.globalAlpha = 0.5 + Math.sin(unit.animTimer * 5) * 0.4;
-    ctx.fillRect(-2, -20 + bob, 4, 2);
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(-1, -19.5 + bob, 2, 1);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#eebb55";
-    ctx.fillRect(-6, -11 + bob, 12, 6);
-    ctx.fillRect(-4, -5 + bob, 8, 4);
-    ctx.fillRect(-2, -1 + bob, 4, 3);
-    ctx.fillStyle = "#c09030";
-    ctx.fillRect(-5, -10 + bob, 1, 8);
-    ctx.fillRect(4, -10 + bob, 1, 8);
-    ctx.fillRect(-1, -4 + bob, 2, 5);
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(-1, -1 + bob, 2, 1);
-    ctx.fillStyle = "#4488cc";
-    ctx.fillRect(-5, -13 + bob, 4, 1);
-    ctx.fillRect(1, -13 + bob, 4, 1);
+    drawRagnarComplete(unit, ctx, bob, moving, legSwing, cv);
+  } else if (ht === "heroHuangZhong" /* HeroQiJiguang */) {
+    drawQiJiguangComplete(unit, ctx, bob, moving, legSwing, cv);
+  } else if (ht === "heroZarathustra" /* HeroZarathustra */) {
+    drawZarathustraComplete(unit, ctx, bob, moving, legSwing, cv);
   } else {
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-5, -20 + bob, 10, 3);
-    ctx.fillRect(-3, -22 + bob, 6, 2);
-  }
-  const heroT = unit.type;
-  if (heroT === "heroMusashi" /* HeroMusashi */) {
-    ctx.save();
-    const isYamatoAttacking = unit.state === 5 /* Attacking */ && unit.attackAnimTimer > 0;
-    if (isYamatoAttacking) {
-      const swingPhase = unit.attackAnimTimer * 10 % (Math.PI * 2);
-      const swingCycle = Math.sin(unit.attackAnimTimer * 10);
-      const slashR = swingCycle * 1.2;
-      const slashL = -swingCycle * 1 + 0.3;
-      ctx.save();
-      ctx.translate(8, -6 + bob);
-      ctx.rotate(slashR);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 4, 4, 6);
-      ctx.fillStyle = "#1a1a2a";
-      ctx.fillRect(-2, 8, 4, 4);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 11, 4, 3);
-      ctx.fillStyle = "#f0f0f0";
-      ctx.beginPath();
-      ctx.moveTo(0, -18);
-      ctx.quadraticCurveTo(3, -10, 1, 0);
-      ctx.lineTo(2, 0);
-      ctx.quadraticCurveTo(4, -10, 1, -18);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0.5, -16, 0.5, 14);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-2, 0, 5, 2);
-      ctx.fillStyle = "#1a1a2a";
-      ctx.fillRect(-1, 2, 3, 4);
-      ctx.fillStyle = "#cc3333";
-      ctx.fillRect(-1, 3, 3, 1);
-      ctx.restore();
-      ctx.save();
-      ctx.translate(-6, -4 + bob);
-      ctx.rotate(slashL);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 2, 4, 5);
-      ctx.fillStyle = "#1a1a2a";
-      ctx.fillRect(-2, 5, 4, 3);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 7, 4, 3);
-      ctx.fillStyle = "#d8d8d8";
-      ctx.fillRect(-1, -12, 2, 14);
-      ctx.fillStyle = "#eee";
-      ctx.fillRect(-0.5, -11, 0.5, 12);
-      ctx.fillStyle = "#cc9944";
-      ctx.fillRect(-2, 0, 4, 1.5);
-      ctx.fillStyle = "#1a1a2a";
-      ctx.restore();
-      ctx.restore();
-    } else {
-      ctx.save();
-      ctx.translate(9, -6 + bob);
-      ctx.rotate(-0.3);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 4, 4, 6);
-      ctx.fillStyle = "#1a1a2a";
-      ctx.fillRect(-2, 8, 4, 4);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 11, 4, 3);
-      ctx.fillStyle = "#f0f0f0";
-      ctx.beginPath();
-      ctx.moveTo(-1, -16);
-      ctx.quadraticCurveTo(3, -8, 1, 2);
-      ctx.lineTo(3, 2);
-      ctx.quadraticCurveTo(5, -8, 1, -16);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0.5, -14, 0.5, 14);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-3, 2, 7, 2);
-      ctx.fillStyle = "#1a1a2a";
-      ctx.fillRect(-1, 4, 3, 5);
-      ctx.fillStyle = "#cc3333";
-      ctx.fillRect(-1, 5, 3, 1);
-      ctx.restore();
-      ctx.save();
-      ctx.translate(-8, -4 + bob);
-      ctx.rotate(0.4);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 2, 4, 5);
-      ctx.fillStyle = "#1a1a2a";
-      ctx.fillRect(-2, 5, 4, 3);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 7, 4, 3);
-      ctx.fillStyle = "#d0d0d0";
-      ctx.fillRect(-1, -10, 2, 14);
-      ctx.fillStyle = "#ddd";
-      ctx.fillRect(-0.5, -9, 0.5, 12);
-      ctx.fillStyle = "#cc9944";
-      ctx.fillRect(-2, 2, 4, 1.5);
-      ctx.fillStyle = "#1a1a2a";
-      ctx.fillRect(-1, 3, 2, 4);
-      ctx.restore();
-      ctx.restore();
-    }
-  } else if (heroT === "heroSpartacus" /* HeroSpartacus */) {
-    ctx.save();
-    const isLaMaAttacking = unit.state === 5 /* Attacking */ && unit.attackAnimTimer > 0;
-    ctx.save();
-    if (isLaMaAttacking) {
-      const shieldBash = Math.max(0, Math.sin(unit.attackAnimTimer * 10)) * 4;
-      ctx.translate(-8 + shieldBash, -4 + bob);
-    } else {
-      ctx.translate(-10, -4 + bob);
-    }
-    ctx.rotate(isLaMaAttacking ? -0.1 : 0.15);
-    ctx.fillStyle = cv.skinColor;
-    ctx.fillRect(-2, 2, 4, 5);
-    ctx.fillStyle = "#5a1a1a";
-    ctx.fillRect(-2, 5, 4, 3);
-    ctx.fillStyle = cv.skinColor;
-    ctx.fillRect(-2, 7, 4, 3);
-    ctx.fillStyle = "#8b0000";
-    ctx.fillRect(-6, -8, 10, 18);
-    ctx.fillStyle = "#daa520";
-    ctx.beginPath();
-    ctx.arc(-1, 1, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#ffd700";
-    ctx.beginPath();
-    ctx.arc(-1, 1, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#daa520";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(-6, -8, 10, 18);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-4, -4, 2, 1);
-    ctx.fillRect(1, -4, 2, 1);
-    ctx.restore();
-    ctx.save();
-    if (isLaMaAttacking) {
-      const slashAng = Math.sin(unit.attackAnimTimer * 10) * 2.2 - 1.2;
-      ctx.translate(6, -8 + bob);
-      ctx.rotate(slashAng);
-    } else {
-      ctx.translate(9, -6 + bob);
-      ctx.rotate(-0.3);
-    }
-    ctx.fillStyle = cv.skinColor;
-    ctx.fillRect(-2, 0, 4, 6);
-    ctx.fillRect(-2, 4, 4, 5);
-    ctx.fillStyle = "#5a1a1a";
-    ctx.fillRect(-2, 7, 4, 3);
-    ctx.fillStyle = cv.skinColor;
-    ctx.fillRect(-2, 9, 4, 3);
-    ctx.fillStyle = "#c8c8d0";
-    ctx.fillRect(-1, -16, 3, 18);
-    ctx.fillStyle = "#e0e0e8";
-    ctx.fillRect(-1, -16, 1, 16);
-    ctx.fillStyle = "#aab";
-    ctx.fillRect(0, -14, 1, 12);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-3, 0, 7, 2);
-    ctx.fillStyle = "#6a3a10";
-    ctx.fillRect(-1, 2, 3, 5);
-    ctx.fillStyle = "#8B4513";
-    ctx.fillRect(-0.5, 2.5, 2, 3.5);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-1, 6, 3, 2);
-    ctx.fillStyle = "#cc1111";
-    ctx.fillRect(0, 6.5, 1, 1);
-    ctx.restore();
-    ctx.restore();
-  } else if (heroT === "heroRagnar" /* HeroRagnar */) {
-    ctx.save();
-    const isVikingAttacking = unit.state === 5 /* Attacking */ && unit.attackAnimTimer > 0;
-    if (isVikingAttacking) {
-      const swingPhase = unit.attackAnimTimer * 10 % (Math.PI * 2);
-      const swingCycle = Math.sin(unit.attackAnimTimer * 10);
-      const chopR = swingCycle * 1.6 - 0.2;
-      const chopL = -swingCycle * 1.2 + 0.4;
-      ctx.save();
-      ctx.translate(8, -6 + bob);
-      ctx.rotate(chopR);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 2, 4, 8);
-      ctx.fillStyle = "#3a2a1a";
-      ctx.fillRect(-2, 6, 4, 4);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 10, 4, 3);
-      ctx.fillStyle = "#4a2a10";
-      ctx.fillRect(-1, -12, 3, 26);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-2, -8, 5, 2);
-      ctx.fillRect(-2, 2, 5, 2);
-      ctx.fillRect(-2, 12, 5, 2);
-      ctx.fillStyle = "#88ccff";
-      ctx.fillRect(1, -12, 8, 8);
-      ctx.fillStyle = "#d0e0f0";
-      ctx.beginPath();
-      ctx.moveTo(2, -14);
-      ctx.lineTo(10, -10);
-      ctx.lineTo(10, 0);
-      ctx.lineTo(2, -6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(9, -9, 1, 8);
-      ctx.fillStyle = "#44ffff";
-      ctx.fillRect(4, -10, 2, 2);
-      ctx.fillRect(6, -8, 2, 2);
-      ctx.fillRect(4, -6, 2, 2);
-      ctx.restore();
-      ctx.save();
-      ctx.translate(-6, -4 + bob);
-      ctx.rotate(chopL);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 1, 4, 6);
-      ctx.fillStyle = "#3a2a1a";
-      ctx.fillRect(-2, 4, 4, 3);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 7, 4, 3);
-      ctx.fillStyle = "#5a3a18";
-      ctx.fillRect(-1, -8, 2, 18);
-      ctx.fillStyle = "#aaa";
-      ctx.beginPath();
-      ctx.moveTo(1, -8);
-      ctx.lineTo(6, -5);
-      ctx.lineTo(6, 1);
-      ctx.lineTo(1, -2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#8b0000";
-      ctx.fillRect(4, -4, 2, 4);
-      ctx.restore();
-      ctx.restore();
-    } else {
-      ctx.save();
-      ctx.translate(9, -4 + bob);
-      ctx.rotate(-0.4);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 2, 4, 7);
-      ctx.fillStyle = "#3a2a1a";
-      ctx.fillRect(-2, 5, 4, 4);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 9, 4, 3);
-      ctx.fillStyle = "#4a2a10";
-      ctx.fillRect(-1, -8, 3, 24);
-      ctx.fillStyle = "#daa520";
-      ctx.fillRect(-2, -4, 5, 2);
-      ctx.fillRect(-2, 4, 5, 2);
-      ctx.fillRect(-2, 14, 5, 2);
-      ctx.fillStyle = "#88ccff";
-      ctx.globalAlpha = 0.5 + Math.sin(unit.animTimer * 6) * 0.3;
-      ctx.fillRect(1, -9, 9, 10);
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#d0e0f0";
-      ctx.beginPath();
-      ctx.moveTo(2, -10);
-      ctx.lineTo(10, -6);
-      ctx.lineTo(10, 4);
-      ctx.lineTo(2, -2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(9, -5, 1, 8);
-      ctx.fillStyle = "#44ffff";
-      ctx.fillRect(4, -6, 2, 2);
-      ctx.fillRect(6, -4, 2, 2);
-      ctx.fillRect(4, -2, 2, 2);
-      ctx.fillStyle = "#ccffff";
-      for (let i = 0;i < 3; i++) {
-        const mistY = -12 - (unit.animTimer * 8 + i * 4) % 10;
-        const mistX = 6 + Math.sin(mistY * 0.5) * 2;
-        ctx.globalAlpha = 1 - Math.abs(mistY + 12) / 10;
-        ctx.fillRect(mistX, mistY, 1.5, 1.5);
-      }
-      ctx.globalAlpha = 1;
-      ctx.restore();
-      ctx.save();
-      ctx.translate(-7, -2 + bob);
-      ctx.rotate(0.5);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 0, 4, 6);
-      ctx.fillStyle = "#3a2a1a";
-      ctx.fillRect(-2, 3, 4, 3);
-      ctx.fillStyle = cv.skinColor;
-      ctx.fillRect(-2, 6, 4, 3);
-      ctx.fillStyle = "#5a3a18";
-      ctx.fillRect(-1, -10, 2, 18);
-      ctx.fillStyle = "#aaa";
-      ctx.beginPath();
-      ctx.moveTo(1, -10);
-      ctx.lineTo(6, -7);
-      ctx.lineTo(6, -1);
-      ctx.lineTo(1, -4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#ccc";
-      ctx.fillRect(5, -6, 1, 5);
-      ctx.fillStyle = "#8b0000";
-      ctx.fillRect(4, -6, 2, 4);
-      ctx.restore();
-    }
-    ctx.restore();
-  } else if (heroT === "heroZarathustra" /* HeroZarathustra */) {
-    ctx.save();
-    ctx.translate(8, -4 + bob);
-    ctx.fillStyle = "#3a2010";
-    ctx.fillRect(0, -14, 3, 22);
-    ctx.fillStyle = "#daa520";
-    for (let i = 0;i < 6; i++) {
-      ctx.fillRect(0, -12 + i * 4, 3, 1);
-    }
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-1, 8, 5, 2);
-    ctx.fillStyle = "#daa520";
-    ctx.fillRect(-1, -16, 5, 3);
-    ctx.fillStyle = "#ffd700";
-    ctx.beginPath();
-    ctx.moveTo(-3, -20);
-    ctx.lineTo(6, -20);
-    ctx.lineTo(4, -16);
-    ctx.lineTo(-1, -16);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = "#daa520";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(-3, -18, 2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(6, -18, 2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = "#ff4400";
-    ctx.beginPath();
-    ctx.moveTo(1.5, -28);
-    ctx.quadraticCurveTo(-4, -22, 1.5, -20);
-    ctx.quadraticCurveTo(7, -22, 1.5, -28);
-    ctx.fill();
-    ctx.fillStyle = "#ffcc00";
-    ctx.globalAlpha = 0.6 + Math.sin(unit.animTimer * 12) * 0.4;
-    ctx.beginPath();
-    ctx.moveTo(1.5, -26);
-    ctx.quadraticCurveTo(-1.5, -22, 1.5, -20);
-    ctx.quadraticCurveTo(4.5, -22, 1.5, -26);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#ff9900";
-    for (let i = 0;i < 4; i++) {
-      const emberY = -28 - (unit.animTimer * 15 + i * 5) % 12;
-      const emberX = 1.5 + Math.sin(emberY * 0.5 + i) * 3;
-      ctx.globalAlpha = 1 - Math.abs(emberY + 28) / 12;
-      ctx.fillRect(emberX, emberY, 1.5, 1.5);
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  } else if (heroT === "heroHuangZhong" /* HeroQiJiguang */) {
-    ctx.save();
-    const isMingAttacking = unit.state === 5 /* Attacking */ && unit.attackAnimTimer > 0;
-    if (isMingAttacking) {
-      const cleavePhase = Math.sin(unit.attackAnimTimer * 10);
-      const swordAngle = cleavePhase * 1.5 - 0.5;
-      ctx.translate(6, -6 + bob);
-      ctx.rotate(swordAngle);
-    } else {
-      ctx.translate(2, -4 + bob);
-      ctx.rotate(0.3);
-    }
-    ctx.fillStyle = cv.skinColor;
-    ctx.fillRect(-6, 2, 8, 4);
-    ctx.fillStyle = "#aa2222";
-    ctx.fillRect(-4, 1, 4, 5);
-    ctx.fillStyle = cv.skinColor;
-    ctx.fillRect(2, 2, 3, 4);
-    ctx.fillStyle = cv.skinColor;
-    ctx.fillRect(-2, -1, 4, 7);
-    ctx.fillStyle = "#aa2222";
-    ctx.fillRect(-2, 3, 4, 4);
-    ctx.fillStyle = cv.skinColor;
-    ctx.fillRect(-2, 7, 4, 3);
-    ctx.fillStyle = "#222";
-    ctx.fillRect(-1, -6, 3, 16);
-    ctx.fillStyle = "#aa2222";
-    ctx.fillRect(-1, -2, 3, 1);
-    ctx.fillRect(-1, 2, 3, 1);
-    ctx.fillRect(-1, 6, 3, 1);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-1.5, 9, 4, 3);
-    ctx.fillStyle = "#ffd700";
-    ctx.fillRect(-3, -7, 7, 2);
-    ctx.fillStyle = "#e0e0e0";
-    ctx.beginPath();
-    ctx.moveTo(1, -7);
-    ctx.lineTo(1, -28);
-    ctx.quadraticCurveTo(0, -32, -2, -30);
-    ctx.lineTo(-2, -7);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, -28, 1, 21);
-    ctx.restore();
+    ctx.fillStyle = "#ff00ff";
+    ctx.fillRect(-5, -20 + bob, 10, 20);
   }
   if (unit.heroLevel > 1) {
     ctx.fillStyle = "#ffd700";
     ctx.font = "bold 8px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`${unit.heroLevel}`, 0, -28 + bob);
+    ctx.fillText(`${unit.heroLevel}`, 0, -32 + bob);
     ctx.textAlign = "left";
   }
 }
@@ -7247,20 +12653,177 @@ function renderAttackWeapon(unit, ctx, totalBob, swingCycle, swingPhase) {
       const slashAngle = swingCycle * 1.2 - 0.3;
       ctx.translate(6, -4 + totalBob);
       ctx.rotate(slashAngle);
-      ctx.fillStyle = "#ccc";
-      ctx.fillRect(-1, -16, 3, 14);
-      ctx.fillStyle = "#8B5E3C";
-      ctx.fillRect(-3, -3, 7, 3);
-      ctx.fillStyle = "#ffd700";
-      ctx.fillRect(-1, 0, 3, 2);
-      if (Math.abs(swingCycle) > 0.5) {
-        ctx.globalAlpha = 0.4;
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 2;
+      if (unit.civilization === "viking" /* Viking */) {
+        const age = unit.age;
+        ctx.save();
+        ctx.scale(0.85, 0.85);
+        ctx.fillStyle = age >= 4 ? "#e6e6e6" : age >= 3 ? "#d0d0d0" : "#b0b0b0";
+        ctx.fillRect(-2.5, -20, 5, 20);
         ctx.beginPath();
-        ctx.arc(0, -8, 14, slashAngle - 0.8, slashAngle + 0.2);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
+        ctx.moveTo(-2.5, -20);
+        ctx.lineTo(0, -25);
+        ctx.lineTo(2.5, -20);
+        ctx.fill();
+        ctx.fillStyle = age >= 4 ? "#aaa" : "#999";
+        ctx.fillRect(-1, -20, 2, 18);
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(-2.5, -22.5, 0.5, 23);
+        ctx.fillRect(2, -22.5, 0.5, 23);
+        ctx.fillStyle = age >= 4 ? "#daa520" : "#5a3a18";
+        ctx.fillRect(-4.5, -2, 9, 2);
+        ctx.fillStyle = "#2a1a10";
+        ctx.fillRect(-1.5, 0, 3, 5);
+        ctx.fillStyle = "#111";
+        ctx.fillRect(-1.5, 1.5, 3, 0.5);
+        ctx.fillRect(-1.5, 3.5, 3, 0.5);
+        ctx.fillStyle = age >= 4 ? "#daa520" : "#5a3a18";
+        ctx.beginPath();
+        ctx.ellipse(0, 6.5, 3.5, 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(-1.5, 5, 3, 1.5);
+        if (age >= 4) {
+          ctx.fillStyle = "#ff4400";
+          ctx.globalAlpha = 0.8 + Math.sin(unit.animTimer * 10) * 0.2;
+          ctx.fillRect(-0.5, -17, 1, 1.5);
+          ctx.fillRect(-0.5, -13, 1, 1.5);
+          ctx.fillRect(-0.5, -9, 1, 1.5);
+          ctx.fillRect(-0.5, -5, 1, 1.5);
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = "rgba(170, 0, 0, 0.8)";
+          ctx.beginPath();
+          ctx.moveTo(0, -25);
+          ctx.lineTo(2.5, -19);
+          ctx.lineTo(-2.5, -20);
+          ctx.fill();
+        }
+        if (Math.abs(swingCycle) > 0.4) {
+          ctx.globalAlpha = 0.5;
+          ctx.strokeStyle = "#ffaa00";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(-6, -8, 16, slashAngle - 0.9, slashAngle + 0.3);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        ctx.restore();
+      } else if (unit.civilization === "yamato" /* Yamato */) {
+        const age = unit.age;
+        ctx.fillStyle = "#3a2a10";
+        ctx.fillRect(1, -2, 2, 8);
+        ctx.fillStyle = "#bb2222";
+        ctx.fillRect(1, 1, 2, 2);
+        ctx.fillStyle = age >= 4 ? "#f0f0f0" : "#ddd";
+        ctx.beginPath();
+        ctx.moveTo(1, -16);
+        ctx.quadraticCurveTo(4, -8, 2, -2);
+        ctx.lineTo(4, -2);
+        ctx.quadraticCurveTo(6, -8, 3, -16);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = age >= 4 ? "#ffd700" : "#666";
+        ctx.fillRect(-1, -2, 6, 2);
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.fillRect(1, -14, 0.5, 12);
+        if (Math.abs(swingCycle) > 0.5) {
+          ctx.globalAlpha = 0.4;
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(-2, -6, 15, slashAngle - 0.7, slashAngle + 0.2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      } else if (unit.civilization === "baTu" /* BaTu */) {
+        const age = unit.age;
+        ctx.fillStyle = "#8a6a30";
+        ctx.fillRect(-1, -1, 3, 5);
+        ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
+        ctx.beginPath();
+        ctx.moveTo(-1, -15);
+        ctx.quadraticCurveTo(4, -8, 0, -1);
+        ctx.lineTo(2, -1);
+        ctx.quadraticCurveTo(6, -8, 1, -15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = age >= 4 ? "#ffd700" : "#aa8822";
+        ctx.fillRect(-3, -2, 6, 2);
+        if (Math.abs(swingCycle) > 0.5) {
+          ctx.globalAlpha = 0.35;
+          ctx.strokeStyle = "#ffd700";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(-2, -6, 16, slashAngle - 0.8, slashAngle + 0.3);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      } else if (unit.civilization === "daiTong" /* DaiMinh */) {
+        const age = unit.age;
+        ctx.fillStyle = "#222";
+        ctx.fillRect(-1, -1, 3, 10);
+        ctx.fillStyle = "#aa2222";
+        ctx.fillRect(-1, 3, 3, 2);
+        ctx.fillStyle = age >= 4 ? "#e6e6e6" : "#ccc";
+        ctx.fillRect(0, -22, 3, 21);
+        ctx.beginPath();
+        ctx.moveTo(0, -22);
+        ctx.lineTo(1.5, -26);
+        ctx.lineTo(3, -22);
+        ctx.fill();
+        ctx.fillStyle = age >= 4 ? "#ffd700" : "#888";
+        ctx.fillRect(-3, -2, 8, 2);
+        if (Math.abs(swingCycle) > 0.5) {
+          ctx.globalAlpha = 0.3;
+          ctx.strokeStyle = "#ffaa44";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(-4, -4, 20, slashAngle - 0.8, slashAngle + 0.3);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      } else if (unit.civilization === "laMa" /* LaMa */) {
+        const age = unit.age;
+        ctx.fillStyle = "#4a2a10";
+        ctx.fillRect(-1, -1, 3, 4);
+        ctx.fillStyle = age >= 4 ? "#e0e0e0" : "#c0c0c0";
+        ctx.beginPath();
+        ctx.moveTo(-1, -2);
+        ctx.lineTo(-2, -12);
+        ctx.lineTo(0.5, -16);
+        ctx.lineTo(3, -12);
+        ctx.lineTo(2, -2);
+        ctx.fill();
+        ctx.fillStyle = "#111";
+        ctx.fillRect(-0.5, -14, 0.5, 12);
+        ctx.fillStyle = age >= 4 ? "#daa520" : "#c9a84c";
+        ctx.fillRect(-3, -3, 7, 2);
+        ctx.beginPath();
+        ctx.arc(0.5, 4, 2, 0, Math.PI * 2);
+        ctx.fill();
+        if (Math.abs(swingCycle) > 0.5) {
+          ctx.globalAlpha = 0.4;
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(0, -6, 12, slashAngle - 0.6, slashAngle + 0.2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      } else {
+        ctx.fillStyle = "#ccc";
+        ctx.fillRect(-1, -16, 3, 14);
+        ctx.fillStyle = "#8B5E3C";
+        ctx.fillRect(-3, -3, 7, 3);
+        ctx.fillStyle = "#ffd700";
+        ctx.fillRect(-1, 0, 3, 2);
+        if (Math.abs(swingCycle) > 0.5) {
+          ctx.globalAlpha = 0.4;
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, -8, 14, slashAngle - 0.8, slashAngle + 0.2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
       }
       break;
     }
@@ -7656,21 +13219,29 @@ function renderAttackWeapon(unit, ctx, totalBob, swingCycle, swingPhase) {
       const civ = unit.civilization;
       switch (civ) {
         case "baTu" /* BaTu */: {
+          const age = unit.age;
           const slashAngle = swingCycle * 1.4 - 0.2;
           ctx.translate(6, -6 + totalBob);
           ctx.rotate(slashAngle);
+          ctx.fillStyle = "#6a5a2a";
+          ctx.fillRect(-5, -2, 5, 4);
           ctx.fillStyle = "#8a6a30";
-          ctx.fillRect(-1, -1, 2, 5);
-          ctx.fillStyle = "#eee";
+          ctx.fillRect(-1, -1, 2, 4);
+          ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
           ctx.beginPath();
-          ctx.moveTo(-1, -14);
-          ctx.quadraticCurveTo(3, -8, 0, -1);
+          ctx.moveTo(-1, -11);
+          ctx.quadraticCurveTo(3, -5, 0, -1);
           ctx.lineTo(2, -1);
-          ctx.quadraticCurveTo(5, -8, 1, -14);
+          ctx.quadraticCurveTo(5, -5, 1, -11);
           ctx.closePath();
           ctx.fill();
-          ctx.fillStyle = "#ffd700";
-          ctx.fillRect(-3, -2, 6, 2);
+          if (age >= 4) {
+            ctx.fillStyle = "#ffd700";
+            ctx.fillRect(-2, -2, 4, 2);
+          } else {
+            ctx.fillStyle = "#ffd700";
+            ctx.fillRect(-3, -2, 6, 2);
+          }
           if (Math.abs(swingCycle) > 0.5) {
             ctx.globalAlpha = 0.35;
             ctx.strokeStyle = "#ffd700";
@@ -7683,28 +13254,48 @@ function renderAttackWeapon(unit, ctx, totalBob, swingCycle, swingPhase) {
           break;
         }
         case "daiTong" /* DaiMinh */: {
-          const sweepAngle = swingCycle * 1 - 0.5;
-          ctx.translate(5, -8 + totalBob);
-          ctx.rotate(sweepAngle);
-          ctx.fillStyle = "#5a3a20";
-          ctx.fillRect(-1, -22, 2, 26);
-          ctx.fillStyle = "#ccc";
-          ctx.fillRect(-3, -26, 6, 3);
+          const age = unit.age;
+          const thrust = Math.sin(swingPhase) * 10;
+          const wobble = Math.cos(swingPhase * 2) * 0.08;
+          ctx.translate(4 + thrust * 0.6, -6 + totalBob);
+          ctx.rotate(Math.PI / 2 - 0.3 + wobble);
+          ctx.fillStyle = "#8a0a0a";
+          ctx.fillRect(-5, -1, 6, 4);
+          ctx.fillStyle = age >= 4 ? "#6a2222" : "#5a3a20";
+          ctx.fillRect(-1, -24, 2, 28);
+          ctx.fillStyle = age >= 4 ? "#eee" : "#ccc";
+          ctx.fillRect(-3, -28, 6, 3);
           ctx.beginPath();
-          ctx.moveTo(0, -29);
-          ctx.lineTo(-2, -23);
-          ctx.lineTo(2, -23);
+          ctx.moveTo(0, -31);
+          ctx.lineTo(-2, -25);
+          ctx.lineTo(2, -25);
           ctx.closePath();
           ctx.fill();
-          ctx.fillRect(2, -24, 3, 2);
+          ctx.fillRect(2, -26, 3, 2);
+          if (age >= 4) {
+            ctx.fillStyle = "#ffd700";
+            ctx.fillRect(-2, -26, 4, 3);
+          }
           ctx.fillStyle = "#dd3333";
-          ctx.fillRect(-2, -4, 2, 4);
+          ctx.fillRect(-2, -22, 2, 4);
+          if (thrust > 4) {
+            ctx.globalAlpha = 0.3;
+            ctx.strokeStyle = "#ffbb44";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -26);
+            ctx.lineTo(0, -26 - thrust * 0.5);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          }
           break;
         }
         case "yamato" /* Yamato */: {
           const cutAngle = swingCycle * 1.3 - 0.1;
           ctx.translate(6, -5 + totalBob);
           ctx.rotate(cutAngle);
+          ctx.fillStyle = "#2a2a35";
+          ctx.fillRect(-6, -2, 7, 4);
           ctx.fillStyle = "#333";
           ctx.fillRect(-1, -1, 2, 6);
           ctx.fillStyle = "#cc3333";
@@ -7828,6 +13419,8 @@ function renderAttackWeapon(unit, ctx, totalBob, swingCycle, swingPhase) {
           const wobble = Math.cos(swingPhase * 2) * 0.08;
           ctx.translate(4 + thrust * 0.6, -6 + totalBob);
           ctx.rotate(Math.PI / 2 - 0.3 + wobble);
+          ctx.fillStyle = "#8b0000";
+          ctx.fillRect(-5, -1, 6, 4);
           ctx.fillStyle = "#8B5E3C";
           ctx.fillRect(-1, -24, 2, 28);
           ctx.fillStyle = "#ccc";
@@ -7859,7 +13452,6 @@ function renderAttackWeapon(unit, ctx, totalBob, swingCycle, swingPhase) {
     case "heroSpartacus" /* HeroSpartacus */:
     case "heroMusashi" /* HeroMusashi */:
     case "heroRagnar" /* HeroRagnar */:
-    case "heroZarathustra" /* HeroZarathustra */:
     case "heroHuangZhong" /* HeroQiJiguang */: {
       const civ = unit.civilization;
       if (civ === "baTu" /* BaTu */) {
@@ -8358,7 +13950,6 @@ function renderAttackEffects(unit, ctx, totalBob, impactPhase, _impactMoment) {
     case "heroSpartacus" /* HeroSpartacus */:
     case "heroMusashi" /* HeroMusashi */:
     case "heroRagnar" /* HeroRagnar */:
-    case "heroZarathustra" /* HeroZarathustra */:
     case "heroHuangZhong" /* HeroQiJiguang */: {
       const civ4 = unit.civilization;
       const slashP = (Math.sin(impactPhase) + 1) * 0.5;
@@ -8607,8 +14198,13 @@ function renderUnit(unit, ctx) {
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(flip, 1);
-  const isMoving = unit.state === 1 /* Moving */ || unit.state === 3 /* Returning */;
+  const prevX = unit.lastX !== undefined ? unit.lastX : unit.x;
+  const prevY = unit.lastY !== undefined ? unit.lastY : unit.y;
+  const distMoved = Math.hypot(unit.x - prevX, unit.y - prevY);
+  const isMoving = distMoved > 0.1 || unit.state === 1 /* Moving */ || unit.state === 3 /* Returning */;
   const bob = isMoving ? Math.sin(unit.animTimer * 18) * 2 : 0;
+  unit.lastX = unit.x;
+  unit.lastY = unit.y;
   const buildSwing = unit.state === 4 /* Building */ ? Math.sin(unit.buildSwingTimer * 8) * 4 : 0;
   const gatherSwing = unit.state === 2 /* Gathering */ ? Math.sin(unit.gatherEffectTimer * 14) * 3 : 0;
   const isIdle = unit.state === 0 /* Idle */;
@@ -8670,6 +14266,51 @@ function renderUnit(unit, ctx) {
       ctx.globalAlpha = 1;
     }
   }
+  if (isMoving && !unit.isStealthed && unit.type !== "targetDummy" /* TargetDummy */) {
+    const civ = unit.civilization;
+    let dustColor;
+    let pColor;
+    switch (civ) {
+      case "baTu" /* BaTu */:
+        dustColor = "#c9a060";
+        pColor = "#e0c090";
+        break;
+      case "viking" /* Viking */:
+        dustColor = "#5a5a58";
+        pColor = "#7a7a78";
+        break;
+      case "daiTong" /* DaiMinh */:
+        dustColor = "#8a6a50";
+        pColor = "#a88a70";
+        break;
+      case "yamato" /* Yamato */:
+        dustColor = "#7a7a60";
+        pColor = "#9a9a80";
+        break;
+      default:
+        dustColor = "#8a7a60";
+        pColor = "#a89a80";
+    }
+    ctx.save();
+    ctx.translate(0, 16);
+    const isCav = unit.type === "knight" /* Knight */ || unit.type === "scout" /* Scout */ || unit.type === "equites" /* Equites */ || unit.type === "fireLancer" /* FireLancer */ || unit.type === "bearRider" /* BearRider */ || unit.type === "warElephant" /* WarElephant */ || unit.type === "yabusame" /* Yabusame */;
+    const numParticles = isCav ? 5 : 3;
+    const spreadMultiplier = isCav ? 8 : 5;
+    const liftMultiplier = isCav ? 12 : 8;
+    ctx.globalAlpha = isCav ? 0.35 : 0.25;
+    for (let i = 0;i < numParticles; i++) {
+      const lift = (unit.animTimer * liftMultiplier + i * 5) % 8;
+      const spreadX = Math.sin(unit.animTimer * 10 + i) * spreadMultiplier;
+      const size = (isCav ? 3 : 2) - lift / 4;
+      if (size > 0.5) {
+        ctx.fillStyle = i % 2 === 0 ? dustColor : pColor;
+        ctx.beginPath();
+        ctx.arc(-8 + spreadX + i * 2, -lift, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
   if (unit.isStealthed && unit.type === "ninja" /* Ninja */) {
     ctx.globalAlpha = 0.15;
     ctx.fillStyle = "#4400aa";
@@ -8710,6 +14351,21 @@ function renderUnit(unit, ctx) {
         break;
       case "ulfhednar" /* Ulfhednar */:
         drawUlfhednar(unit, ctx, age, totalBob, isMoving);
+        break;
+      case "warElephant" /* WarElephant */:
+        drawWarElephant(unit, ctx, age, totalBob, isMoving);
+        break;
+      case "fireLancer" /* FireLancer */:
+        drawFireLancer(unit, ctx, age, totalBob, isMoving);
+        break;
+      case "yabusame" /* Yabusame */:
+        drawYabusame(unit, ctx, age, totalBob, isMoving);
+        break;
+      case "equites" /* Equites */:
+        drawEquites(unit, ctx, age, totalBob, isMoving);
+        break;
+      case "bearRider" /* BearRider */:
+        drawBearRider(unit, ctx, age, totalBob, isMoving);
         break;
       case "targetDummy" /* TargetDummy */:
         drawTargetDummy(unit, ctx, age, totalBob);
@@ -8787,7 +14443,9 @@ function renderUnit(unit, ctx) {
     const swingCycle = Math.sin(swingT * 10);
     const swingPhase = swingT * 10 % (Math.PI * 2);
     ctx.save();
-    renderAttackWeapon(unit, ctx, totalBob, swingCycle, swingPhase);
+    if (!isCivElite(unit.type) && !isCivCavalry(unit.type) && unit.type !== "archer" /* Archer */) {
+      renderAttackWeapon(unit, ctx, totalBob, swingCycle, swingPhase);
+    }
     ctx.restore();
     const impactPhase = unit.attackAnimTimer * 10 % (Math.PI * 2);
     const impactMoment = Math.sin(impactPhase) > 0.85;
@@ -8932,7 +14590,7 @@ class BaseCombatStrategy {
       const dist2 = Math.hypot(dx2, dy2);
       const range2 = unit.civRange + bldg.tileW * TILE_SIZE * 0.4;
       if (findNearestEnemy) {
-        const nearbyEnemy = findNearestEnemy(unit.x, unit.y, unit.team, unit.data.sight * TILE_SIZE * 0.6);
+        const nearbyEnemy = findNearestEnemy(unit.x, unit.y, unit.team, unit.data.sight * TILE_SIZE + TILE_SIZE * 2);
         if (nearbyEnemy) {
           unit.attackBuildingTarget = null;
           unit.attackUnit(nearbyEnemy);
@@ -8957,7 +14615,7 @@ class BaseCombatStrategy {
       unit.attackTarget = null;
       unit.manualAttackCommand = false;
       if (findNearestEnemy) {
-        const aggroRange = unit.data.sight * TILE_SIZE * 0.8;
+        const aggroRange = unit.data.sight * TILE_SIZE * 1.5;
         const next = findNearestEnemy(unit.x, unit.y, unit.team, aggroRange);
         if (next) {
           unit.attackTarget = next;
@@ -9127,6 +14785,7 @@ class ArcherStrategy extends BaseCombatStrategy {
   }
   executeBuildingAttack(context, target, dx, dy) {
     const { unit, particles } = context;
+    audioSystem.playArrowSound();
     const atkAngle = Math.atan2(dy, dx);
     particles.emit({
       x: unit.x + (unit.facingRight ? 10 : -10),
@@ -9145,6 +14804,7 @@ class ArcherStrategy extends BaseCombatStrategy {
   executeUnitAttackFx(context, target, atkAngle, damageDealt) {
     const { unit, particles } = context;
     const age = unit.age;
+    audioSystem.playArrowSound();
     particles.emit({
       x: unit.x + (unit.facingRight ? 10 : -10),
       y: unit.y - 8,
@@ -9228,6 +14888,7 @@ class SwordsmanStrategy extends BaseCombatStrategy {
   executeUnitAttackFx(context, target, atkAngle, damageDealt) {
     const { unit, particles } = context;
     const age = unit.age;
+    audioSystem.playSlashSound();
     for (let i = 0;i < (age >= 3 ? 6 : 4); i++) {
       const sa = atkAngle - 1 + i * 0.5;
       particles.emit({
@@ -9295,6 +14956,7 @@ class SpearmanStrategy extends BaseCombatStrategy {
   executeUnitAttackFx(context, target, atkAngle, damageDealt) {
     const { unit, particles } = context;
     const age = unit.age;
+    audioSystem.playSpearStab();
     particles.emit({
       x: target.x,
       y: target.y - 5,
@@ -9342,7 +15004,8 @@ class KnightStrategy extends BaseCombatStrategy {
         if (unit.passiveCooldown <= 0) {
           unit.passiveCooldown = 8;
           const os = target.speed;
-          target.speed = 0;
+          if (!target.isUnstoppable)
+            target.speed = 0;
           setTimeout(() => {
             if (target.alive)
               target.speed = os;
@@ -9391,6 +15054,11 @@ class KnightStrategy extends BaseCombatStrategy {
   executeUnitAttackFx(context, target, atkAngle, damageDealt) {
     const { unit, particles } = context;
     const age = unit.age;
+    if (unit.civilization === "laMa" /* LaMa */ || unit.civilization === "daiTong" /* DaiMinh */) {
+      audioSystem.playSpearStab();
+    } else {
+      audioSystem.playSlashSound();
+    }
     particles.emit({
       x: target.x,
       y: target.y,
@@ -9486,41 +15154,42 @@ class ScoutStrategy extends BaseCombatStrategy {
   }
 }
 
-// src/entities/combat/strategies/ImmortalStrategy.ts
-class ImmortalStrategy extends BaseCombatStrategy {
-  applyPassiveIdle(unit, dt, particles) {
-    super.applyPassiveIdle(unit, dt, particles);
-    if (unit.magiCooldown <= 0 && !unit.magiCastActive) {
-      if (Math.random() < dt * 1.5) {
-        particles.emit({ x: unit.x + (Math.random() - 0.5) * 10, y: unit.y - 8, count: 1, spread: 3, speed: [5, 15], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.4, 0.8], size: [1.5, 3], colors: ["#88ddff", "#44ff88", "#aaeeff"], gravity: -20, shape: "star" });
-      }
-    }
-  }
-  executeUnitAttackFx(context, target, atkAngle, damageDealt) {
-    const { unit, particles } = context;
-    particles.emit({ x: target.x, y: target.y - 5, count: 8, spread: 5, speed: [40, 100], angle: [0, Math.PI * 2], life: [0.2, 0.5], size: [2, 4], colors: ["#8866cc", "#aa88dd", "#44ddff", "#fff"], gravity: -15, shape: "star" });
-    const boltCount = 4;
-    for (let b = 0;b < boltCount; b++) {
-      const t = b / boltCount;
-      const bx = unit.x + (target.x - unit.x) * t + (Math.random() - 0.5) * 6;
-      const by = unit.y - 8 + (target.y - 4 - (unit.y - 8)) * t + (Math.random() - 0.5) * 4;
-      particles.emit({ x: bx, y: by, count: 1, spread: 2, speed: [5, 20], angle: [0, Math.PI * 2], life: [0.1, 0.25], size: [1.5, 3], colors: ["#8866cc", "#aa88dd"], gravity: 0, shape: "circle" });
-    }
-  }
-}
-
 // src/entities/combat/strategies/ChuKoNuStrategy.ts
 class ChuKoNuStrategy extends BaseCombatStrategy {
   executeUnitAttackFx(context, target, atkAngle, damageDealt) {
     const { unit, particles } = context;
     const isComboReady = unit.camYVeCooldown <= 0 && !unit.camYVeComboActive;
-    const slashColors = isComboReady ? ["#8b0000", "#ff0044", "#dd2222"] : ["#dd3333", "#ffd700", "#fff"];
-    for (let sw = 0;sw < 5; sw++) {
-      const sa = atkAngle - 0.4 + sw * 0.2;
-      particles.emit({ x: target.x, y: target.y - 4, count: 1, spread: 2, speed: [100 + sw * 20, 200], angle: [sa - 0.05, sa + 0.05], life: [0.1, 0.25], size: [1.5, 6], colors: slashColors, gravity: 0, shape: "rect" });
+    const slashColors = isComboReady ? ["#8b0000", "#ff0033", "#ffffff"] : ["#dd2222", "#ff8800", "#ffffff"];
+    for (let sw = 0;sw < 6; sw++) {
+      const sa = atkAngle - 0.6 + sw * 0.25;
+      particles.emit({
+        x: target.x,
+        y: target.y - 4,
+        count: 1,
+        spread: 2,
+        speed: [100 + sw * 15, 200],
+        angle: [sa - 0.05, sa + 0.05],
+        life: [0.15, 0.3],
+        size: [2, 5],
+        colors: slashColors,
+        gravity: 10,
+        shape: "rect"
+      });
     }
-    const sparkColors = isComboReady ? ["#ff0044", "#8b0000", "#ff3333"] : ["#ffd700", "#fff", "#c9a84c"];
-    particles.emit({ x: target.x, y: target.y - 4, count: 5, spread: 4, speed: [40, 90], angle: [0, Math.PI * 2], life: [0.1, 0.3], size: [1.5, 3], colors: sparkColors, gravity: 50, shape: "circle" });
+    const sparkColors = isComboReady ? ["#ff0033", "#8b0000", "#550000"] : ["#ff4444", "#dd2222", "#ffcc00"];
+    particles.emit({
+      x: target.x,
+      y: target.y - 4,
+      count: 8,
+      spread: 6,
+      speed: [40, 110],
+      angle: [0, Math.PI * 2],
+      life: [0.15, 0.4],
+      size: [1.5, 4],
+      colors: sparkColors,
+      gravity: 60,
+      shape: "circle"
+    });
     if (isComboReady) {
       particles.emit({ x: unit.x, y: unit.y - 8, count: 4, spread: 3, speed: [10, 30], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.3, 0.6], size: [2, 4], colors: ["#8b0000", "#aa2222", "#ff0044"], gravity: -20, shape: "circle" });
     }
@@ -9569,15 +15238,25 @@ class NinjaStrategy extends BaseCombatStrategy {
   }
   executeUnitAttackFx(context, target, atkAngle, damageDealt) {
     const { unit, particles } = context;
-    for (let sw = 0;sw < 6; sw++) {
-      const sa = atkAngle - 1 + sw * 0.35;
-      particles.emit({ x: target.x, y: target.y - 4, count: 1, spread: 2, speed: [80 + sw * 15, 160], angle: [sa - 0.05, sa + 0.05], life: [0.12, 0.35], size: [2, 4], colors: ["#aa44ff", "#8800ff", "#ddd"], gravity: 5, shape: "rect" });
+    const slashColors = ["#aa44ff", "#8800ff", "#1a1a2e", "#ffffff"];
+    for (let sw = 0;sw < 5; sw++) {
+      const sa = atkAngle - 0.8 + sw * 0.4;
+      particles.emit({
+        x: target.x,
+        y: target.y - 4,
+        count: 1,
+        spread: 3,
+        speed: [120 + sw * 10, 220],
+        angle: [sa - 0.05, sa + 0.05],
+        life: [0.1, 0.25],
+        size: [1.5, 4],
+        colors: slashColors,
+        gravity: 0,
+        shape: "rect"
+      });
     }
-    const midX = (unit.x + target.x) / 2;
-    const midY = (unit.y + target.y) / 2;
-    particles.emit({ x: midX, y: midY - 4, count: 6, spread: 4, speed: [50, 100], angle: [atkAngle - 0.2, atkAngle + 0.2], life: [0.1, 0.3], size: [2, 4], colors: ["#1a1a2e", "#2a2a4e", "#4400aa"], gravity: 0, shape: "rect" });
-    particles.emit({ x: target.x, y: target.y - 6, count: 5, spread: 4, speed: [40, 90], angle: [0, Math.PI * 2], life: [0.1, 0.3], size: [1.5, 3], colors: ["#fff", "#ddd", "#aaa"], gravity: 50, shape: "circle" });
-    particles.emit({ x: target.x, y: target.y - 4, count: 10, spread: 6, speed: [60, 150], angle: [0, Math.PI * 2], life: [0.2, 0.5], size: [2, 5], colors: ["#8800ff", "#6600cc", "#aa44ff", "#ff00ff"], gravity: 15, shape: "star" });
+    particles.emit({ x: target.x, y: target.y - 4, count: 2, spread: 1, speed: [180, 250], angle: [atkAngle - 0.3, atkAngle + 0.3], life: [0.05, 0.15], size: [1, 8], colors: ["#fff", "#ddbbff"], gravity: 0, shape: "rect" });
+    particles.emit({ x: target.x, y: target.y - 6, count: 6, spread: 5, speed: [40, 100], angle: [0, Math.PI * 2], life: [0.2, 0.4], size: [2, 4], colors: ["#1a1a2e", "#2a2a4e", "#8800ff"], gravity: -10, shape: "star" });
   }
 }
 
@@ -9585,7 +15264,15 @@ class NinjaStrategy extends BaseCombatStrategy {
 class CenturionStrategy extends BaseCombatStrategy {
   shouldSkipStandardAttack(context) {
     const { unit } = context;
-    return unit.centurionMode === "spear";
+    if (unit.centurionMode === "spear") {
+      let dist = 999;
+      if (unit.attackTarget)
+        dist = Math.hypot(unit.attackTarget.x - unit.x, unit.attackTarget.y - unit.y);
+      else if (unit.attackBuildingTarget)
+        dist = Math.hypot(unit.attackBuildingTarget.x - unit.x, unit.attackBuildingTarget.y - unit.y);
+      return dist > 40;
+    }
+    return false;
   }
   applyPreDamageModifiers(context, target, baseDamage) {
     const { unit, particles } = context;
@@ -9638,13 +15325,23 @@ class CenturionStrategy extends BaseCombatStrategy {
   }
   executeUnitAttackFx(context, target, atkAngle, damageDealt) {
     const { unit, particles } = context;
-    if (unit.centurionMode === "spear") {
-      particles.emit({ x: unit.x + (unit.facingRight ? 12 : -12), y: unit.y - 6, count: 1, spread: 0, speed: [200, 250], angle: [atkAngle - 0.02, atkAngle + 0.02], life: [0.12, 0.2], size: [3, 4], colors: ["#8B6914"], gravity: 10, shape: "spear" });
-      particles.emit({ x: target.x, y: target.y - 2, count: 4, spread: 4, speed: [20, 60], angle: [atkAngle - 0.5, atkAngle + 0.5], life: [0.1, 0.25], size: [1.5, 3], colors: ["#c9a84c", "#aa8844", "#ddd"], gravity: 20, shape: "rect" });
-    } else {
-      particles.emit({ x: target.x, y: target.y - 4, count: 6, spread: 5, speed: [50, 110], angle: [atkAngle - 0.8, atkAngle + 0.8], life: [0.2, 0.5], size: [2, 5], colors: ["#ff4400", "#ffd700", "#fff"], gravity: 30, shape: "rect" });
-      particles.emit({ x: target.x, y: target.y + 4, count: 3, spread: 6, speed: [20, 50], angle: [-0.3, 0.3], life: [0.2, 0.4], size: [2, 4], colors: ["#8a7a60", "#aa9a80"], gravity: 40, shape: "circle" });
-    }
+    particles.emit({
+      x: unit.x + (unit.facingRight ? 12 : -12),
+      y: unit.y - 6,
+      count: 1,
+      spread: 0,
+      speed: [250, 300],
+      angle: [atkAngle - 0.01, atkAngle + 0.01],
+      life: [0.15, 0.25],
+      size: [2, 3],
+      colors: ["#aaa", "#fff"],
+      gravity: 0,
+      shape: "trident",
+      rotation: atkAngle,
+      rotSpeed: 0
+    });
+    particles.emit({ x: target.x, y: target.y - 6, count: 8, spread: 5, speed: [50, 100], angle: [atkAngle - 0.8, atkAngle + 0.8], life: [0.15, 0.35], size: [2, 4], colors: ["#ff3300", "#ffccee", "#ddd"], gravity: 15, shape: "star" });
+    particles.emit({ x: target.x, y: target.y, count: 5, spread: 6, speed: [20, 50], angle: [-0.5, 0.5], life: [0.2, 0.4], size: [2, 5], colors: ["#8a7a60", "#aa9a80", "#554433"], gravity: 30, shape: "circle" });
   }
 }
 
@@ -9673,12 +15370,597 @@ class UlfhednarStrategy extends BaseCombatStrategy {
     return super.applyPassiveDefense(unit, incomingDmg, particles, pierceBlock);
   }
   executeUnitAttackFx(context, target, atkAngle, damageDealt) {
-    const { particles } = context;
-    for (let i = 0;i < 8; i++) {
-      const sa = atkAngle - 1.5 + i * 0.4;
-      particles.emit({ x: target.x, y: target.y - 3, count: 1, spread: 2, speed: [70, 150], angle: [sa - 0.08, sa + 0.08], life: [0.12, 0.3], size: [2, 4], colors: ["#ff2200", "#ff6600", "#ffaa00"], gravity: 15, shape: "rect" });
+    const { unit, particles } = context;
+    const isRaging = unit.ulfhednarRageActive;
+    const slashColors = isRaging ? ["#ff2200", "#ff6600", "#ffaa00"] : ["#cccccc", "#ffffff", "#aaaaaa"];
+    const axSpread = isRaging ? 0.3 : 0.15;
+    for (let i = 0;i < 4; i++) {
+      const sa1 = atkAngle - 0.5 + i * axSpread;
+      particles.emit({
+        x: target.x,
+        y: target.y - 4,
+        count: 1,
+        spread: 2,
+        speed: [100 + i * 15, 200],
+        angle: [sa1 - 0.05, sa1 + 0.05],
+        life: [0.1, 0.25],
+        size: [2, 5],
+        colors: slashColors,
+        gravity: 5,
+        shape: "rect"
+      });
     }
-    particles.emit({ x: target.x, y: target.y - 5, count: 5, spread: 5, speed: [40, 90], angle: [0, Math.PI * 2], life: [0.15, 0.4], size: [1.5, 3], colors: ["#cc0000", "#880000", "#ff4444"], gravity: 60, shape: "circle" });
+    for (let i = 0;i < 4; i++) {
+      const sa2 = atkAngle + 0.5 - i * axSpread;
+      particles.emit({
+        x: target.x,
+        y: target.y - 2,
+        count: 1,
+        spread: 2,
+        speed: [100 + i * 15, 200],
+        angle: [sa2 - 0.05, sa2 + 0.05],
+        life: [0.1, 0.25],
+        size: [2, 5],
+        colors: slashColors,
+        gravity: 5,
+        shape: "rect"
+      });
+    }
+    const bloodColors = isRaging ? ["#880000", "#ee0000", "#ff4444"] : ["#990000", "#cc0000"];
+    particles.emit({
+      x: target.x,
+      y: target.y - 4,
+      count: isRaging ? 12 : 6,
+      spread: 8,
+      speed: [50, 140],
+      angle: [0, Math.PI * 2],
+      life: [0.2, 0.5],
+      size: [1.5, 4],
+      colors: bloodColors,
+      gravity: 80,
+      shape: "circle"
+    });
+    if (isRaging) {
+      particles.emit({
+        x: target.x,
+        y: target.y - 6,
+        count: 4,
+        spread: 4,
+        speed: [80, 160],
+        angle: [-Math.PI * 0.8, -Math.PI * 0.2],
+        life: [0.1, 0.3],
+        size: [2, 4],
+        colors: ["#fff", "#ffccaa"],
+        gravity: 20,
+        shape: "star"
+      });
+    }
+  }
+}
+
+// src/entities/combat/strategies/WarElephantStrategy.ts
+class WarElephantStrategy extends BaseCombatStrategy {
+  applyPreDamageModifiers(context, target, baseDamage) {
+    const { unit, particles, findNearestEnemy } = context;
+    let dmg = baseDamage;
+    if (findNearestEnemy) {
+      const splashRadius = 40;
+      const splashDmg = Math.round(dmg * 0.5);
+      const nearby = findNearestEnemy(target.x, target.y, unit.team, splashRadius);
+      if (nearby && nearby.id !== target.id) {
+        nearby.hp -= splashDmg;
+        particles.emit({
+          x: nearby.x,
+          y: nearby.y,
+          count: 8,
+          spread: 12,
+          speed: [30, 80],
+          angle: [0, Math.PI * 2],
+          life: [0.3, 0.6],
+          size: [4, 6],
+          colors: ["#8b0000", "#ff2222", "#550000"],
+          gravity: 30,
+          shape: "circle"
+        });
+      }
+    }
+    return dmg;
+  }
+  executeBuildingAttack(context, target, dx, dy) {
+    super.executeBuildingAttack(context, target, dx, dy);
+    const extraDamage = context.unit.attack * 2.5;
+    target.takeDamage(extraDamage, context.particles);
+    context.particles.emit({
+      x: target.x,
+      y: target.y + 10,
+      count: 15,
+      spread: 30,
+      speed: [20, 60],
+      angle: [-0.8, 0.8],
+      life: [0.5, 0.9],
+      size: [5, 10],
+      colors: ["#6a5a40", "#4a3a20", "#aa9a80"],
+      gravity: 25,
+      shape: "circle"
+    });
+  }
+  executeUnitAttackFx(context, target, atkAngle, damageDealt) {
+    const { particles } = context;
+    audioSystem.playSlashSound();
+    particles.emit({
+      x: target.x,
+      y: target.y,
+      count: 12,
+      spread: 15,
+      speed: [40, 100],
+      angle: [0, Math.PI * 2],
+      life: [0.3, 0.7],
+      size: [4, 8],
+      colors: ["#aaddff", "#fff", "#ddd"],
+      gravity: 10,
+      shape: "circle"
+    });
+    particles.emit({
+      x: target.x,
+      y: target.y + 10,
+      count: 10,
+      spread: 20,
+      speed: [10, 40],
+      angle: [-0.6, 0.6],
+      life: [0.4, 0.8],
+      size: [4, 7],
+      colors: ["#6a5a40", "#4a3a20", "#aa9a80"],
+      gravity: 20,
+      shape: "circle"
+    });
+  }
+}
+
+// src/entities/combat/strategies/FireLancerStrategy.ts
+class FireLancerStrategy extends BaseCombatStrategy {
+  applyPreDamageModifiers(context, target, baseDamage) {
+    const { unit, particles } = context;
+    let dmg = baseDamage;
+    if (unit.passiveChargeReady) {
+      dmg = Math.round(dmg * 2.5);
+      if (!target.isUnstoppable) {
+        const os = target.speed;
+        if (os > 0) {
+          target.speed = 0;
+          setTimeout(() => {
+            if (target.alive)
+              target.speed = os;
+          }, 1500);
+        }
+      }
+    }
+    return dmg;
+  }
+  executeUnitAttackFx(context, target, atkAngle, damageDealt) {
+    const { unit, particles } = context;
+    if (unit.passiveChargeReady) {
+      audioSystem.playExplosionSound();
+      particles.emit({
+        x: target.x,
+        y: target.y,
+        count: 25,
+        spread: 25,
+        speed: [60, 180],
+        angle: [0, Math.PI * 2],
+        life: [0.3, 0.8],
+        size: [4, 10],
+        colors: ["#ff8c00", "#ff2222", "#ffff00", "#ffffff"],
+        gravity: -10,
+        shape: "star"
+      });
+      particles.emit({
+        x: target.x,
+        y: target.y + 10,
+        count: 12,
+        spread: 20,
+        speed: [30, 80],
+        angle: [-0.6, 0.6],
+        life: [0.4, 0.9],
+        size: [3, 8],
+        colors: ["#6a5a40", "#4a3a20", "#aa9a80"],
+        gravity: 20,
+        shape: "circle"
+      });
+      unit.passiveChargeReady = false;
+    } else {
+      audioSystem.playSpearStab();
+      particles.emit({
+        x: target.x,
+        y: target.y,
+        count: 6,
+        spread: 8,
+        speed: [40, 100],
+        angle: [atkAngle - 0.2, atkAngle + 0.2],
+        life: [0.2, 0.4],
+        size: [2, 5],
+        colors: ["#ffdd00", "#ff4400"],
+        gravity: -10,
+        shape: "circle"
+      });
+    }
+  }
+}
+
+// src/entities/combat/strategies/YabusameStrategy.ts
+class YabusameStrategy extends BaseCombatStrategy {
+  doAttack(context) {
+    const { unit, dt, particles, tileMap, findNearestEnemy, findNearestEnemyBuilding } = context;
+    const leashRange = unit.data.sight * TILE_SIZE * 1.5;
+    if (unit.attackBuildingTarget) {
+      super.doAttack(context);
+      return;
+    }
+    if (!unit.attackTarget || !unit.attackTarget.alive || unit.attackTarget.hp <= 0) {
+      unit.attackTarget = null;
+      unit.manualAttackCommand = false;
+      if (findNearestEnemy) {
+        const aggroRange = unit.data.sight * TILE_SIZE * 0.8;
+        const next = findNearestEnemy(unit.x, unit.y, unit.team, aggroRange);
+        if (next) {
+          unit.attackTarget = next;
+        } else {
+          if (findNearestEnemyBuilding) {
+            const bldg = findNearestEnemyBuilding(unit.x, unit.y, unit.team, aggroRange);
+            if (bldg) {
+              unit.attackBuilding(bldg);
+              return;
+            }
+          }
+          unit.state = 0 /* Idle */;
+          return;
+        }
+      } else {
+        unit.state = 0 /* Idle */;
+        return;
+      }
+    }
+    const target = unit.attackTarget;
+    const dx = target.x - unit.x;
+    const dy = target.y - unit.y;
+    const dist = Math.hypot(dx, dy);
+    const range = unit.civRange;
+    if (!unit.manualAttackCommand && dist > leashRange) {
+      unit.attackTarget = null;
+      unit.state = 0 /* Idle */;
+      return;
+    }
+    unit.facingRight = dx > 0;
+    let isMoving = false;
+    if (dist > range) {
+      unit.chaseMove(dx, dy, dist, dt, tileMap);
+      isMoving = true;
+    } else if (dist < range * 0.7) {
+      unit.chaseMove(-dx, -dy, dist, dt, tileMap);
+      isMoving = true;
+    } else {
+      unit.state = 5 /* Attacking */;
+    }
+    if (dist <= range && unit.attackCooldown <= 0) {
+      let atkSpeedMod = this.calculateAttackSpeedModifier(unit);
+      unit.attackCooldown = unit.civAttackSpeed * atkSpeedMod;
+      let dmg = unit.attack;
+      unit.passiveHitCounter++;
+      if (Math.random() < 0.15) {
+        dmg *= 2;
+        particles.emit({
+          x: target.x,
+          y: target.y - 8,
+          count: 8,
+          spread: 5,
+          speed: [50, 120],
+          angle: [0, Math.PI * 2],
+          life: [0.2, 0.5],
+          size: [2, 5],
+          colors: ["#ff0000", "#ff4444", "#fff"],
+          gravity: -10,
+          shape: "star"
+        });
+      }
+      dmg = this.applyPreDamageModifiers(context, target, dmg);
+      const pierceBlock = this.shouldPierceBlock(unit);
+      dmg = target.applyPassiveDefense(dmg, particles, pierceBlock);
+      target.hp -= dmg;
+      this.handlePostDamageEffects(context, target, dmg);
+      const atkAngle = Math.atan2(dy, dx);
+      this.executeUnitAttackFx(context, target, atkAngle, dmg);
+    }
+  }
+  executeBuildingAttack(context, target, dx, dy) {
+    const { unit, particles } = context;
+    audioSystem.playArrowSound();
+    const atkAngle = Math.atan2(dy, dx);
+    particles.emit({
+      x: unit.x + (unit.facingRight ? 10 : -10),
+      y: unit.y - 8,
+      count: 1,
+      spread: 0,
+      speed: [280, 320],
+      angle: [atkAngle - 0.02, atkAngle + 0.02],
+      life: [0.15, 0.35],
+      size: [3, 4],
+      colors: unit.age >= 4 ? ["#ffd700"] : ["#cc3333"],
+      gravity: 15,
+      shape: "arrow"
+    });
+  }
+  executeUnitAttackFx(context, target, atkAngle, damageDealt) {
+    const { unit, particles } = context;
+    const age = unit.age;
+    audioSystem.playArrowSound();
+    particles.emit({
+      x: unit.x + (unit.facingRight ? 10 : -10),
+      y: unit.y - 8,
+      count: 1,
+      spread: 0,
+      speed: [350, 400],
+      angle: [atkAngle - 0.02, atkAngle + 0.02],
+      life: [0.15, 0.35],
+      size: [3, 4],
+      colors: age >= 4 ? ["#ffd700"] : ["#cc3333"],
+      gravity: 15,
+      shape: "arrow"
+    });
+    particles.emit({
+      x: target.x,
+      y: target.y - 5,
+      count: 3,
+      spread: 5,
+      speed: [20, 60],
+      angle: [-Math.PI, 0],
+      life: [0.15, 0.4],
+      size: [1, 2.5],
+      colors: ["#ff4444", "#ff8800", "#fff"],
+      gravity: 60,
+      shape: "circle"
+    });
+  }
+}
+
+// src/entities/combat/strategies/EquitesStrategy.ts
+class EquitesStrategy extends BaseCombatStrategy {
+  doAttack(context) {
+    const { unit, dt, particles, tileMap, findNearestEnemy, findNearestEnemyBuilding } = context;
+    const leashRange = unit.data.sight * TILE_SIZE * 1.5;
+    if (unit.attackBuildingTarget) {
+      super.doAttack(context);
+      return;
+    }
+    if (!unit.attackTarget || !unit.attackTarget.alive || unit.attackTarget.hp <= 0) {
+      unit.attackTarget = null;
+      unit.manualAttackCommand = false;
+      unit.passiveCooldown = Math.max(0, unit.passiveCooldown - dt);
+      unit.centurionBlockCooldown = Math.max(0, unit.centurionBlockCooldown - dt);
+      if (findNearestEnemy) {
+        const aggroRange = unit.data.sight * TILE_SIZE * 0.8;
+        const next = findNearestEnemy(unit.x, unit.y, unit.team, aggroRange);
+        if (next)
+          unit.attackTarget = next;
+        else {
+          if (findNearestEnemyBuilding) {
+            const bldg = findNearestEnemyBuilding(unit.x, unit.y, unit.team, aggroRange);
+            if (bldg) {
+              unit.attackBuilding(bldg);
+              return;
+            }
+          }
+          unit.state = 0 /* Idle */;
+          return;
+        }
+      } else {
+        unit.state = 0 /* Idle */;
+        return;
+      }
+    }
+    const target = unit.attackTarget;
+    const dx = target.x - unit.x;
+    const dy = target.y - unit.y;
+    const dist = Math.hypot(dx, dy);
+    const pilumReady = unit.passiveCooldown <= 0;
+    const range = pilumReady ? 130 : unit.civRange;
+    if (!unit.manualAttackCommand && dist > leashRange) {
+      unit.attackTarget = null;
+      unit.state = 0 /* Idle */;
+      return;
+    }
+    unit.facingRight = dx > 0;
+    if (dist > range) {
+      unit.chaseMove(dx, dy, dist, dt, tileMap);
+      unit.passiveCooldown = Math.max(0, unit.passiveCooldown - dt);
+      unit.centurionBlockCooldown = Math.max(0, unit.centurionBlockCooldown - dt);
+      return;
+    }
+    if (this.shouldSkipStandardAttack(context))
+      return;
+    if (unit.attackCooldown <= 0) {
+      let atkSpeedMod = this.calculateAttackSpeedModifier(unit);
+      unit.attackCooldown = unit.civAttackSpeed * atkSpeedMod;
+      let dmg = unit.attack;
+      const atkAngle = Math.atan2(dy, dx);
+      if (pilumReady) {
+        unit.passiveCooldown = 8;
+        dmg = Math.round(dmg * 1.5);
+        audioSystem.playArrowSound();
+        particles.emit({
+          x: unit.x + (unit.facingRight ? 12 : -12),
+          y: unit.y - 6,
+          count: 1,
+          spread: 0,
+          speed: [250, 300],
+          angle: [atkAngle - 0.05, atkAngle + 0.05],
+          life: [0.2, 0.4],
+          size: [3, 5],
+          colors: ["#a8a8a8", "#ffffff"],
+          gravity: 15,
+          shape: "spear"
+        });
+        setTimeout(() => {
+          if (target.alive) {
+            const actualDmg = target.applyPassiveDefense(dmg, particles, true);
+            target.hp -= actualDmg;
+            this.handlePostDamageEffects(context, target, actualDmg);
+            particles.emit({
+              x: target.x,
+              y: target.y - 4,
+              count: 5,
+              spread: 8,
+              speed: [30, 80],
+              angle: [-Math.PI, 0],
+              life: [0.2, 0.4],
+              size: [2, 4],
+              colors: ["#ff0000", "#aaaaaa"],
+              gravity: 30,
+              shape: "star"
+            });
+          }
+        }, 100);
+      } else {
+        unit.passiveHitCounter++;
+        dmg = this.applyPreDamageModifiers(context, target, dmg);
+        dmg = target.applyPassiveDefense(dmg, particles, this.shouldPierceBlock(unit));
+        target.hp -= dmg;
+        this.handlePostDamageEffects(context, target, dmg);
+        this.executeUnitAttackFx(context, target, atkAngle, dmg);
+      }
+    } else {
+      unit.passiveCooldown = Math.max(0, unit.passiveCooldown - dt);
+      unit.centurionBlockCooldown = Math.max(0, unit.centurionBlockCooldown - dt);
+    }
+  }
+  applyPassiveDefense(unit, incomingDmg, particles, pierceBlock = false) {
+    if (!pierceBlock && unit.centurionBlockCooldown <= 0) {
+      unit.centurionBlockCooldown = 12;
+      particles.emit({
+        x: unit.x + (unit.facingRight ? 6 : -6),
+        y: unit.y - 8,
+        count: 6,
+        spread: 5,
+        speed: [20, 50],
+        angle: [0, Math.PI * 2],
+        life: [0.2, 0.4],
+        size: [2, 4],
+        colors: ["#d6d6d6", "#aaaaaa", "#ffffff"],
+        gravity: 10,
+        shape: "star"
+      });
+      audioSystem.playSlashSound();
+      return 0;
+    }
+    return super.applyPassiveDefense(unit, incomingDmg, particles, pierceBlock);
+  }
+  executeUnitAttackFx(context, target, atkAngle, damageDealt) {
+    const { unit, particles } = context;
+    audioSystem.playSpearStab();
+    particles.emit({
+      x: target.x,
+      y: target.y - 5,
+      count: 5,
+      spread: 6,
+      speed: [40, 90],
+      angle: [0, Math.PI * 2],
+      life: [0.2, 0.4],
+      size: [2, 4],
+      colors: ["#ffdd00", "#ffffff", "#ffaa00"],
+      gravity: 20,
+      shape: "circle"
+    });
+    particles.emit({
+      x: unit.x + (unit.facingRight ? 10 : -10),
+      y: unit.y - 6,
+      count: 3,
+      spread: 2,
+      speed: [150, 220],
+      angle: [atkAngle - 0.1, atkAngle + 0.1],
+      life: [0.1, 0.25],
+      size: [2, 4],
+      colors: ["#cccccc", "#ffffff"],
+      gravity: 0,
+      shape: "rect"
+    });
+  }
+}
+
+// src/entities/combat/strategies/BearRiderStrategy.ts
+class BearRiderStrategy extends BaseCombatStrategy {
+  calculateAttackSpeedModifier(unit) {
+    let mod = super.calculateAttackSpeedModifier(unit);
+    if (unit.hp < unit.maxHp * 0.3) {
+      mod *= 0.6;
+    }
+    return mod;
+  }
+  applyPreDamageModifiers(context, target, baseDamage) {
+    const { unit, particles } = context;
+    let dmg = baseDamage;
+    const isRaging = unit.hp < unit.maxHp * 0.3;
+    if (isRaging) {
+      dmg = Math.round(dmg * 1.5);
+    }
+    if (unit.passiveCooldown <= 0) {
+      unit.passiveCooldown = 8;
+      if (!target.isUnstoppable) {
+        const os = target.speed;
+        if (os > 0) {
+          target.speed = Math.max(1, Math.floor(os * 0.3));
+          setTimeout(() => {
+            if (target.alive)
+              target.speed = os;
+          }, 3000);
+        }
+      }
+      audioSystem.playDeathSound();
+      particles.emit({
+        x: unit.x + (unit.facingRight ? 10 : -10),
+        y: unit.y - 12,
+        count: 12,
+        spread: 20,
+        speed: [30, 80],
+        angle: [-0.5, 0.5],
+        life: [0.3, 0.6],
+        size: [3, 6],
+        colors: ["#cccccc", "#888888", "#555555"],
+        gravity: 0,
+        shape: "circle"
+      });
+      if (isRaging) {
+        particles.emit({
+          x: unit.x,
+          y: unit.y,
+          count: 10,
+          spread: 10,
+          speed: [20, 50],
+          angle: [0, Math.PI * 2],
+          life: [0.4, 0.8],
+          size: [2, 5],
+          colors: ["#ff0000", "#ff5500"],
+          gravity: -20,
+          shape: "star"
+        });
+      }
+    }
+    return dmg;
+  }
+  executeUnitAttackFx(context, target, atkAngle, damageDealt) {
+    const { unit, particles } = context;
+    audioSystem.playSlashSound();
+    const isRaging = unit.hp < unit.maxHp * 0.3;
+    particles.emit({
+      x: target.x,
+      y: target.y - 6,
+      count: isRaging ? 10 : 6,
+      spread: 5,
+      speed: [50, 100],
+      angle: [0, Math.PI * 2],
+      life: [0.2, 0.4],
+      size: [2, 5],
+      colors: isRaging ? ["#ff4444", "#ffffff"] : ["#dddddd", "#ffffff"],
+      gravity: 20,
+      shape: "circle"
+    });
   }
 }
 
@@ -9940,16 +16222,38 @@ class ZarathustraStrategy extends BaseCombatStrategy {
         particles.emit({ x: unit.x, y: unit.y - 8, count: 12, spread: 4, speed: [60, 140], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.8, 1.6], size: [3, 6], colors: ["#ffd700", "#fff"], gravity: -60, shape: "star" });
         break;
       case "batu_m0": {
-        const t = unit.attackTarget;
-        const fx = t ? t.x : unit.x + (unit.facingRight ? 60 : -60);
-        const fy = t ? t.y : unit.y;
-        HeroSkillUtils.aoeDamage(unit, 45, aoeRange, 6, findNearestEnemy);
-        HeroSkillUtils.explodeVfx(fx, fy, particles, ["#ff2200", "#ff4400", "#ff6600", "#ffaa00"]);
-        const fa = Math.atan2(fy - unit.y, fx - unit.x);
-        particles.emit({ x: unit.x, y: unit.y - 8, count: 12, spread: 2, speed: [220, 400], angle: [fa - 0.08, fa + 0.08], life: [0.08, 0.2], size: [3, 7], colors: ["#ff6600", "#ffaa00", "#fff"], gravity: 0, shape: "circle" });
-        for (let i = 0;i < 5; i++) {
-          const p = i / 5;
-          particles.emit({ x: unit.x + (fx - unit.x) * p, y: unit.y + (fy - unit.y) * p - 4, count: 4, spread: 4, speed: [10, 30], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.3, 0.6], size: [2, 4], colors: ["#ff440088", "#ff880066"], gravity: -20, shape: "circle" });
+        const arrowCount = 3;
+        const delayMs = 150;
+        for (let step = 0;step < arrowCount; step++) {
+          setTimeout(() => {
+            if (!unit.alive)
+              return;
+            const maxRange = Math.max(unit.civRange * 1.5, 250);
+            let t = unit.attackTarget;
+            if (t && t.alive) {
+              const dist = Math.hypot(t.x - unit.x, t.y - unit.y);
+              if (dist > maxRange) {
+                t = null;
+              }
+            }
+            if (!t || !t.alive) {
+              if (findNearestEnemy)
+                t = findNearestEnemy(unit.x, unit.y, unit.team, maxRange);
+            }
+            const arrowX = unit.x + (unit.facingRight ? 10 : -10);
+            const arrowY = unit.y - 12;
+            if (t && t.alive) {
+              t.hp -= unit.attack * 1.2;
+              if (t.hp <= 0)
+                unit.addHeroXp(Math.max(10, Math.floor(t.maxHp * 0.3)));
+              const fa = Math.atan2(t.y - unit.y, t.x - unit.x);
+              particles.emit({ x: arrowX, y: arrowY, count: 1, spread: 0, speed: [650, 750], angle: [fa, fa], life: [0.35, 0.45], size: [16, 20], colors: ["#ffd700", "#ffee88", "#fff"], gravity: 0, shape: "flaming_arrow" });
+              particles.emit({ x: t.x, y: t.y, count: 12, spread: 6, speed: [60, 180], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.2, 0.5], size: [2, 5], colors: ["#ff4400", "#ff8800", "#fff"], gravity: 30, shape: "star" });
+            } else {
+              const fa = unit.facingRight ? 0 : Math.PI;
+              particles.emit({ x: arrowX, y: arrowY, count: 1, spread: 0, speed: [650, 750], angle: [fa, fa], life: [0.35, 0.45], size: [16, 20], colors: ["#ffd700", "#ffee88", "#fff"], gravity: 0, shape: "flaming_arrow" });
+            }
+          }, step * delayMs);
         }
         break;
       }
@@ -10018,68 +16322,57 @@ class ZarathustraStrategy extends BaseCombatStrategy {
   }
   executeUnitAttackFx(context, target, atkAngle, damageDealt) {
     const { unit, particles } = context;
+    const arrowX = unit.x + (unit.facingRight ? 10 : -10);
+    const arrowY = unit.y - 12;
     particles.emit({
-      x: unit.x + (unit.facingRight ? 12 : -12),
-      y: unit.y - 10,
-      count: 4,
-      spread: 2,
-      speed: [260, 380],
-      angle: [atkAngle - 0.04, atkAngle + 0.04],
-      life: [0.12, 0.3],
-      size: [4, 7],
-      colors: ["#aa44ff", "#cc66ff", "#ff44ff", "#fff"],
+      x: arrowX,
+      y: arrowY,
+      count: 1,
+      spread: 0,
+      speed: [550, 650],
+      angle: [atkAngle, atkAngle],
+      life: [0.35, 0.45],
+      size: [14, 16],
+      colors: ["#ffd700", "#ffee88", "#ffffff"],
       gravity: 0,
-      shape: "circle"
+      shape: "flaming_arrow"
     });
     particles.emit({
-      x: unit.x,
-      y: unit.y - 8,
-      count: 10,
-      spread: 4,
-      speed: [80, 180],
-      angle: [atkAngle - 0.4, atkAngle + 0.4],
-      life: [0.1, 0.3],
-      size: [1.5, 3.5],
-      colors: ["#cc88ff", "#ff88ff", "#8844ff", "#aa66ff", "#fff"],
-      gravity: 0,
-      shape: "star"
-    });
-    particles.emit({
-      x: target.x,
-      y: target.y,
-      count: 18,
-      spread: 8,
-      speed: [50, 140],
-      angle: [0, Math.PI * 2],
-      life: [0.2, 0.6],
-      size: [2.5, 6],
-      colors: ["#aa44ff", "#ff44ff", "#cc88ff", "#fff"],
-      gravity: 15,
-      shape: "star"
-    });
-    particles.emit({
-      x: target.x,
-      y: target.y,
+      x: arrowX,
+      y: arrowY,
       count: 6,
-      spread: 3,
-      speed: [10, 40],
-      angle: [0, Math.PI * 2],
+      spread: 4,
+      speed: [100, 200],
+      angle: [atkAngle - 0.2, atkAngle + 0.2],
       life: [0.15, 0.3],
-      size: [4, 8],
-      colors: ["#ffffff", "#eeddff", "#ffccff"],
-      gravity: 0,
+      size: [2, 4],
+      colors: ["#ff4400", "#ff8800", "#ffd700"],
+      gravity: 10,
       shape: "circle"
+    });
+    particles.emit({
+      x: target.x,
+      y: target.y - 5,
+      count: 15,
+      spread: 6,
+      speed: [40, 160],
+      angle: [-Math.PI * 0.8, -Math.PI * 0.2],
+      life: [0.2, 0.5],
+      size: [2, 5],
+      colors: ["#ff4400", "#ff8800", "#ffd700", "#ffffff"],
+      gravity: 30,
+      shape: "star"
     });
     particles.emit({
       x: target.x,
       y: target.y + 4,
-      count: 10,
-      spread: 12,
-      speed: [60, 120],
+      count: 8,
+      spread: 10,
+      speed: [30, 80],
       angle: [0, Math.PI * 2],
-      life: [0.15, 0.4],
-      size: [2, 4],
-      colors: ["#6622cc", "#8844ff", "#aa66ff"],
+      life: [0.2, 0.4],
+      size: [1.5, 3],
+      colors: ["#cc4400", "#ff6600"],
       gravity: 50,
       shape: "circle"
     });
@@ -10512,11 +16805,15 @@ class CombatStrategyFactory {
   static spearman = new SpearmanStrategy;
   static knight = new KnightStrategy;
   static scout = new ScoutStrategy;
-  static immortal = new ImmortalStrategy;
   static chukonu = new ChuKoNuStrategy;
   static ninja = new NinjaStrategy;
   static centurion = new CenturionStrategy;
   static ulfhednar = new UlfhednarStrategy;
+  static warElephant = new WarElephantStrategy;
+  static fireLancer = new FireLancerStrategy;
+  static yabusame = new YabusameStrategy;
+  static equites = new EquitesStrategy;
+  static bearRider = new BearRiderStrategy;
   static spartacus = new SpartacusStrategy;
   static zarathustra = new ZarathustraStrategy;
   static musashi = new MusashiStrategy;
@@ -10525,8 +16822,6 @@ class CombatStrategyFactory {
   static fallback = new SwordsmanStrategy;
   static getStrategy(unitType) {
     switch (unitType) {
-      case "archer" /* Archer */:
-        return this.archer;
       case "swordsman" /* Swordsman */:
         return this.swordsman;
       case "spearman" /* Spearman */:
@@ -10535,8 +16830,9 @@ class CombatStrategyFactory {
         return this.knight;
       case "scout" /* Scout */:
         return this.scout;
+      case "archer" /* Archer */:
       case "immortal" /* Immortal */:
-        return this.immortal;
+        return this.archer;
       case "chuKoNu" /* ChuKoNu */:
         return this.chukonu;
       case "ninja" /* Ninja */:
@@ -10545,6 +16841,16 @@ class CombatStrategyFactory {
         return this.centurion;
       case "ulfhednar" /* Ulfhednar */:
         return this.ulfhednar;
+      case "warElephant" /* WarElephant */:
+        return this.warElephant;
+      case "fireLancer" /* FireLancer */:
+        return this.fireLancer;
+      case "yabusame" /* Yabusame */:
+        return this.yabusame;
+      case "equites" /* Equites */:
+        return this.equites;
+      case "bearRider" /* BearRider */:
+        return this.bearRider;
       case "heroSpartacus" /* HeroSpartacus */:
         return this.spartacus;
       case "heroZarathustra" /* HeroZarathustra */:
@@ -10574,7 +16880,8 @@ function unitChaseMove(unit, dx, dy, dist, dt, tileMap) {
   }
   unit.lastX = unit.x;
   unit.lastY = unit.y;
-  if (unit.stuckTimer > 0.4) {
+  const stuckThreshold = 0.4 + unit.id % 10 * 0.05;
+  if (unit.stuckTimer > stuckThreshold) {
     unit.pathWaypoints = [];
     unit.pathIndex = 0;
     unit.stuckTimer = 0;
@@ -10784,7 +17091,8 @@ function unitDoMove(unit, dt, particles, tileMap) {
   }
   unit.lastX = unit.x;
   unit.lastY = unit.y;
-  if (unit.stuckTimer > 0.4) {
+  const stuckThreshold = 0.4 + unit.id % 10 * 0.05;
+  if (unit.stuckTimer > stuckThreshold) {
     unit.pathWaypoints = [];
     unit.pathIndex = 0;
     unit.stuckTimer = 0;
@@ -11304,28 +17612,28 @@ var MagiAbility = {
             frozen++;
             particles.emit({
               x: nearEnemy.x,
-              y: nearEnemy.y - 6,
+              y: nearEnemy.y + 4,
               count: 14,
-              spread: 6,
-              speed: [20, 70],
-              angle: [0, Math.PI * 2],
-              life: [0.5, 1],
-              size: [2, 5],
-              colors: ["#88ddff", "#aaeeff", "#fff", "#4488cc"],
-              gravity: -15,
-              shape: "star"
+              spread: 8,
+              speed: [10, 40],
+              angle: [-Math.PI, 0],
+              life: [0.6, 1.2],
+              size: [2, 4],
+              colors: ["#e5b13a", "#d4af37", "#8a6608", "#ffcc00"],
+              gravity: 5,
+              shape: "circle"
             });
             particles.emit({
               x: nearEnemy.x,
-              y: nearEnemy.y - 10,
-              count: 6,
-              spread: 3,
-              speed: [40, 80],
-              angle: [-Math.PI * 0.8, -Math.PI * 0.2],
-              life: [0.3, 0.6],
-              size: [3, 6],
-              colors: ["#aaeeff", "#fff"],
-              gravity: -30,
+              y: nearEnemy.y - 5,
+              count: 8,
+              spread: 5,
+              speed: [30, 70],
+              angle: [-Math.PI * 0.7, -Math.PI * 0.3],
+              life: [0.4, 0.8],
+              size: [1.5, 3],
+              colors: ["#ffe55c", "#d4af37"],
+              gravity: -10,
               shape: "rect"
             });
           }
@@ -11337,28 +17645,28 @@ var MagiAbility = {
               frozen++;
               particles.emit({
                 x: extraEnemy.x,
-                y: extraEnemy.y - 6,
+                y: extraEnemy.y + 4,
                 count: 10,
-                spread: 5,
-                speed: [15, 60],
-                angle: [0, Math.PI * 2],
-                life: [0.4, 0.8],
-                size: [2, 4],
-                colors: ["#88ddff", "#aaeeff", "#fff"],
-                gravity: -15,
-                shape: "star"
+                spread: 6,
+                speed: [10, 30],
+                angle: [-Math.PI, 0],
+                life: [0.5, 1],
+                size: [1.5, 3.5],
+                colors: ["#e5b13a", "#d4af37", "#ffcc00"],
+                gravity: 5,
+                shape: "circle"
               });
               particles.emit({
                 x: extraEnemy.x,
-                y: extraEnemy.y - 10,
-                count: 4,
-                spread: 3,
-                speed: [30, 60],
-                angle: [-Math.PI * 0.8, -Math.PI * 0.2],
-                life: [0.2, 0.5],
-                size: [2, 5],
-                colors: ["#aaeeff", "#fff"],
-                gravity: -30,
+                y: extraEnemy.y - 5,
+                count: 5,
+                spread: 4,
+                speed: [25, 60],
+                angle: [-Math.PI * 0.7, -Math.PI * 0.3],
+                life: [0.3, 0.7],
+                size: [1.5, 3],
+                colors: ["#ffe55c", "#d4af37"],
+                gravity: -10,
                 shape: "rect"
               });
             }
@@ -11367,58 +17675,58 @@ var MagiAbility = {
           particles.emit({
             x: unit.x,
             y: unit.y - 4,
-            count: 14,
-            spread: 10,
-            speed: [15, 50],
+            count: 18,
+            spread: 12,
+            speed: [20, 60],
             angle: [0, Math.PI * 2],
-            life: [0.5, 1],
-            size: [2, 5],
-            colors: ["#44ff88", "#88ffaa", "#aaffcc", "#fff"],
-            gravity: -20,
+            life: [0.6, 1.2],
+            size: [2.5, 5],
+            colors: ["#ff4444", "#ffaa00", "#ffd700", "#ffffff"],
+            gravity: -15,
             shape: "circle"
           });
           particles.emit({
             x: unit.x,
-            y: unit.y + 2,
-            count: 16,
-            spread: 14,
-            speed: [40, 100],
+            y: unit.y + 8,
+            count: 20,
+            spread: 16,
+            speed: [30, 80],
             angle: [0, Math.PI * 2],
-            life: [0.3, 0.6],
+            life: [0.4, 0.7],
             size: [2, 4],
-            colors: ["#4488ff", "#88ccff", "#aaeeff"],
+            colors: ["#d4af37", "#ffcc00", "#ffaa00"],
             gravity: 0,
             shape: "rect"
           });
           particles.emit({
             x: unit.x,
-            y: unit.y - 8,
-            count: 12,
-            spread: 6,
-            speed: [50, 120],
+            y: unit.y,
+            count: 15,
+            spread: 8,
+            speed: [40, 100],
             angle: [0, Math.PI * 2],
-            life: [0.2, 0.5],
-            size: [3, 6],
-            colors: ["#88ddff", "#fff", "#aaeeff", "#4488cc"],
-            gravity: -10,
-            shape: "star"
+            life: [0.3, 0.6],
+            size: [2.5, 5.5],
+            colors: ["#8a6608", "#e5b13a", "#ffcc00", "#ffffff"],
+            gravity: -5,
+            shape: "circle"
           });
         }
       }
     } else {
       unit.magiCastTimer += dt;
-      if (Math.random() < 0.2) {
+      if (Math.random() < 0.25) {
         particles.emit({
-          x: unit.x + (Math.random() - 0.5) * 16,
-          y: unit.y - 4 + (Math.random() - 0.5) * 10,
+          x: unit.x + (Math.random() - 0.5) * 18,
+          y: unit.y - 4 + (Math.random() - 0.5) * 12,
           count: 1,
-          spread: 2,
-          speed: [5, 20],
+          spread: 3,
+          speed: [10, 25],
           angle: [-Math.PI * 0.8, -Math.PI * 0.2],
-          life: [0.3, 0.5],
-          size: [1.5, 3],
-          colors: ["#44ff88", "#88ffaa"],
-          gravity: -20,
+          life: [0.4, 0.7],
+          size: [2, 3.5],
+          colors: ["#ff4444", "#ffaa00"],
+          gravity: -15,
           shape: "circle"
         });
       }
@@ -11451,12 +17759,12 @@ function healNearbyAllies(unit, healRange, healAmount, healVisualDuration, parti
           y: ally.y - (healAmount >= 1 ? 8 : 6),
           count: healAmount >= 1 ? 5 : 2,
           spread: healAmount >= 1 ? 4 : 3,
-          speed: [healAmount >= 1 ? 10 : 8, healAmount >= 1 ? 35 : 25],
+          speed: [healAmount >= 1 ? 12 : 8, healAmount >= 1 ? 40 : 25],
           angle: [-Math.PI * 0.8, -Math.PI * 0.2],
           life: [0.3, healAmount >= 1 ? 0.8 : 0.5],
-          size: [healAmount >= 1 ? 2 : 1.5, healAmount >= 1 ? 4 : 3],
-          colors: ["#44ff88", "#88ffaa", "#aaffcc"],
-          gravity: -healAmount >= 1 ? 25 : 20,
+          size: [healAmount >= 1 ? 2.5 : 1.5, healAmount >= 1 ? 4.5 : 3.5],
+          colors: ["#ff4444", "#ffaa00", "#ffd700"],
+          gravity: -healAmount >= 1 ? 20 : 15,
           shape: "circle"
         });
       }
@@ -11645,46 +17953,23 @@ var CenturionAbility = {
   }
 };
 function updateModeSwitch(unit, particles) {
-  if (unit.state === 5 /* Attacking */) {
-    let targetDist = Infinity;
-    if (unit.attackTarget && unit.attackTarget.alive) {
-      targetDist = Math.hypot(unit.attackTarget.x - unit.x, unit.attackTarget.y - unit.y);
-    } else if (unit.attackBuildingTarget && unit.attackBuildingTarget.alive) {
-      targetDist = Math.hypot(unit.attackBuildingTarget.x - unit.x, unit.attackBuildingTarget.y - unit.y);
-    }
-    if (targetDist <= unit.centurionSwordRange + 10 && unit.centurionMode === "spear") {
-      unit.centurionMode = "sword";
-      unit.civRange = unit.centurionSwordRange;
-      unit.centurionMeleeHits = 0;
-      particles?.emit({
-        x: unit.x,
-        y: unit.y - 6,
-        count: 5,
-        spread: 4,
-        speed: [15, 40],
-        angle: [0, Math.PI * 2],
-        life: [0.2, 0.4],
-        size: [2, 3],
-        colors: ["#ccc", "#ffd700", "#fff"],
-        gravity: 0,
-        shape: "star"
-      });
-    } else if (targetDist > unit.centurionSwordRange + 20 && unit.centurionMode === "sword") {
-      unit.centurionMode = "spear";
-      unit.civRange = unit.centurionSpearRange;
-    }
-  } else {
-    if (unit.centurionMode === "sword") {
-      unit.centurionMode = "spear";
-      unit.civRange = unit.centurionSpearRange;
+  unit.centurionMode = "spear";
+  let range = 32;
+  if (unit.attackTarget || unit.attackBuildingTarget) {
+    const targetX = unit.attackTarget ? unit.attackTarget.x : unit.attackBuildingTarget.x;
+    const targetY = unit.attackTarget ? unit.attackTarget.y : unit.attackBuildingTarget.y;
+    const dist = Math.hypot(targetX - unit.x, targetY - unit.y);
+    if (dist > 60 && unit.centurionPilumCooldown <= 1) {
+      range = unit.centurionSpearRange;
     }
   }
+  unit.civRange = range;
 }
 function throwPilumAtUnit(unit, particles, allUnits) {
   const target = unit.attackTarget;
   const dx = target.x - unit.x, dy = target.y - unit.y;
   const dist = Math.hypot(dx, dy);
-  if (dist > unit.centurionSpearRange)
+  if (dist > unit.centurionSpearRange || dist <= 40)
     return;
   unit.centurionPilumCooldown = 3;
   if (target.x > unit.x)
@@ -11700,7 +17985,7 @@ function throwPilumAtBuilding(unit, particles, allUnits) {
   const dx = bldg.x - unit.x, dy = bldg.y - unit.y;
   const dist = Math.hypot(dx, dy);
   const bldgRange = unit.centurionSpearRange + bldg.tileW * TILE_SIZE * 0.4;
-  if (dist > bldgRange)
+  if (dist > bldgRange || dist <= 40)
     return;
   unit.centurionPilumCooldown = 3;
   if (bldg.x > unit.x)
@@ -11763,7 +18048,9 @@ function launchPilumProjectile(unit, particles, allUnits, impactX, impactY, isBu
       size: [3, 4],
       colors: ["#8B6914"],
       gravity: 0,
-      shape: "spear"
+      shape: "trident",
+      rotation: renderAngle,
+      rotSpeed: 0
     });
     particles?.emit({
       x: currX,
@@ -12209,11 +18496,18 @@ function updateHeroSkills(unit, dt, particles, findNearestEnemy, findNearestEnem
       continue;
     let shouldCast = false;
     const sid = skill.skillId;
-    const hasTarget = !!unit.attackTarget || !!unit.attackBuildingTarget;
+    const target = unit.attackTarget || unit.attackBuildingTarget;
+    const hasTarget = !!target;
+    let inRange = false;
+    if (hasTarget && target) {
+      const castRange = Math.max(unit.civRange * 1.5, 120);
+      const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+      inRange = dist <= castRange;
+    }
     if (sid.endsWith("_w0")) {
       shouldCast = inCombat;
     } else if (sid.endsWith("_w1")) {
-      shouldCast = inCombat && hasTarget;
+      shouldCast = inCombat && hasTarget && inRange;
     } else if (sid.endsWith("_w2")) {
       if (sid === "viking_w2") {
         shouldCast = unit.hp < unit.maxHp * 0.25;
@@ -12221,7 +18515,7 @@ function updateHeroSkills(unit, dt, particles, findNearestEnemy, findNearestEnem
         shouldCast = unit.hp < unit.maxHp * 0.35;
       }
     } else if (sid.endsWith("_m0")) {
-      shouldCast = inCombat && hasTarget;
+      shouldCast = inCombat && hasTarget && inRange;
     } else if (sid.endsWith("_m1")) {
       if (sid === "daiminh_m1") {
         shouldCast = unit.hp < unit.maxHp * 0.5;
@@ -12229,13 +18523,13 @@ function updateHeroSkills(unit, dt, particles, findNearestEnemy, findNearestEnem
         shouldCast = inCombat;
       }
     } else if (sid.endsWith("_m2")) {
-      shouldCast = inCombat && hasTarget;
+      shouldCast = inCombat && hasTarget && inRange;
     } else if (sid.endsWith("_r0")) {
-      shouldCast = inCombat && hasTarget;
+      shouldCast = inCombat && hasTarget && inRange;
     } else if (sid.endsWith("_r1")) {
       shouldCast = inCombat;
     } else if (sid.endsWith("_r2")) {
-      shouldCast = inCombat && hasTarget;
+      shouldCast = inCombat && hasTarget && inRange;
     }
     if (shouldCast) {
       unit.heroSkillCooldowns[i] = skill.cooldown;
@@ -12415,6 +18709,9 @@ class Unit {
   }
   get isHero() {
     return this.type === "heroSpartacus" /* HeroSpartacus */ || this.type === "heroZarathustra" /* HeroZarathustra */ || this.type === "heroHuangZhong" /* HeroQiJiguang */ || this.type === "heroMusashi" /* HeroMusashi */ || this.type === "heroRagnar" /* HeroRagnar */;
+  }
+  get isUnstoppable() {
+    return this.type === "warElephant" /* WarElephant */;
   }
   get isCarrying() {
     return this.carriedAmount > 0;
@@ -12632,6 +18929,7 @@ class Unit {
           gravity: 80,
           shape: "circle"
         });
+        audioSystem.playDeathSound();
       }
       this.deathTimer -= dt;
       return;
@@ -12698,6 +18996,15 @@ class Unit {
         break;
       }
       case 1 /* Moving */:
+        if (!this.manualCommand && !this.isVillager && findNearestEnemy && !this.isCarrying) {
+          const enemy = findNearestEnemy(this.x, this.y, this.team, this.data.sight * TILE_SIZE);
+          if (enemy) {
+            this.attackUnit(enemy);
+            break;
+          }
+        }
+        this.doMove(dt, particles, tileMap);
+        break;
       case 3 /* Returning */:
         this.doMove(dt, particles, tileMap);
         break;
@@ -18725,11 +25032,15 @@ class EntityManager {
     const combatSepRadius = 22;
     const sepRadiusSq = sepRadius * sepRadius;
     const combatSepRadiusSq = combatSepRadius * combatSepRadius;
+    const MAX_SEPARATIONS_PER_UNIT = 4;
     for (const a of this.units) {
       if (!a.alive)
         continue;
       const nearby = this.spatialGrid.getNearby(a.x, a.y);
+      let separationsApplied = 0;
       for (let j = 0;j < nearby.length; j++) {
+        if (separationsApplied >= MAX_SEPARATIONS_PER_UNIT)
+          break;
         const b = nearby[j];
         if (b.id <= a.id || !b.alive)
           continue;
@@ -18745,12 +25056,15 @@ class EntityManager {
           const overlap = (activeSepRadius - dist) * (bothInCombat ? 0.5 : 0.35);
           const nx = dx / dist;
           const ny = dy / dist;
+          separationsApplied++;
           const aBusy = !areEnemies && (a.state === 5 /* Attacking */ || a.state === 2 /* Gathering */ || a.state === 4 /* Building */);
           const bBusy = !areEnemies && (b.state === 5 /* Attacking */ || b.state === 2 /* Gathering */ || b.state === 4 /* Building */);
-          const newAx = a.x - nx * overlap * (aBusy ? 0.1 : 1);
-          const newAy = a.y - ny * overlap * (aBusy ? 0.1 : 1);
-          const newBx = b.x + nx * overlap * (bBusy ? 0.1 : 1);
-          const newBy = b.y + ny * overlap * (bBusy ? 0.1 : 1);
+          const bothIdle = !areEnemies && a.state === 0 /* Idle */ && b.state === 0 /* Idle */;
+          let idleMul = bothIdle ? 0.05 : 1;
+          const newAx = a.x - nx * overlap * (aBusy ? 0.1 : 1) * idleMul;
+          const newAy = a.y - ny * overlap * (aBusy ? 0.1 : 1) * idleMul;
+          const newBx = b.x + nx * overlap * (bBusy ? 0.1 : 1) * idleMul;
+          const newBy = b.y + ny * overlap * (bBusy ? 0.1 : 1) * idleMul;
           const [ac, ar] = this.tileMap.worldToTile(newAx, newAy);
           const [bc, br] = this.tileMap.worldToTile(newBx, newBy);
           if (this.tileMap.isWalkable(ac, ar)) {
@@ -19522,6 +25836,11 @@ class SelectionSystem {
   commandIndicators = [];
   freePlacementActive = false;
   isPaused = false;
+  isTouchDevice = false;
+  longPressTimer = null;
+  touchStartX = 0;
+  touchStartY = 0;
+  isLongPressTriggered = false;
   constructor(canvas, camera, entityManager, playerState, tileMap, particleSystem) {
     this.canvas = canvas;
     this.camera = camera;
@@ -19534,6 +25853,10 @@ class SelectionSystem {
     canvas.addEventListener("mousemove", (e) => this.onMouseMove(e));
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     window.addEventListener("keydown", (e) => this.onKeyDown(e));
+    canvas.addEventListener("touchstart", (e) => this.onTouchStart(e), { passive: false });
+    canvas.addEventListener("touchmove", (e) => this.onTouchMove(e), { passive: false });
+    canvas.addEventListener("touchend", (e) => this.onTouchEnd(e), { passive: false });
+    canvas.addEventListener("touchcancel", (e) => this.onTouchEnd(e));
   }
   get hasSelection() {
     return this.selectedUnits.length > 0 || this.selectedBuilding !== null || this.selectedResource !== null;
@@ -19556,6 +25879,8 @@ class SelectionSystem {
     return true;
   }
   onMouseDown(e) {
+    if (this.isTouchDevice && e.type.startsWith("mouse"))
+      return;
     if (this.freePlacementActive || this.isPaused)
       return;
     if (e.button === 0) {
@@ -19620,6 +25945,8 @@ class SelectionSystem {
     }
   }
   onMouseUp(e) {
+    if (this.isTouchDevice && e.type.startsWith("mouse"))
+      return;
     if (this.freePlacementActive || this.isPaused)
       return;
     if (e.button === 0 && this.isBoxSelecting) {
@@ -19631,6 +25958,8 @@ class SelectionSystem {
     }
   }
   onMouseMove(e) {
+    if (this.isTouchDevice && e.type.startsWith("mouse"))
+      return;
     this.mouseScreenX = e.clientX;
     this.mouseScreenY = e.clientY;
     if (this.isBoxSelecting) {
@@ -19734,6 +26063,73 @@ class SelectionSystem {
           break;
       }
     }
+  }
+  onTouchStart(e) {
+    this.isTouchDevice = true;
+    if (this.freePlacementActive || this.isPaused)
+      return;
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      this.touchStartX = touch.clientX;
+      this.touchStartY = touch.clientY;
+      this.isLongPressTriggered = false;
+      this.clearLongPress();
+      this.longPressTimer = setTimeout(() => {
+        this.isLongPressTriggered = true;
+        this.isBoxSelecting = false;
+        this.simulateMouseEvent(e, "mousedown", 2, this.touchStartX, this.touchStartY);
+      }, 350);
+      this.simulateMouseEvent(e, "mousedown", 0, touch.clientX, touch.clientY);
+    } else {
+      this.clearLongPress();
+      if (this.isBoxSelecting) {
+        this.isBoxSelecting = false;
+      }
+    }
+  }
+  onTouchMove(e) {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const dx = touch.clientX - this.touchStartX;
+      const dy = touch.clientY - this.touchStartY;
+      if (Math.hypot(dx, dy) > 15) {
+        this.clearLongPress();
+      }
+      if (!this.isLongPressTriggered) {
+        this.simulateMouseEvent(e, "mousemove", 0, touch.clientX, touch.clientY);
+      }
+    }
+  }
+  onTouchEnd(e) {
+    this.clearLongPress();
+    if (!this.isLongPressTriggered && e.changedTouches.length === 1) {
+      const touch = e.changedTouches[0];
+      this.simulateMouseEvent(e, "mouseup", 0, touch.clientX, touch.clientY);
+    }
+  }
+  clearLongPress() {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  }
+  simulateMouseEvent(originalEvent, type, button, clientX, clientY) {
+    const mockE = {
+      type: "touch",
+      clientX,
+      clientY,
+      button,
+      ctrlKey: originalEvent.ctrlKey,
+      metaKey: originalEvent.metaKey,
+      preventDefault: () => originalEvent.preventDefault(),
+      stopPropagation: () => originalEvent.stopPropagation()
+    };
+    if (type === "mousedown")
+      this.onMouseDown(mockE);
+    else if (type === "mousemove")
+      this.onMouseMove(mockE);
+    else if (type === "mouseup")
+      this.onMouseUp(mockE);
   }
   onKeyDown(e) {
     if (this.isPaused)
@@ -20253,7 +26649,7 @@ function renderCommandGrid(ctx, vpW, vpH, ui) {
   } else if (hasVillager) {
     if (!sel.buildMenuOpen) {
       actions[8] = {
-        label: "XÂY DỰNG",
+        label: "\uD83D\uDD28",
         hotkey: "B",
         cost: "",
         enabled: true,
@@ -20300,7 +26696,14 @@ function renderCommandGrid(ctx, vpW, vpH, ui) {
       const bCiv = b.civilization;
       const trainSpeedMult = CIVILIZATION_DATA[bCiv].bonuses.trainSpeed;
       const myElite = CIV_ELITE_UNIT[bCiv];
-      const filtered = trainable.filter((ut) => !isCivElite(ut) || ut === myElite);
+      const myUniqueCav = CIV_UNIQUE_CAVALRY[bCiv];
+      const filtered = trainable.filter((ut) => {
+        if (isCivElite(ut) && ut !== myElite)
+          return false;
+        if (isCivCavalry(ut) && ut !== myUniqueCav)
+          return false;
+        return true;
+      });
       for (let i = 0;i < filtered.length; i++) {
         const unitType = filtered[i];
         const ud = UNIT_DATA[unitType];
@@ -20510,8 +26913,14 @@ function drawCommandButton(ctx, x, y, size, action, ui) {
     ctx.fillRect(x + 2, y + 2, size - 4, size / 2 - 2);
   }
   ctx.fillStyle = enabled ? C.uiText : "#4a3a2a";
-  ctx.font = "bold 10px 'Inter', sans-serif";
-  ctx.fillText(action.label, x + 4, y + 16);
+  if (action.label === "\uD83D\uDD28") {
+    ctx.font = "24px 'Inter', sans-serif";
+    const w = ctx.measureText(action.label).width;
+    ctx.fillText(action.label, x + size / 2 - w / 2, y + size / 2 + 8);
+  } else {
+    ctx.font = "bold 10px 'Inter', sans-serif";
+    ctx.fillText(action.label, x + 4, y + 16);
+  }
   if (action.cost) {
     ctx.fillStyle = enabled ? C.uiTextDim : C.uiTextRed;
     ctx.font = "8px 'Inter', sans-serif";
@@ -20557,6 +26966,11 @@ var SPAWN_ITEMS = [
   { type: "ninja" /* Ninja */, entityCategory: "unit", label: "Ninja", group: "⭐ Đặc Biệt (Unit)" },
   { type: "centurion" /* Centurion */, entityCategory: "unit", label: "Bách Phu", group: "⭐ Đặc Biệt (Unit)" },
   { type: "ulfhednar" /* Ulfhednar */, entityCategory: "unit", label: "Chiến Binh Sói", group: "⭐ Đặc Biệt (Unit)" },
+  { type: "warElephant" /* WarElephant */, entityCategory: "unit", label: "Voi Chiến", group: "⭐ Đặc Biệt (Unit)" },
+  { type: "fireLancer" /* FireLancer */, entityCategory: "unit", label: "Hỏa Thương", group: "⭐ Đặc Biệt (Unit)" },
+  { type: "yabusame" /* Yabusame */, entityCategory: "unit", label: "Yabusame", group: "⭐ Đặc Biệt (Unit)" },
+  { type: "equites" /* Equites */, entityCategory: "unit", label: "Equites", group: "⭐ Đặc Biệt (Unit)" },
+  { type: "bearRider" /* BearRider */, entityCategory: "unit", label: "Kỵ Binh Gấu", group: "⭐ Đặc Biệt (Unit)" },
   { type: "targetDummy" /* TargetDummy */, entityCategory: "unit", label: "Hình Nhân", group: "\uD83E\uDDEA Thử Nghiệm (Unit)" },
   { type: "townCenter" /* TownCenter */, entityCategory: "building", label: "Nhà Chính", group: "\uD83C\uDFD7️ Công Trình" },
   { type: "house" /* House */, entityCategory: "building", label: "Nhà Ở", group: "\uD83C\uDFD7️ Công Trình" },
@@ -20770,6 +27184,9 @@ function renderSpawnPalette(ctx, vpW, vpH, ui) {
         return false;
       if (isCivElite(ut)) {
         return ut === CIV_ELITE_UNIT[ui.freeSpawnCiv];
+      }
+      if (isCivCavalry(ut)) {
+        return ut === CIV_UNIQUE_CAVALRY[ui.freeSpawnCiv];
       }
       if (isHeroGroup) {
         const civHeroes = {
@@ -21754,6 +28171,23 @@ class GameUI {
     canvas.addEventListener("mouseup", () => {
       this.freeDragging = false;
     });
+    canvas.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const mockE = { clientX: touch.clientX, clientY: touch.clientY, button: 0, stopPropagation: () => {} };
+        this.handleMinimapClick(mockE);
+        this.mouseX = touch.clientX;
+        this.mouseY = touch.clientY;
+        this.handleClick(mockE);
+      }
+    }, { passive: false });
+    canvas.addEventListener("touchmove", (e) => {
+      if (e.touches.length > 0) {
+        this.mouseX = e.touches[0].clientX;
+        this.mouseY = e.touches[0].clientY;
+      }
+    }, { passive: false });
+    canvas.style.touchAction = "none";
     canvas.addEventListener("contextmenu", (e) => {
       if (this.freeMode && this.freePlacementPhase && this.freeSpawnUnit) {
         e.preventDefault();
@@ -22347,11 +28781,30 @@ class ParticleSystem {
         size,
         color: cfg.colors[Math.floor(Math.random() * cfg.colors.length)],
         gravity: cfg.gravity ?? 0,
-        rotation: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() - 0.5) * 8,
+        rotation: cfg.rotation !== undefined ? cfg.rotation : Math.random() * Math.PI * 2,
+        rotSpeed: cfg.rotSpeed !== undefined ? cfg.rotSpeed : (Math.random() - 0.5) * 8,
         shape: cfg.shape ?? "rect"
       });
     }
+  }
+  emitCustom(renderFn, life) {
+    if (this.particles.length >= this.maxParticles)
+      return;
+    this.particles.push({
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      life,
+      maxLife: life,
+      size: 1,
+      color: "#fff",
+      gravity: 0,
+      rotation: 0,
+      rotSpeed: 0,
+      shape: "custom",
+      customRender: renderFn
+    });
   }
   emitWoodChips(x, y) {
     this.emit({
@@ -22687,6 +29140,33 @@ class ParticleSystem {
           ctx.restore();
           break;
         }
+        case "trident": {
+          const tridentAngle = p.vx !== 0 || p.vy !== 0 ? Math.atan2(p.vy, p.vx) : p.rotation;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(tridentAngle);
+          ctx.fillStyle = "#5a3020";
+          ctx.fillRect(-16, -1.5, 24, 3);
+          ctx.fillStyle = "#aa1111";
+          ctx.fillRect(-6, -2, 4, 4);
+          ctx.fillStyle = "#888";
+          ctx.fillRect(-16, -2, 2, 4);
+          ctx.fillStyle = "#aaa";
+          ctx.fillRect(8, -6, 2, 12);
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.moveTo(10, -6);
+          ctx.quadraticCurveTo(15, -7, 20, -4);
+          ctx.lineTo(10, -4);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(10, 6);
+          ctx.quadraticCurveTo(15, 7, 20, 4);
+          ctx.lineTo(10, 4);
+          ctx.fill();
+          ctx.restore();
+          break;
+        }
         case "arrow": {
           const arrowAngle = p.vx !== 0 || p.vy !== 0 ? Math.atan2(p.vy, p.vx) : p.rotation;
           ctx.save();
@@ -22703,6 +29183,48 @@ class ParticleSystem {
           ctx.fill();
           ctx.fillStyle = p.color;
           ctx.fillRect(-7, -1.5, 3, 3);
+          ctx.restore();
+          break;
+        }
+        case "flaming_arrow": {
+          const faAngle = p.vx !== 0 || p.vy !== 0 ? Math.atan2(p.vy, p.vx) : p.rotation;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(faAngle);
+          const scale = Math.max(0.6, p.size / 10);
+          ctx.scale(scale, scale);
+          ctx.fillStyle = "#6a3600";
+          ctx.fillRect(-12, -1, 24, 2);
+          ctx.fillStyle = "#ffd700";
+          ctx.fillRect(-8, -1, 16, 1);
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(-14, -3, 6, 6);
+          ctx.fillStyle = "#eee";
+          ctx.fillRect(-12, -3, 3, 6);
+          ctx.fillStyle = "#ff2200";
+          ctx.beginPath();
+          ctx.moveTo(12, -4);
+          ctx.lineTo(26, 0);
+          ctx.lineTo(12, 4);
+          ctx.fill();
+          ctx.fillStyle = "#fffc00";
+          ctx.beginPath();
+          ctx.moveTo(13, -2);
+          ctx.lineTo(21, 0);
+          ctx.lineTo(13, 2);
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.moveTo(14, -1);
+          ctx.lineTo(18, 0);
+          ctx.lineTo(14, 1);
+          ctx.fill();
+          ctx.fillStyle = "#ff6600";
+          ctx.globalAlpha = p.life / p.maxLife * 0.8;
+          for (let f = 0;f < 3; f++) {
+            ctx.fillRect(-22 + Math.random() * 12, -3 + Math.random() * 6, 4, 4);
+          }
+          ctx.globalAlpha = 1;
           ctx.restore();
           break;
         }
@@ -22739,6 +29261,11 @@ class ParticleSystem {
           break;
         case "star":
           this.drawStar(ctx, p.x, p.y, p.size, p.rotation);
+          break;
+        case "custom":
+          if (p.customRender) {
+            p.customRender(ctx);
+          }
           break;
       }
     }
@@ -22978,7 +29505,7 @@ function handleCombat(ai) {
       ai.handleActiveAttacker(u, aiUnits, isAggressive);
       continue;
     }
-    const baseSight = isAggressive ? TILE_SIZE * 12 : TILE_SIZE * 5;
+    const baseSight = isAggressive || isSupporting ? TILE_SIZE * 20 : TILE_SIZE * 10;
     const sightRange = baseSight * ai.params.combatAwareness;
     const alliedUnitInCombat = ai.findAllyInCombat(u.x, u.y, TILE_SIZE * 12);
     if (alliedUnitInCombat) {
@@ -22999,8 +29526,9 @@ function handleCombat(ai) {
       }
       continue;
     }
-    if (isAggressive && (u.state === 0 /* Idle */ || u.state === 1 /* Moving */)) {
-      const nearestEnemyBuilding = ai.findNearestEnemyBuilding(u.x, u.y, TILE_SIZE * 15);
+    if (u.state === 0 /* Idle */ || u.state === 1 /* Moving */) {
+      const buildingSightRange = isAggressive ? TILE_SIZE * 15 : TILE_SIZE * 8;
+      const nearestEnemyBuilding = ai.findNearestEnemyBuilding(u.x, u.y, buildingSightRange);
       if (nearestEnemyBuilding) {
         u.attackBuilding(nearestEnemyBuilding);
         continue;
@@ -23009,6 +29537,11 @@ function handleCombat(ai) {
       }
     }
     if (isSupporting && ai.supportTarget && u.state === 0 /* Idle */) {
+      const enemyNearSupport = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 15);
+      if (enemyNearSupport) {
+        u.attackUnit(enemyNearSupport);
+        continue;
+      }
       const dist = Math.hypot(u.x - ai.supportTarget.x, u.y - ai.supportTarget.y);
       if (dist > TILE_SIZE * 5) {
         ai.safeMoveTo(u, ai.supportTarget.x + (Math.random() - 0.5) * TILE_SIZE * 3, ai.supportTarget.y + (Math.random() - 0.5) * TILE_SIZE * 3);
@@ -23248,7 +29781,7 @@ function triggerRetreat(ai, units) {
   for (let i = 0;i < units.length; i++) {
     const u = units[i];
     const angle = i / units.length * Math.PI * 2;
-    const spreadDist = TILE_SIZE * 3 + Math.random() * TILE_SIZE * 2;
+    const spreadDist = TILE_SIZE * 6 + Math.random() * TILE_SIZE * 6;
     const tx = ai.retreatRallyX + Math.cos(angle) * spreadDist;
     const ty = ai.retreatRallyY + Math.sin(angle) * spreadDist;
     ai.safeMoveTo(u, tx, ty);
@@ -23523,7 +30056,7 @@ function calculateForceAllocation(ai) {
     if (remaining <= 7) {
       supportCount = remaining;
     } else {
-      supportCount = 3;
+      supportCount = Math.max(3, Math.floor(remaining * 0.4));
     }
   } else {
     supportCount = Math.min(2, Math.floor(remaining * 0.1));
@@ -23771,7 +30304,30 @@ function handleDefense(ai) {
     }
   }
   const hasOwnBaseThreats = damagedOwnBuildings.length > 0 || villagersUnderAttack.length > 0;
+  const allThreats = [];
   if (hasOwnBaseThreats) {
+    for (const dmgBldg of damagedOwnBuildings) {
+      for (const u of ai.entityManager.units) {
+        if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team))
+          continue;
+        const d = Math.hypot(u.x - dmgBldg.x, u.y - dmgBldg.y);
+        if (d < TILE_SIZE * 15 && !allThreats.includes(u)) {
+          allThreats.push(u);
+        }
+      }
+    }
+    for (const v of villagersUnderAttack) {
+      for (const u of ai.entityManager.units) {
+        if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team))
+          continue;
+        const d = Math.hypot(u.x - v.x, u.y - v.y);
+        if (d < TILE_SIZE * 8 && !allThreats.includes(u)) {
+          allThreats.push(u);
+        }
+      }
+    }
+  }
+  if (allThreats.length > 0) {
     if (ai.defenseStance !== "fortress" /* Fortress */) {
       ai.defenseStance = "fortress" /* Fortress */;
     }
@@ -23799,55 +30355,26 @@ function handleDefense(ai) {
     recordAttackDirection(ai, atkDirection, damagedOwnBuildings.length + villagersUnderAttack.length, ai.baseX, ai.baseY);
     const allEnemiesNearBase = ai.entityManager.units.filter((u) => u.alive && ai.entityManager.isEnemy(ai.team, u.team) && Math.hypot(u.x - ai.baseX, u.y - ai.baseY) < TILE_SIZE * 25);
     recordAttackPattern(ai, allEnemiesNearBase, atkDirection, false);
-    const allThreats = [];
-    for (const dmgBldg of damagedOwnBuildings) {
-      for (const u of ai.entityManager.units) {
-        if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team))
-          continue;
-        const d = Math.hypot(u.x - dmgBldg.x, u.y - dmgBldg.y);
-        if (d < TILE_SIZE * 15 && !allThreats.includes(u)) {
-          allThreats.push(u);
-        }
-      }
-    }
-    for (const v of villagersUnderAttack) {
-      for (const u of ai.entityManager.units) {
-        if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team))
-          continue;
-        const d = Math.hypot(u.x - v.x, u.y - v.y);
-        if (d < TILE_SIZE * 8 && !allThreats.includes(u)) {
-          allThreats.push(u);
-        }
-      }
-    }
     const currentEnemyCount = allThreats.length;
     const wasWinning = currentEnemyCount < ai.lastDefenseEnemyCount;
     ai.lastDefenseEnemyCount = currentEnemyCount;
-    if (allThreats.length === 0) {
-      ai.defenseSuccessStreak++;
-      ai.defenseStance = "alert" /* Alert */;
-      for (const u of military) {
-        if (!ai.defendingUnits.has(u.id))
-          continue;
-        ai.defendingUnits.delete(u.id);
-        if (u.state !== 5 /* Attacking */) {
-          const rallyX = ai.rallyX || (ownBuildings[0]?.x ?? 0);
-          const rallyY = ai.rallyY || (ownBuildings[0]?.y ?? 0);
-          ai.safeMoveTo(u, rallyX + (Math.random() - 0.5) * TILE_SIZE * 6, rallyY + (Math.random() - 0.5) * TILE_SIZE * 6);
-        }
+    const enemyPower = ai.calculateCombatPower(allThreats);
+    const garrisonPower = ai.calculateCombatPower(ai.forceAllocation.garrisonUnits);
+    let defenders = [...ai.forceAllocation.garrisonUnits];
+    let pulledSupportOrAttack = false;
+    if (enemyPower > garrisonPower * 1.5 || garrisonPower === 0) {
+      defenders.push(...ai.forceAllocation.supportUnits);
+      const combinedPower = ai.calculateCombatPower(defenders);
+      pulledSupportOrAttack = true;
+      if (enemyPower > combinedPower * 1.5 || combinedPower === 0) {
+        defenders.push(...ai.forceAllocation.attackUnits);
       }
-      const attackForce = ai.forceAllocation.attackUnits.concat(ai.forceAllocation.supportUnits);
-      if (attackForce.length >= 3 && ai.counterAttackTimer <= 0 && damagedOwnBuildings.length > 0) {
-        const worstBuilding = damagedOwnBuildings.reduce((a, b) => a.hp / a.maxHp < b.hp / b.maxHp ? a : b);
-        ai.initiateCounterAttack(attackForce, worstBuilding);
-      }
-      ai.log(`\uD83D\uDEE1️ Phòng thủ xong! ${military.length} lính quay về doanh trại!`, "#44ff88");
-      return;
     }
-    if (ai.waveState === "attacking" || ai.waveState === "supporting") {
+    defenders = defenders.filter((u) => u.alive && u.hp > 0);
+    if (pulledSupportOrAttack && (ai.waveState === "attacking" || ai.waveState === "supporting")) {
       ai.waveState = "gathering";
       ai.supportTimer = 0;
-      ai.log("\uD83D\uDED1 CĂN CỨ BỊ TẤN CÔNG! BỎ NHIỆM VỤ, RÚT VỀ NGAY!", "#ff0000");
+      ai.log(`\uD83D\uDED1 CĂN CỨ BỊ TẤN CÔNG MẠNH (Địch: ${Math.round(enemyPower)} vs Thủ nhà: ${Math.round(garrisonPower)})! RÚT QUÂN VỀ NGAY!`, "#ff0000");
     }
     const referenceBuilding = damagedOwnBuildings.length > 0 ? damagedOwnBuildings.reduce((a, b) => a.hp / a.maxHp < b.hp / b.maxHp ? a : b) : ownBuildings[0];
     if (wasWinning && allThreats.length <= 3 && military.length > allThreats.length * 2 && referenceBuilding) {
@@ -23891,7 +30418,7 @@ function handleDefense(ai) {
       }
     }
     ai.towerDefenseActive = false;
-    for (const u of military) {
+    for (const u of defenders) {
       let nearestSite = null;
       let nearestSiteDist = Infinity;
       for (const [site] of threatsBySite) {
@@ -23923,11 +30450,26 @@ function handleDefense(ai) {
           u.attackUnit(closestEnemy);
         }
       } else {
-        u.attackUnit(closestEnemy);
+        const distToEnemy = Math.hypot(u.x - closestEnemy.x, u.y - closestEnemy.y);
+        if (distToEnemy > TILE_SIZE * 10) {
+          ai.safeMoveTo(u, closestEnemy.x + (Math.random() - 0.5) * TILE_SIZE * 12, closestEnemy.y + (Math.random() - 0.5) * TILE_SIZE * 12);
+        } else {
+          u.attackUnit(closestEnemy);
+        }
       }
     }
     return;
   } else {
+    if (ai.lastDefenseEnemyCount > 0) {
+      ai.defenseSuccessStreak++;
+      ai.defenseStance = "alert" /* Alert */;
+      const attackForce = ai.forceAllocation.attackUnits.concat(ai.forceAllocation.supportUnits);
+      if (attackForce.length >= 3 && ai.counterAttackTimer <= 0 && damagedOwnBuildings.length > 0) {
+        const worstBuilding = damagedOwnBuildings.reduce((a, b) => a.hp / a.maxHp < b.hp / b.maxHp ? a : b);
+        ai.initiateCounterAttack(attackForce, worstBuilding);
+      }
+      ai.log(`\uD83D\uDEE1️ Phòng thủ xong! Lính quay về doanh trại hoặc sẵn sàng!`, "#44ff88");
+    }
     ai.lastDefenseEnemyCount = 0;
     if (ai.defendingUnits.size > 0) {
       for (const u of military) {
@@ -23937,68 +30479,16 @@ function handleDefense(ai) {
         if (u.state !== 5 /* Attacking */) {
           const rallyX = ai.rallyX || (ownBuildings[0]?.x ?? 0);
           const rallyY = ai.rallyY || (ownBuildings[0]?.y ?? 0);
-          ai.safeMoveTo(u, rallyX + (Math.random() - 0.5) * TILE_SIZE * 6, rallyY + (Math.random() - 0.5) * TILE_SIZE * 6);
+          ai.safeMoveTo(u, rallyX + (Math.random() - 0.5) * TILE_SIZE * 8, rallyY + (Math.random() - 0.5) * TILE_SIZE * 8);
         }
       }
-      ai.log(`\uD83C\uDFE0 Hết mối đe dọa! Lính tập kết sẵn sàng tấn công.`, "#44ff88");
+      ai.log(`\uD83C\uDFE0 Hết mối đe dọa! Giải tán chỉ huy phòng thủ (${ai.defendingUnits.size}).`, "#44ff88");
+      ai.defendingUnits.clear();
     }
     if (ai.defenseStance === "fortress" /* Fortress */ && !ai.earlyWarningActive) {
       ai.defenseStance = "alert" /* Alert */;
     } else if (ai.defenseStance === "alert" /* Alert */ && !ai.earlyWarningActive) {
       ai.defenseStance = "peaceful" /* Peaceful */;
-    }
-  }
-  if (damagedAllyBuildings.length > 0) {
-    const worstAlly = damagedAllyBuildings.reduce((a, b) => a.hp / a.maxHp < b.hp / b.maxHp ? a : b);
-    const severity = Math.min(1, 1 - worstAlly.hp / worstAlly.maxHp + 0.3);
-    ai.reportThreat(worstAlly.x, worstAlly.y, severity, worstAlly.team);
-    const allyThreats = [];
-    for (const u of ai.entityManager.units) {
-      if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team))
-        continue;
-      const d = Math.hypot(u.x - worstAlly.x, u.y - worstAlly.y);
-      if (d < TILE_SIZE * 15)
-        allyThreats.push(u);
-    }
-    if (allyThreats.length === 0)
-      return;
-    let enemyCX = 0, enemyCY = 0;
-    for (const t of allyThreats) {
-      enemyCX += t.x;
-      enemyCY += t.y;
-    }
-    enemyCX /= allyThreats.length;
-    enemyCY /= allyThreats.length;
-    const flankAngle = Math.atan2(enemyCY - worstAlly.y, enemyCX - worstAlly.x);
-    const flankX = enemyCX + Math.cos(flankAngle) * TILE_SIZE * 5;
-    const flankY = enemyCY + Math.sin(flankAngle) * TILE_SIZE * 5;
-    const defendCount = Math.max(3, Math.ceil(military.length * Math.min(1, severity + 0.3)));
-    let sent = 0;
-    for (const u of military) {
-      if (sent >= defendCount)
-        break;
-      if (u.state === 5 /* Attacking */) {
-        const distToThreat = Math.hypot(u.x - enemyCX, u.y - enemyCY);
-        if (distToThreat < TILE_SIZE * 8)
-          continue;
-      }
-      if (sent < defendCount / 2) {
-        const distToFlank = Math.hypot(u.x - flankX, u.y - flankY);
-        if (distToFlank > TILE_SIZE * 6) {
-          ai.safeMoveTo(u, flankX + (Math.random() - 0.5) * TILE_SIZE * 3, flankY + (Math.random() - 0.5) * TILE_SIZE * 3);
-        } else {
-          const nearest = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 10);
-          if (nearest)
-            u.attackUnit(nearest);
-        }
-      } else {
-        const nearest = allyThreats.reduce((a, b) => Math.hypot(a.x - u.x, a.y - u.y) < Math.hypot(b.x - u.x, b.y - u.y) ? a : b);
-        u.attackUnit(nearest);
-      }
-      sent++;
-    }
-    if (sent > 0) {
-      ai.log(`\uD83D\uDD31 Tấn công gọng kìm! ${sent} lính bao vây địch tại căn cứ đồng minh!`, "#00ffaa");
     }
   }
 }
@@ -24538,25 +31028,17 @@ function checkAllyStatus(ai) {
       }
     }
   }
-  if (ai.waveState === "gathering" && !ownBaseUnderAttack && ai.forceAllocation.supportUnits.length > 0) {
-    const allyTC = ai.entityManager.buildings.find((b) => b.alive && b.built && b.type === "townCenter" /* TownCenter */ && b.team !== ai.team && ai.entityManager.isAlly(ai.team, b.team));
-    if (allyTC) {
-      const idleSupporters = ai.forceAllocation.supportUnits.filter((u) => u.state === 0 /* Idle */);
-      const mapCenterX = MAP_COLS * TILE_SIZE / 2;
-      const mapCenterY = MAP_ROWS * TILE_SIZE / 2;
-      const allyThreatAngle = Math.atan2(mapCenterY - allyTC.y, mapCenterX - allyTC.x);
-      for (let i = 0;i < Math.min(3, idleSupporters.length); i++) {
-        const u = idleSupporters[i];
-        const distToAlly = Math.hypot(u.x - allyTC.x, u.y - allyTC.y);
-        const patrolX = allyTC.x + Math.cos(allyThreatAngle) * TILE_SIZE * 8;
-        const patrolY = allyTC.y + Math.sin(allyThreatAngle) * TILE_SIZE * 8;
-        if (distToAlly > TILE_SIZE * 20) {
-          const spread = (Math.random() - 0.5) * TILE_SIZE * 4;
-          ai.safeMoveTo(u, patrolX + Math.cos(allyThreatAngle + Math.PI / 2) * spread, patrolY + Math.sin(allyThreatAngle + Math.PI / 2) * spread);
-        } else if (distToAlly > TILE_SIZE * 5) {
-          const patrolSpread = (Math.random() - 0.5) * Math.PI / 2;
-          ai.safeMoveTo(u, allyTC.x + Math.cos(allyThreatAngle + patrolSpread) * TILE_SIZE * (6 + Math.random() * 4), allyTC.y + Math.sin(allyThreatAngle + patrolSpread) * TILE_SIZE * (6 + Math.random() * 4));
-        }
+  if (ai.waveState === "supporting" && ai.supportTarget) {
+    const idleSupporters = ai.forceAllocation.supportUnits.filter((u) => u.state === 0 /* Idle */);
+    for (let i = 0;i < idleSupporters.length; i++) {
+      const u = idleSupporters[i];
+      const distToTarget = Math.hypot(u.x - ai.supportTarget.x, u.y - ai.supportTarget.y);
+      if (distToTarget > TILE_SIZE * 12) {
+        const spread = (Math.random() - 0.5) * TILE_SIZE * 15;
+        ai.safeMoveTo(u, ai.supportTarget.x + Math.cos(i) * spread, ai.supportTarget.y + Math.sin(i) * spread);
+      } else if (distToTarget > TILE_SIZE * 3) {
+        const patrolSpread = (Math.random() - 0.5) * Math.PI * 2;
+        ai.safeMoveTo(u, ai.supportTarget.x + Math.cos(patrolSpread) * TILE_SIZE * (7 + Math.random() * 7), ai.supportTarget.y + Math.sin(patrolSpread) * TILE_SIZE * (7 + Math.random() * 7));
       }
     }
   }
@@ -24575,11 +31057,11 @@ function checkAllyStatus(ai) {
   if (relevantThreats.length === 0)
     return;
   const worstThreat = relevantThreats.reduce((a, b) => b.severity * (1 - (now - b.timestamp) / 30) > a.severity * (1 - (now - a.timestamp) / 30) ? b : a);
-  if (ai.waveState === "supporting" && ai.supportTimer > 0) {
-    if (ai.supportTarget) {
-      const distToNewThreat = Math.hypot(ai.supportTarget.x - worstThreat.x, ai.supportTarget.y - worstThreat.y);
-      if (distToNewThreat < TILE_SIZE * 15)
-        return;
+  let isNewThreatArea = true;
+  if (ai.waveState === "supporting" && ai.supportTimer > 0 && ai.supportTarget) {
+    const distToNewThreat = Math.hypot(ai.supportTarget.x - worstThreat.x, ai.supportTarget.y - worstThreat.y);
+    if (distToNewThreat < TILE_SIZE * 15) {
+      isNewThreatArea = false;
     }
   }
   const isEmergency = worstThreat.severity > 0.6 && !ownBaseUnderAttack;
@@ -24593,13 +31075,27 @@ function checkAllyStatus(ai) {
   let sent = 0;
   for (const u of availableMilitary) {
     const dist = Math.hypot(u.x - worstThreat.x, u.y - worstThreat.y);
-    if (u.state === 5 /* Attacking */ && dist < TILE_SIZE * 10)
+    if (u.state === 5 /* Attacking */ && dist < TILE_SIZE * 15)
       continue;
+    if (u.state === 1 /* Moving */ && u.pathWaypoints && u.pathWaypoints.length > 0) {
+      const dest = u.pathWaypoints[u.pathWaypoints.length - 1];
+      if (Math.hypot(dest.x - worstThreat.x, dest.y - worstThreat.y) < TILE_SIZE * 15) {
+        const enemyOnTheWay = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 10);
+        if (enemyOnTheWay)
+          u.attackUnit(enemyOnTheWay);
+        continue;
+      }
+    }
     const enemyNearThreat = ai.findNearestEnemyUnit(worstThreat.x, worstThreat.y, TILE_SIZE * 15);
     if (enemyNearThreat) {
       u.attackUnit(enemyNearThreat);
     } else {
-      ai.safeMoveTo(u, worstThreat.x + (Math.random() - 0.5) * TILE_SIZE * 4, worstThreat.y + (Math.random() - 0.5) * TILE_SIZE * 4);
+      const enemyOnTheWay = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 10);
+      if (enemyOnTheWay) {
+        u.attackUnit(enemyOnTheWay);
+      } else {
+        ai.safeMoveTo(u, worstThreat.x + (Math.random() - 0.5) * TILE_SIZE * 6, worstThreat.y + (Math.random() - 0.5) * TILE_SIZE * 6);
+      }
     }
     sent++;
   }
@@ -24608,8 +31104,10 @@ function checkAllyStatus(ai) {
     ai.supportTarget = { x: worstThreat.x, y: worstThreat.y };
     ai.supportTimer = 45;
     ai.waveResetTimer = 45;
-    const urgency = isEmergency ? "\uD83D\uDEA8 KHẨN CẤP" : isCritical ? "⚠️ GẤP" : "\uD83D\uDE91";
-    ai.log(`${urgency} Chi viện đồng minh ${sent} lính! (giữ nhà: ${ai.forceAllocation.garrisonUnits.length})`, "#00ffcc");
+    if (isNewThreatArea || sent >= 4 || isEmergency) {
+      const urgency = isEmergency ? "\uD83D\uDEA8 KHẨN CẤP" : isCritical ? "⚠️ GẤP" : "\uD83D\uDE91";
+      ai.log(`${urgency} Cử thêm ${sent} lính cứu đồng minh! (Giữ nhà: ${ai.forceAllocation.garrisonUnits.length})`, "#00ffcc");
+    }
   }
   if (ai.waveState === "supporting" && ai.supportTarget) {
     const enemiesNearSupport = ai.entityManager.units.filter((u) => u.alive && ai.entityManager.isEnemy(ai.team, u.team) && Math.hypot(u.x - ai.supportTarget.x, u.y - ai.supportTarget.y) < TILE_SIZE * 12);
@@ -25019,14 +31517,32 @@ function autoGather(ai) {
   for (let i = 0;i < villagers.length; i++) {
     const v = villagers[i];
     const targetType = needs[i % needs.length].type;
-    const nearestRes = ai.findNearestResourceOfType(v.x, v.y, targetType);
+    let nearestRes = ai.findNearestResourceOfType(v.x, v.y, targetType);
+    let rejectedBecauseTooFar = false;
+    if (nearestRes && targetType === "berryBush" /* BerryBush */) {
+      const dist = Math.hypot(nearestRes.x - baseX, nearestRes.y - baseY);
+      if (dist > TILE_SIZE * 20) {
+        nearestRes = null;
+        rejectedBecauseTooFar = true;
+      }
+    }
     if (nearestRes) {
       v.gatherFrom(nearestRes, () => ai.entityManager.findNearestDropOff(v.x, v.y, nearestRes.resourceType, ai.team));
     } else {
-      if (targetType === "berryBush" /* BerryBush */ || targetType === "farm" /* Farm */) {
+      if (targetType === "berryBush" /* BerryBush */ || targetType === "farm" /* Farm */ || rejectedBecauseTooFar) {
         const farmRes = ai.findNearestResourceOfType(v.x, v.y, "farm" /* Farm */);
         if (farmRes) {
           v.gatherFrom(farmRes, () => ai.entityManager.findNearestDropOff(v.x, v.y, farmRes.resourceType, ai.team));
+        } else if (rejectedBecauseTooFar) {
+          const woodRes = ai.findNearestResourceOfType(v.x, v.y, "tree" /* Tree */);
+          if (woodRes) {
+            v.gatherFrom(woodRes, () => ai.entityManager.findNearestDropOff(v.x, v.y, woodRes.resourceType, ai.team));
+          } else {
+            const any = ai.findNearestResource(v.x, v.y);
+            if (any) {
+              v.gatherFrom(any, () => ai.entityManager.findNearestDropOff(v.x, v.y, any.resourceType, ai.team));
+            }
+          }
         }
       } else {
         const any = ai.findNearestResource(v.x, v.y);
@@ -25069,9 +31585,35 @@ function smartVillagerManagement(ai) {
   }
   for (const v of aiUnits) {
     if (v.state === 2 /* Gathering */ && v.targetResource && !v.targetResource.alive) {
-      const sameType = ai.findNearestResourceOfType(v.x, v.y, v.targetResource.nodeType);
+      let sameType = ai.findNearestResourceOfType(v.x, v.y, v.targetResource.nodeType);
+      let rejectedBecauseTooFar = false;
+      if (sameType && sameType.nodeType === "berryBush" /* BerryBush */) {
+        const aiTC = aiBuildings.find((b) => b.type === "townCenter" /* TownCenter */);
+        if (aiTC) {
+          const dist = Math.hypot(sameType.x - aiTC.x, sameType.y - aiTC.y);
+          if (dist > TILE_SIZE * 20) {
+            sameType = null;
+            rejectedBecauseTooFar = true;
+          }
+        }
+      }
       if (sameType) {
         v.gatherFrom(sameType, () => ai.entityManager.findNearestDropOff(v.x, v.y, sameType.resourceType, ai.team));
+      } else if (rejectedBecauseTooFar) {
+        const farmRes = ai.findNearestResourceOfType(v.x, v.y, "farm" /* Farm */);
+        if (farmRes) {
+          v.gatherFrom(farmRes, () => ai.entityManager.findNearestDropOff(v.x, v.y, farmRes.resourceType, ai.team));
+        } else {
+          const woodRes = ai.findNearestResourceOfType(v.x, v.y, "tree" /* Tree */);
+          if (woodRes) {
+            v.gatherFrom(woodRes, () => ai.entityManager.findNearestDropOff(v.x, v.y, woodRes.resourceType, ai.team));
+          } else {
+            const anyRes = ai.findNearestResource(v.x, v.y);
+            if (anyRes) {
+              v.gatherFrom(anyRes, () => ai.entityManager.findNearestDropOff(v.x, v.y, anyRes.resourceType, ai.team));
+            }
+          }
+        }
       } else {
         const anyRes = ai.findNearestResource(v.x, v.y);
         if (anyRes) {
@@ -25323,8 +31865,14 @@ function autoBuild(ai) {
     const unworkedFarms = farmResources.filter((fr) => {
       return !aiUnits.some((u) => (u.state === 2 /* Gathering */ || u.state === 3 /* Returning */) && u.targetResource === fr);
     }).length;
-    const needsFarms = berriesDepleted || berriesRunningOut && isFoodLow || isFoodCritical || foodGatherers.length < 2 && farmResources.length === 0 && nearbyBerryCount === 0;
-    const farmsToBuild = isFoodCritical && berriesDepleted ? 2 : 1;
+    const needsFarms = berriesDepleted || berriesRunningOut && isFoodLow || isFoodCritical || foodGatherers.length < 2 && farmResources.length === 0 && nearbyBerryCount === 0 || berriesDepleted && idleFoodlessVillagers > 0;
+    let farmsToBuild = 1;
+    if (isFoodCritical && berriesDepleted) {
+      farmsToBuild = 2;
+    }
+    if (berriesDepleted && idleFoodlessVillagers >= 3) {
+      farmsToBuild = Math.min(3, Math.ceil(idleFoodlessVillagers / 2));
+    }
     if (needsFarms && activeFarms.length < maxFarms && farmResources.length < maxFarms) {
       for (let fb = 0;fb < farmsToBuild; fb++) {
         if (!ai.aiState.canAfford({ wood: 60 }))
@@ -25559,7 +32107,8 @@ function sendAttackWave(ai) {
   const nearTargetEnemies = ai.entityManager.units.filter((u) => u.alive && ai.entityManager.isEnemy(ai.team, u.team) && !u.isVillager && Math.hypot(u.x - checkX, u.y - checkY) < TILE_SIZE * 20);
   const enemyDefensePower = ai.calculateCombatPower(nearTargetEnemies);
   const hasMaxArmy = military.length >= ai.params.maxWaveSize;
-  if (!hasMaxArmy && enemyDefensePower > ownPower * 2 && military.length < ai.params.maxWaveSize * 0.8) {
+  const acceptableDisadvantage = ai.difficulty === "hard" /* Hard */ ? 3 : 2;
+  if (!hasMaxArmy && enemyDefensePower > ownPower * acceptableDisadvantage && military.length < ai.params.maxWaveSize * 0.5) {
     ai.log(`⚠️ Địch phòng thủ mạnh! Chờ thêm quân... (${military.length}/${ai.params.maxWaveSize})`, "#ffaa00");
     return;
   }
@@ -25679,16 +32228,7 @@ function rallyTroops(ai) {
   const enemyBuildings = ai.getScoutedEnemyBuildings();
   const baseX = ai.baseX;
   const baseY = ai.baseY;
-  const allyTCs = ai.entityManager.buildings.filter((b) => b.alive && b.type === "townCenter" /* TownCenter */ && b.team !== ai.team && ai.entityManager.isAlly(b.team, ai.team));
-  const isGuardingAlly = allyTCs.length > 0 && Math.floor(sharedIntel.gameTime / 60) % 2 === 1;
-  if (isGuardingAlly) {
-    const allyTC = allyTCs[0];
-    const mapCenterX = MAP_COLS * TILE_SIZE / 2;
-    const mapCenterY = MAP_ROWS * TILE_SIZE / 2;
-    const allyThreatAngle = Math.atan2(mapCenterY - allyTC.y, mapCenterX - allyTC.x);
-    ai.rallyX = allyTC.x + Math.cos(allyThreatAngle) * TILE_SIZE * 8;
-    ai.rallyY = allyTC.y + Math.sin(allyThreatAngle) * TILE_SIZE * 8;
-  } else if (enemyBuildings.length > 0) {
+  if (enemyBuildings.length > 0) {
     let nearestBldg = enemyBuildings[0];
     let nearestDist = Infinity;
     for (const pb of enemyBuildings) {
@@ -25698,11 +32238,13 @@ function rallyTroops(ai) {
         nearestBldg = pb;
       }
     }
-    ai.rallyX = baseX + (nearestBldg.x - baseX) * 0.3;
-    ai.rallyY = baseY + (nearestBldg.y - baseY) * 0.3;
+    const angleToTarget = Math.atan2(nearestBldg.y - baseY, nearestBldg.x - baseX);
+    const rallyDist = TILE_SIZE * 15;
+    ai.rallyX = baseX + Math.cos(angleToTarget) * rallyDist;
+    ai.rallyY = baseY + Math.sin(angleToTarget) * rallyDist;
   } else {
     const angleToCenter = Math.atan2(MAP_ROWS * TILE_SIZE / 2 - ai.baseY, MAP_COLS * TILE_SIZE / 2 - ai.baseX);
-    const rallyDist = TILE_SIZE * 8;
+    const rallyDist = TILE_SIZE * 15;
     const dtp = ai.getDefenseTrainingPriority();
     const hasPatternData = dtp.lastUpdate > 0 && sharedIntel.gameTime - dtp.lastUpdate < 120;
     ai.rallyX = ai.baseX + Math.cos(angleToCenter) * rallyDist;
@@ -25726,7 +32268,7 @@ function rallyTroops(ai) {
     if (buildingsToGuard.length > 0) {
       const assignedBuilding = buildingsToGuard[i % buildingsToGuard.length];
       const patrolAngle = (sharedIntel.gameTime * 0.3 + i * Math.PI * 2 / Math.max(1, ai.forceAllocation.garrisonUnits.length)) % (Math.PI * 2);
-      const patrolRadius = TILE_SIZE * (6 + i % 4);
+      const patrolRadius = TILE_SIZE * (8 + i % 6);
       const patrolX = assignedBuilding.x + Math.cos(patrolAngle) * patrolRadius;
       const patrolY = assignedBuilding.y + Math.sin(patrolAngle) * patrolRadius;
       const distToPatrol = Math.hypot(u.x - patrolX, u.y - patrolY);
@@ -25739,14 +32281,15 @@ function rallyTroops(ai) {
     }
   }
   const rallyUnits = [
-    ...ai.forceAllocation.attackUnits,
-    ...ai.forceAllocation.supportUnits
+    ...ai.forceAllocation.attackUnits
   ].filter((u) => u.state === 0 /* Idle */ && !garrisonSet.has(u));
   for (const u of rallyUnits) {
     const dist = Math.hypot(u.x - ai.rallyX, u.y - ai.rallyY);
-    if (dist > TILE_SIZE * 4) {
-      const tx = ai.rallyX + (Math.random() - 0.5) * TILE_SIZE * 3;
-      const ty = ai.rallyY + (Math.random() - 0.5) * TILE_SIZE * 3;
+    if (dist > TILE_SIZE * 10) {
+      const angle = Math.random() * Math.PI * 2;
+      const spreadRadius = Math.random() * TILE_SIZE * 18;
+      const tx = ai.rallyX + Math.cos(angle) * spreadRadius;
+      const ty = ai.rallyY + Math.sin(angle) * spreadRadius;
       const cx = Math.max(TILE_SIZE * 2, Math.min(tx, (MAP_COLS - 2) * TILE_SIZE));
       const cy = Math.max(TILE_SIZE * 2, Math.min(ty, (MAP_ROWS - 2) * TILE_SIZE));
       ai.safeMoveTo(u, cx, cy);
@@ -27457,6 +34000,7 @@ class Game {
     this.console.update(dt);
     this.settingsMenu.update(dt);
     const targetVol = this.settingsMenu.settings.musicVolume / 100;
+    audioSystem.setVolume(targetVol);
     this.camera.update(dt);
     if (this.paused)
       return;
