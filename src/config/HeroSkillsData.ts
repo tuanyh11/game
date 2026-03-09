@@ -69,5 +69,5 @@ export function getHeroSkills(heroType: UnitType): HeroSkill[] {
     return HERO_SKILLS[heroType] ?? [];
 }
 
-export const HERO_XP_TABLE = [0, 0, 50, 130, 250, 420, 650];
+export const HERO_XP_TABLE = [0, 0, 100, 250, 500, 850, 1300];
 export const HERO_MAX_LEVEL = 6;

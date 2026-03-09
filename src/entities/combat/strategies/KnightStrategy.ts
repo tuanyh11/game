@@ -3,6 +3,7 @@ import { CombatContext } from "../CombatTypes";
 import { Unit } from "../../Unit";
 import { ParticleSystem } from "../../../effects/ParticleSystem";
 import { CivilizationType } from "../../../config/GameConfig";
+import { audioSystem } from "../../../systems/AudioSystem";
 
 export class KnightStrategy extends BaseCombatStrategy {
 
@@ -25,7 +26,7 @@ export class KnightStrategy extends BaseCombatStrategy {
                 if (unit.passiveCooldown <= 0) {
                     unit.passiveCooldown = 8;
                     const os = target.speed;
-                    target.speed = 0;
+                    if (!target.isUnstoppable) target.speed = 0;
                     setTimeout(() => { if (target.alive) target.speed = os; }, 500);
                     particles.emit({ x: target.x, y: target.y - 6, count: 6, spread: 3, speed: [20, 50], angle: [0, Math.PI * 2], life: [0.3, 0.7], size: [2, 5], colors: ['#ffcc00', '#fff'], gravity: 0, shape: 'star' });
                 }
@@ -82,6 +83,13 @@ export class KnightStrategy extends BaseCombatStrategy {
     protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
         const { unit, particles } = context;
         const age = unit.age;
+
+        // Play appropriate sound based on civilization
+        if (unit.civilization === CivilizationType.LaMa || unit.civilization === CivilizationType.DaiMinh) {
+            audioSystem.playSpearStab(); // Romans and Ming use Spears/Lances
+        } else {
+            audioSystem.playSlashSound(); // Persians, Vikings, Yamato use swords/axes
+        }
 
         // Cavalry charge impact — big shockwave
         particles.emit({

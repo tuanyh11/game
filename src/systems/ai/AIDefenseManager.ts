@@ -136,7 +136,8 @@ export function calculateForceAllocation(ai: AIContext): void {
         if (remaining <= 7) {
             supportCount = remaining;
         } else {
-            supportCount = 3;
+            // Send 40% of army to help instead of just 3 units
+            supportCount = Math.max(3, Math.floor(remaining * 0.4));
         }
     } else {
         supportCount = Math.min(2, Math.floor(remaining * 0.1));
@@ -519,8 +520,33 @@ export function handleDefense(ai: AIContext): void {
     // Combine threat sources: damaged buildings AND villagers under attack
     const hasOwnBaseThreats = damagedOwnBuildings.length > 0 || villagersUnderAttack.length > 0;
 
-    // ===== OWN BASE UNDER ATTACK =====
+    // First find ALL enemies near any of our damaged buildings or threatened villagers
+    const allThreats: Unit[] = [];
     if (hasOwnBaseThreats) {
+        for (const dmgBldg of damagedOwnBuildings) {
+            for (const u of ai.entityManager.units) {
+                if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team)) continue;
+                const d = Math.hypot(u.x - dmgBldg.x, u.y - dmgBldg.y);
+                if (d < TILE_SIZE * 15 && !allThreats.includes(u)) {
+                    allThreats.push(u);
+                }
+            }
+        }
+        for (const v of villagersUnderAttack) {
+            for (const u of ai.entityManager.units) {
+                if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team)) continue;
+                const d = Math.hypot(u.x - v.x, u.y - v.y);
+                if (d < TILE_SIZE * 8 && !allThreats.includes(u)) {
+                    allThreats.push(u);
+                }
+            }
+        }
+    }
+
+    // ===== OWN BASE UNDER ATTACK =====
+    // TIER-2 FIX: Only trigger active defense if there are ACTUAL enemies (allThreats.length > 0),
+    // otherwise the AI gets stuck constantly assigning defenders to damaged buildings that are safe.
+    if (allThreats.length > 0) {
         // Auto-escalate to Fortress stance when base is hit
         if (ai.defenseStance !== DefenseStance.Fortress) {
             ai.defenseStance = DefenseStance.Fortress;
@@ -560,75 +586,34 @@ export function handleDefense(ai: AIContext): void {
         );
         recordAttackPattern(ai, allEnemiesNearBase, atkDirection, false);
 
-        // Find ALL enemies near any of our damaged buildings or threatened villagers
-        const allThreats: Unit[] = [];
-        for (const dmgBldg of damagedOwnBuildings) {
-            for (const u of ai.entityManager.units) {
-                if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team)) continue;
-                const d = Math.hypot(u.x - dmgBldg.x, u.y - dmgBldg.y);
-                if (d < TILE_SIZE * 15 && !allThreats.includes(u)) {
-                    allThreats.push(u);
-                }
-            }
-        }
-        for (const v of villagersUnderAttack) {
-            for (const u of ai.entityManager.units) {
-                if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team)) continue;
-                const d = Math.hypot(u.x - v.x, u.y - v.y);
-                if (d < TILE_SIZE * 8 && !allThreats.includes(u)) {
-                    allThreats.push(u);
-                }
-            }
-        }
-
         // Track enemy count trend
         const currentEnemyCount = allThreats.length;
         const wasWinning = currentEnemyCount < ai.lastDefenseEnemyCount;
         ai.lastDefenseEnemyCount = currentEnemyCount;
 
-        if (allThreats.length === 0) {
-            // ===== DEFENSE COMPLETE! All threats eliminated =====
-            ai.defenseSuccessStreak++;
-            ai.defenseStance = DefenseStance.Alert; // Stay alert after defense
+        // Calculate threat power to determine how many units to pull
+        const enemyPower = ai.calculateCombatPower(allThreats);
+        const garrisonPower = ai.calculateCombatPower(ai.forceAllocation.garrisonUnits);
 
-            // === DEFENSE DONE — RALLY FORWARD instead of camping at barracks ===
-            // Clear defending status and let normal rally logic take over
-            for (const u of military) {
-                if (!ai.defendingUnits.has(u.id)) continue;
-                ai.defendingUnits.delete(u.id);
+        let defenders = [...ai.forceAllocation.garrisonUnits];
+        let pulledSupportOrAttack = false;
 
-                // Instead of going back to barracks (which causes camping),
-                // send them to rally point so they're ready for next action
-                if (u.state !== UnitState.Attacking) {
-                    const rallyX = ai.rallyX || (ownBuildings[0]?.x ?? 0);
-                    const rallyY = ai.rallyY || (ownBuildings[0]?.y ?? 0);
-                    ai.safeMoveTo(u,
-                        rallyX + (Math.random() - 0.5) * TILE_SIZE * 6,
-                        rallyY + (Math.random() - 0.5) * TILE_SIZE * 6
-                    );
-                }
+        if (enemyPower > garrisonPower * 1.5 || garrisonPower === 0) {
+            defenders.push(...ai.forceAllocation.supportUnits);
+            const combinedPower = ai.calculateCombatPower(defenders);
+            pulledSupportOrAttack = true; // We needed support
+
+            if (enemyPower > combinedPower * 1.5 || combinedPower === 0) {
+                defenders.push(...ai.forceAllocation.attackUnits);
             }
-
-            // Counter-attack with attack squad only!
-            const attackForce = ai.forceAllocation.attackUnits.concat(
-                ai.forceAllocation.supportUnits
-            );
-            if (attackForce.length >= 3 && ai.counterAttackTimer <= 0 && damagedOwnBuildings.length > 0) {
-                const worstBuilding = damagedOwnBuildings.reduce((a, b) =>
-                    (a.hp / a.maxHp) < (b.hp / b.maxHp) ? a : b
-                );
-                ai.initiateCounterAttack(attackForce, worstBuilding);
-            }
-
-            ai.log(`🛡️ Phòng thủ xong! ${military.length} lính quay về doanh trại!`, '#44ff88');
-            return;
         }
+        defenders = defenders.filter(u => u.alive && u.hp > 0);
 
-        // EMERGENCY: abort ongoing attack/support
-        if (ai.waveState === 'attacking' || ai.waveState === 'supporting') {
+        // EMERGENCY: abort ongoing attack/support ONLY if we needed those units
+        if (pulledSupportOrAttack && (ai.waveState === 'attacking' || ai.waveState === 'supporting')) {
             ai.waveState = 'gathering';
             ai.supportTimer = 0;
-            ai.log("🛑 CĂN CỨ BỊ TẤN CÔNG! BỎ NHIỆM VỤ, RÚT VỀ NGAY!", "#ff0000");
+            ai.log(`🛑 CĂN CỨ BỊ TẤN CÔNG MẠNH (Địch: ${Math.round(enemyPower)} vs Thủ nhà: ${Math.round(garrisonPower)})! RÚT QUÂN VỀ NGAY!`, "#ff0000");
         }
 
         const referenceBuilding = damagedOwnBuildings.length > 0
@@ -689,7 +674,7 @@ export function handleDefense(ai: AIContext): void {
         // Each military unit: try to lure enemies to tower first, then standard defense
         ai.towerDefenseActive = false;
 
-        for (const u of military) {
+        for (const u of defenders) {
             let nearestSite: AttackSite | null = null;
             let nearestSiteDist = Infinity;
             for (const [site] of threatsBySite) {
@@ -727,11 +712,40 @@ export function handleDefense(ai: AIContext): void {
                     u.attackUnit(closestEnemy);
                 }
             } else {
-                u.attackUnit(closestEnemy);
+                // TIER-1 FIX (Defense Scatter): Do not clump on one coordinate if far away
+                const distToEnemy = Math.hypot(u.x - closestEnemy.x, u.y - closestEnemy.y);
+                if (distToEnemy > TILE_SIZE * 10) {
+                    ai.safeMoveTo(u,
+                        closestEnemy.x + (Math.random() - 0.5) * TILE_SIZE * 12,
+                        closestEnemy.y + (Math.random() - 0.5) * TILE_SIZE * 12
+                    );
+                } else {
+                    u.attackUnit(closestEnemy);
+                }
             }
         }
         return;
     } else {
+        // === POST-COMBAT (ALL THREATS CLEARED) ===
+        if (ai.lastDefenseEnemyCount > 0) {
+            // We just finished defending
+            ai.defenseSuccessStreak++;
+            ai.defenseStance = DefenseStance.Alert;
+
+            // Counter-attack with attack squad only!
+            const attackForce = ai.forceAllocation.attackUnits.concat(
+                ai.forceAllocation.supportUnits
+            );
+            if (attackForce.length >= 3 && ai.counterAttackTimer <= 0 && damagedOwnBuildings.length > 0) {
+                const worstBuilding = damagedOwnBuildings.reduce((a, b) =>
+                    (a.hp / a.maxHp) < (b.hp / b.maxHp) ? a : b
+                );
+                ai.initiateCounterAttack(attackForce, worstBuilding);
+            }
+
+            ai.log(`🛡️ Phòng thủ xong! Lính quay về doanh trại hoặc sẵn sàng!`, '#44ff88');
+        }
+
         ai.lastDefenseEnemyCount = 0;
 
         // === NO ACTIVE THREATS: Rally defenders FORWARD instead of camping ===
@@ -745,12 +759,13 @@ export function handleDefense(ai: AIContext): void {
                     const rallyX = ai.rallyX || (ownBuildings[0]?.x ?? 0);
                     const rallyY = ai.rallyY || (ownBuildings[0]?.y ?? 0);
                     ai.safeMoveTo(u,
-                        rallyX + (Math.random() - 0.5) * TILE_SIZE * 6,
-                        rallyY + (Math.random() - 0.5) * TILE_SIZE * 6
+                        rallyX + (Math.random() - 0.5) * TILE_SIZE * 8,
+                        rallyY + (Math.random() - 0.5) * TILE_SIZE * 8
                     );
                 }
             }
-            ai.log(`🏠 Hết mối đe dọa! Lính tập kết sẵn sàng tấn công.`, '#44ff88');
+            ai.log(`🏠 Hết mối đe dọa! Giải tán chỉ huy phòng thủ (${ai.defendingUnits.size}).`, '#44ff88');
+            ai.defendingUnits.clear();
         }
 
         // Gradually relax stance if no threats — go all the way to Peaceful
@@ -761,65 +776,7 @@ export function handleDefense(ai: AIContext): void {
         }
     }
 
-    // ===== ALLY BASE UNDER ATTACK (with pincer flanking!) =====
-    if (damagedAllyBuildings.length > 0) {
-        const worstAlly = damagedAllyBuildings.reduce((a, b) =>
-            (a.hp / a.maxHp) < (b.hp / b.maxHp) ? a : b
-        );
-        const severity = Math.min(1.0, 1.0 - (worstAlly.hp / worstAlly.maxHp) + 0.3);
-        ai.reportThreat(worstAlly.x, worstAlly.y, severity, worstAlly.team);
 
-        const allyThreats: Unit[] = [];
-        for (const u of ai.entityManager.units) {
-            if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team)) continue;
-            const d = Math.hypot(u.x - worstAlly.x, u.y - worstAlly.y);
-            if (d < TILE_SIZE * 15) allyThreats.push(u);
-        }
-        if (allyThreats.length === 0) return;
-
-        // PINCER ATTACK
-        let enemyCX = 0, enemyCY = 0;
-        for (const t of allyThreats) { enemyCX += t.x; enemyCY += t.y; }
-        enemyCX /= allyThreats.length;
-        enemyCY /= allyThreats.length;
-
-        const flankAngle = Math.atan2(enemyCY - worstAlly.y, enemyCX - worstAlly.x);
-        const flankX = enemyCX + Math.cos(flankAngle) * TILE_SIZE * 5;
-        const flankY = enemyCY + Math.sin(flankAngle) * TILE_SIZE * 5;
-
-        const defendCount = Math.max(3, Math.ceil(military.length * Math.min(1, severity + 0.3)));
-        let sent = 0;
-
-        for (const u of military) {
-            if (sent >= defendCount) break;
-
-            if (u.state === UnitState.Attacking) {
-                const distToThreat = Math.hypot(u.x - enemyCX, u.y - enemyCY);
-                if (distToThreat < TILE_SIZE * 8) continue;
-            }
-
-            if (sent < defendCount / 2) {
-                const distToFlank = Math.hypot(u.x - flankX, u.y - flankY);
-                if (distToFlank > TILE_SIZE * 6) {
-                    ai.safeMoveTo(u, flankX + (Math.random() - 0.5) * TILE_SIZE * 3,
-                        flankY + (Math.random() - 0.5) * TILE_SIZE * 3);
-                } else {
-                    const nearest = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 10);
-                    if (nearest) u.attackUnit(nearest);
-                }
-            } else {
-                const nearest = allyThreats.reduce((a, b) =>
-                    Math.hypot(a.x - u.x, a.y - u.y) < Math.hypot(b.x - u.x, b.y - u.y) ? a : b
-                );
-                u.attackUnit(nearest);
-            }
-            sent++;
-        }
-
-        if (sent > 0) {
-            ai.log(`🔱 Tấn công gọng kìm! ${sent} lính bao vây địch tại căn cứ đồng minh!`, '#00ffaa');
-        }
-    }
 }
 
 // ===================================================================

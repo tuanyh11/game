@@ -113,8 +113,8 @@ export function handleCombat(ai: AIContext): void {
             continue;
         }
 
-        // Sight range depends on phase and difficulty
-        const baseSight = isAggressive ? TILE_SIZE * 12 : TILE_SIZE * 5;
+        // Sight range depends on phase, support status, and difficulty
+        const baseSight = (isAggressive || isSupporting) ? TILE_SIZE * 20 : TILE_SIZE * 10;
         const sightRange = baseSight * ai.params.combatAwareness;
 
         // PRIORITY 1: Help nearby allied units in combat
@@ -152,10 +152,11 @@ export function handleCombat(ai: AIContext): void {
             continue;
         }
 
-        // PRIORITY 3: Attack enemy buildings during any aggressive phase
-        // Ensures units destroy ALL nearby buildings (including Farms) when attacking
-        if (isAggressive && (u.state === UnitState.Idle || u.state === UnitState.Moving)) {
-            const nearestEnemyBuilding = ai.findNearestEnemyBuilding(u.x, u.y, TILE_SIZE * 15);
+        // PRIORITY 3: Attack enemy buildings
+        // Ensures units destroy ALL nearby buildings (including Farms) when attacking, or if they stumble too close while gathering
+        if (u.state === UnitState.Idle || u.state === UnitState.Moving) {
+            const buildingSightRange = isAggressive ? TILE_SIZE * 15 : TILE_SIZE * 8; // If not aggressive, only attack if very close
+            const nearestEnemyBuilding = ai.findNearestEnemyBuilding(u.x, u.y, buildingSightRange);
             if (nearestEnemyBuilding) {
                 u.attackBuilding(nearestEnemyBuilding);
                 continue;
@@ -165,8 +166,15 @@ export function handleCombat(ai: AIContext): void {
             }
         }
 
-        // PRIORITY 4: If idle and supporting, move toward support target
+        // PRIORITY 4: If idle and supporting, move toward support target OR attack nearby enemies
         if (isSupporting && ai.supportTarget && u.state === UnitState.Idle) {
+            // Check for enemies near the support target first
+            const enemyNearSupport = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 15);
+            if (enemyNearSupport) {
+                u.attackUnit(enemyNearSupport);
+                continue;
+            }
+
             const dist = Math.hypot(u.x - ai.supportTarget.x, u.y - ai.supportTarget.y);
             if (dist > TILE_SIZE * 5) {
                 ai.safeMoveTo(u,
@@ -545,9 +553,9 @@ export function triggerRetreat(ai: AIContext, units: Unit[]): void {
     // Command all units to retreat to rally point (with some spread)
     for (let i = 0; i < units.length; i++) {
         const u = units[i];
-        // Spread units around rally point to avoid clumping
+        // Spread units around rally point to avoid clumping (wider spread)
         const angle = (i / units.length) * Math.PI * 2;
-        const spreadDist = TILE_SIZE * 3 + Math.random() * TILE_SIZE * 2;
+        const spreadDist = TILE_SIZE * 6 + Math.random() * TILE_SIZE * 6;
         const tx = ai.retreatRallyX + Math.cos(angle) * spreadDist;
         const ty = ai.retreatRallyY + Math.sin(angle) * spreadDist;
         ai.safeMoveTo(u, tx, ty);

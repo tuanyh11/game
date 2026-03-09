@@ -68,18 +68,190 @@ export function renderAttackWeapon(unit: Unit, ctx: CanvasRenderingContext2D, to
             const slashAngle = swingCycle * 1.2 - 0.3;
             ctx.translate(6, -4 + totalBob);
             ctx.rotate(slashAngle);
-            ctx.fillStyle = '#ccc';
-            ctx.fillRect(-1, -16, 3, 14);
-            ctx.fillStyle = '#8B5E3C';
-            ctx.fillRect(-3, -3, 7, 3);
-            ctx.fillStyle = '#ffd700';
-            ctx.fillRect(-1, 0, 3, 2);
-            if (Math.abs(swingCycle) > 0.5) {
-                ctx.globalAlpha = 0.4;
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 2;
-                ctx.beginPath(); ctx.arc(0, -8, 14, slashAngle - 0.8, slashAngle + 0.2); ctx.stroke();
-                ctx.globalAlpha = 1;
+
+            if (unit.civilization === CivilizationType.Viking) {
+                // Ulfberht Broadsword (Viking custom sword in attack animation)
+                const age = unit.age;
+
+                ctx.save();
+                ctx.scale(0.85, 0.85); // Shrink the sword slightly
+
+                // Blade
+                ctx.fillStyle = age >= 4 ? '#e6e6e6' : age >= 3 ? '#d0d0d0' : '#b0b0b0';
+                ctx.fillRect(-2.5, -20, 5, 20); // Center at x=0
+                // Tip
+                ctx.beginPath();
+                ctx.moveTo(-2.5, -20);
+                ctx.lineTo(0, -25);
+                ctx.lineTo(2.5, -20);
+                ctx.fill();
+
+                // Fuller (blood groove)
+                ctx.fillStyle = age >= 4 ? '#aaa' : '#999';
+                ctx.fillRect(-1, -20, 2, 18);
+
+                // Shiny edges
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(-2.5, -22.5, 0.5, 23);
+                ctx.fillRect(2, -22.5, 0.5, 23);
+
+                // Crossguard
+                ctx.fillStyle = age >= 4 ? '#daa520' : '#5a3a18';
+                ctx.fillRect(-4.5, -2, 9, 2);
+
+                // Handle grip
+                ctx.fillStyle = '#2a1a10';
+                ctx.fillRect(-1.5, 0, 3, 5);
+                ctx.fillStyle = '#111'; // wrap
+                ctx.fillRect(-1.5, 1.5, 3, 0.5);
+                ctx.fillRect(-1.5, 3.5, 3, 0.5);
+
+                // Lobed pommel
+                ctx.fillStyle = age >= 4 ? '#daa520' : '#5a3a18';
+                ctx.beginPath();
+                ctx.ellipse(0, 6.5, 3.5, 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillRect(-1.5, 5, 3, 1.5);
+
+                if (age >= 4) {
+                    // Glowing runes down the fuller active during strike
+                    ctx.fillStyle = '#ff4400';
+                    ctx.globalAlpha = 0.8 + Math.sin(unit.animTimer * 10) * 0.2;
+                    ctx.fillRect(-0.5, -17, 1, 1.5);
+                    ctx.fillRect(-0.5, -13, 1, 1.5);
+                    ctx.fillRect(-0.5, -9, 1, 1.5);
+                    ctx.fillRect(-0.5, -5, 1, 1.5);
+                    ctx.globalAlpha = 1;
+
+                    // Blood stains at the tip
+                    ctx.fillStyle = 'rgba(170, 0, 0, 0.8)';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -25); // tip
+                    ctx.lineTo(2.5, -19); // right
+                    ctx.lineTo(-2.5, -20); // left
+                    ctx.fill();
+                }
+
+                if (Math.abs(swingCycle) > 0.4) {
+                    ctx.globalAlpha = 0.5;
+                    ctx.strokeStyle = '#ffaa00'; // fiery trail for viking
+                    ctx.lineWidth = 2.5;
+                    // Adjusted arc radius to match the slightly smaller scaled position if needed
+                    // Actually, the slash trail looks better scaled down with the sword too
+                    ctx.beginPath(); ctx.arc(-6, -8, 16, slashAngle - 0.9, slashAngle + 0.3); ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+
+                ctx.restore();
+            } else if (unit.civilization === CivilizationType.Yamato) {
+                // Yamato Katana (Curved Japanese Sword)
+                const age = unit.age;
+                ctx.fillStyle = '#3a2a10';
+                ctx.fillRect(1, -2, 2, 8); // tsuka (handle)
+                ctx.fillStyle = '#bb2222';
+                ctx.fillRect(1, 1, 2, 2); // wrap
+                ctx.fillStyle = age >= 4 ? '#f0f0f0' : '#ddd';
+                ctx.beginPath();
+                ctx.moveTo(1, -16);
+                ctx.quadraticCurveTo(4, -8, 2, -2);
+                ctx.lineTo(4, -2);
+                ctx.quadraticCurveTo(6, -8, 3, -16);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = age >= 4 ? '#ffd700' : '#666';
+                ctx.fillRect(-1, -2, 6, 2); // tsuba
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.fillRect(1, -14, 0.5, 12); // hamon
+
+                if (Math.abs(swingCycle) > 0.5) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(-2, -6, 15, slashAngle - 0.7, slashAngle + 0.2); ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            } else if (unit.civilization === CivilizationType.BaTu) {
+                // Persian/Middle Eastern Scimitar
+                const age = unit.age;
+                ctx.fillStyle = '#8a6a30';
+                ctx.fillRect(-1, -1, 3, 5); // handle
+                ctx.fillStyle = age >= 4 ? '#eee' : '#ccc';
+                ctx.beginPath();
+                ctx.moveTo(-1, -15);
+                ctx.quadraticCurveTo(4, -8, 0, -1);
+                ctx.lineTo(2, -1);
+                ctx.quadraticCurveTo(6, -8, 1, -15);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = age >= 4 ? '#ffd700' : '#aa8822';
+                ctx.fillRect(-3, -2, 6, 2); // guard
+
+                if (Math.abs(swingCycle) > 0.5) {
+                    ctx.globalAlpha = 0.35;
+                    ctx.strokeStyle = '#ffd700';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath(); ctx.arc(-2, -6, 16, slashAngle - 0.8, slashAngle + 0.3); ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            } else if (unit.civilization === CivilizationType.DaiMinh) {
+                // Ming Dynasty Changdao (Long two-handed sword)
+                const age = unit.age;
+                ctx.fillStyle = '#222';
+                ctx.fillRect(-1, -1, 3, 10); // long handle
+                ctx.fillStyle = '#aa2222';
+                ctx.fillRect(-1, 3, 3, 2); // tassel/wrap
+                ctx.fillStyle = age >= 4 ? '#e6e6e6' : '#ccc';
+                ctx.fillRect(0, -22, 3, 21); // long straight blade
+                ctx.beginPath();
+                ctx.moveTo(0, -22); ctx.lineTo(1.5, -26); ctx.lineTo(3, -22); ctx.fill(); // Tip
+                ctx.fillStyle = age >= 4 ? '#ffd700' : '#888';
+                ctx.fillRect(-3, -2, 8, 2); // disc guard
+
+                if (Math.abs(swingCycle) > 0.5) {
+                    ctx.globalAlpha = 0.3;
+                    ctx.strokeStyle = '#ffaa44';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(-4, -4, 20, slashAngle - 0.8, slashAngle + 0.3); ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            } else if (unit.civilization === CivilizationType.LaMa) {
+                // Roman Gladius (Short thrusting sword / broad blade)
+                const age = unit.age;
+                ctx.fillStyle = '#4a2a10';
+                ctx.fillRect(-1, -1, 3, 4); // grip
+                ctx.fillStyle = age >= 4 ? '#e0e0e0' : '#c0c0c0';
+                ctx.beginPath();
+                ctx.moveTo(-1, -2); ctx.lineTo(-2, -12); // wide base to tip
+                ctx.lineTo(0.5, -16); // point
+                ctx.lineTo(3, -12); ctx.lineTo(2, -2); ctx.fill();
+                ctx.fillStyle = '#111';
+                ctx.fillRect(-0.5, -14, 0.5, 12); // center ridge
+                ctx.fillStyle = age >= 4 ? '#daa520' : '#c9a84c';
+                ctx.fillRect(-3, -3, 7, 2); // guard
+                ctx.beginPath(); ctx.arc(0.5, 4, 2, 0, Math.PI * 2); ctx.fill(); // spherical pommel
+
+                if (Math.abs(swingCycle) > 0.5) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath(); ctx.arc(0, -6, 12, slashAngle - 0.6, slashAngle + 0.2); ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            } else {
+                // Generic sword (Fallback)
+                ctx.fillStyle = '#ccc';
+                ctx.fillRect(-1, -16, 3, 14);
+                ctx.fillStyle = '#8B5E3C';
+                ctx.fillRect(-3, -3, 7, 3);
+                ctx.fillStyle = '#ffd700';
+                ctx.fillRect(-1, 0, 3, 2);
+                if (Math.abs(swingCycle) > 0.5) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(0, -8, 14, slashAngle - 0.8, slashAngle + 0.2); ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
             }
             break;
         }
@@ -418,25 +590,43 @@ export function renderAttackWeapon(unit: Unit, ctx: CanvasRenderingContext2D, to
             const civ = unit.civilization;
             switch (civ) {
                 case CivilizationType.BaTu: {
+                    const age = unit.age;
                     // Scimitar wide slash
                     const slashAngle = swingCycle * 1.4 - 0.2;
                     ctx.translate(6, -6 + totalBob);
                     ctx.rotate(slashAngle);
+
+                    // Gauntlet / Arm
+                    ctx.fillStyle = '#6a5a2a'; // bronze bracer
+                    ctx.fillRect(-5, -2, 5, 4);
+
                     // Handle
                     ctx.fillStyle = '#8a6a30';
-                    ctx.fillRect(-1, -1, 2, 5);
-                    // Curved blade
-                    ctx.fillStyle = '#eee';
+                    ctx.fillRect(-1, -1, 2, 4);
+
+                    // Curved blade (matches idle scimitar)
+                    ctx.fillStyle = age >= 4 ? '#eee' : '#ccc';
                     ctx.beginPath();
-                    ctx.moveTo(-1, -14);
-                    ctx.quadraticCurveTo(3, -8, 0, -1);
+                    // Tip of sword
+                    ctx.moveTo(-1, -11);
+                    // Right curve (outer edge)
+                    ctx.quadraticCurveTo(3, -5, 0, -1);
+                    // Bottom near hilt
                     ctx.lineTo(2, -1);
-                    ctx.quadraticCurveTo(5, -8, 1, -14);
+                    // Left curve (inner edge)
+                    ctx.quadraticCurveTo(5, -5, 1, -11);
                     ctx.closePath();
                     ctx.fill();
-                    // Guard
-                    ctx.fillStyle = '#ffd700';
-                    ctx.fillRect(-3, -2, 6, 2);
+
+                    // Gold accent on blade
+                    if (age >= 4) {
+                        ctx.fillStyle = '#ffd700';
+                        ctx.fillRect(-2, -2, 4, 2);
+                    } else {
+                        // Guard
+                        ctx.fillStyle = '#ffd700';
+                        ctx.fillRect(-3, -2, 6, 2);
+                    }
                     // Slash trail
                     if (Math.abs(swingCycle) > 0.5) {
                         ctx.globalAlpha = 0.35;
@@ -450,27 +640,54 @@ export function renderAttackWeapon(unit: Unit, ctx: CanvasRenderingContext2D, to
                     break;
                 }
                 case CivilizationType.DaiMinh: {
-                    // Halberd sweeping strike
-                    const sweepAngle = swingCycle * 1.0 - 0.5;
-                    ctx.translate(5, -8 + totalBob);
-                    ctx.rotate(sweepAngle);
+                    const age = unit.age;
+                    // Halberd forward thrust
+                    const thrust = Math.sin(swingPhase) * 10;
+                    const wobble = Math.cos(swingPhase * 2) * 0.08;
+                    ctx.translate(4 + thrust * 0.6, -6 + totalBob);
+                    ctx.rotate(Math.PI / 2 - 0.3 + wobble);
+
+                    // Arm / Hand
+                    ctx.fillStyle = '#8a0a0a'; // red Ming sleeve
+                    ctx.fillRect(-5, -1, 6, 4);
+
                     // Shaft
-                    ctx.fillStyle = '#5a3a20';
-                    ctx.fillRect(-1, -22, 2, 26);
-                    // Halberd head — broad blade
-                    ctx.fillStyle = '#ccc';
-                    ctx.fillRect(-3, -26, 6, 3);
+                    ctx.fillStyle = age >= 4 ? '#6a2222' : '#5a3a20';
+                    ctx.fillRect(-1, -24, 2, 28);
+
+                    // Halberd head (broad blade + hook)
+                    ctx.fillStyle = age >= 4 ? '#eee' : '#ccc';
+                    ctx.fillRect(-3, -28, 6, 3);
                     ctx.beginPath();
-                    ctx.moveTo(0, -29);
-                    ctx.lineTo(-2, -23);
-                    ctx.lineTo(2, -23);
+                    ctx.moveTo(0, -31);
+                    ctx.lineTo(-2, -25);
+                    ctx.lineTo(2, -25);
                     ctx.closePath();
                     ctx.fill();
+
                     // Hook
-                    ctx.fillRect(2, -24, 3, 2);
+                    ctx.fillRect(2, -26, 3, 2);
+
+                    if (age >= 4) {
+                        ctx.fillStyle = '#ffd700';
+                        ctx.fillRect(-2, -26, 4, 3);
+                    }
+
                     // Red tassel
                     ctx.fillStyle = '#dd3333';
-                    ctx.fillRect(-2, -4, 2, 4);
+                    ctx.fillRect(-2, -22, 2, 4);
+
+                    // Thrust trail
+                    if (thrust > 4) {
+                        ctx.globalAlpha = 0.3;
+                        ctx.strokeStyle = '#ffbb44'; // slightly golden/fiery trail
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(0, -26);
+                        ctx.lineTo(0, -26 - thrust * 0.5);
+                        ctx.stroke();
+                        ctx.globalAlpha = 1;
+                    }
                     break;
                 }
                 case CivilizationType.Yamato: {
@@ -478,6 +695,11 @@ export function renderAttackWeapon(unit: Unit, ctx: CanvasRenderingContext2D, to
                     const cutAngle = swingCycle * 1.3 - 0.1;
                     ctx.translate(6, -5 + totalBob);
                     ctx.rotate(cutAngle);
+
+                    // Arm / Sode
+                    ctx.fillStyle = '#2a2a35'; // dark Yamato armor
+                    ctx.fillRect(-6, -2, 7, 4);
+
                     // Handle with red wrapping
                     ctx.fillStyle = '#333';
                     ctx.fillRect(-1, -1, 2, 6);
@@ -625,6 +847,11 @@ export function renderAttackWeapon(unit: Unit, ctx: CanvasRenderingContext2D, to
                     const wobble = Math.cos(swingPhase * 2) * 0.08;
                     ctx.translate(4 + thrust * 0.6, -6 + totalBob);
                     ctx.rotate(Math.PI / 2 - 0.3 + wobble);
+
+                    // Roman/Generic Arm
+                    ctx.fillStyle = '#8b0000'; // roman red tunic
+                    ctx.fillRect(-5, -1, 6, 4);
+
                     // Shaft
                     ctx.fillStyle = '#8B5E3C';
                     ctx.fillRect(-1, -24, 2, 28);
@@ -661,7 +888,6 @@ export function renderAttackWeapon(unit: Unit, ctx: CanvasRenderingContext2D, to
         case UnitType.HeroSpartacus:
         case UnitType.HeroMusashi:
         case UnitType.HeroRagnar:
-        case UnitType.HeroZarathustra:
         case UnitType.HeroQiJiguang: {
             const civ = unit.civilization;
             if (civ === CivilizationType.BaTu) {
@@ -1187,7 +1413,6 @@ export function renderAttackEffects(unit: Unit, ctx: CanvasRenderingContext2D, t
         case UnitType.HeroSpartacus:
         case UnitType.HeroMusashi:
         case UnitType.HeroRagnar:
-        case UnitType.HeroZarathustra:
         case UnitType.HeroQiJiguang: {
             const civ4 = unit.civilization;
             const slashP = (Math.sin(impactPhase) + 1) * 0.5;

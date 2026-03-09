@@ -55,46 +55,34 @@ export const CenturionAbility: EliteAbility = {
 
 // ---- Mode switching logic ----
 function updateModeSwitch(unit: Unit, particles: any): void {
-    if (unit.state === UnitState.Attacking) {
-        let targetDist = Infinity;
-        if (unit.attackTarget && unit.attackTarget.alive) {
-            targetDist = Math.hypot(unit.attackTarget.x - unit.x, unit.attackTarget.y - unit.y);
-        } else if (unit.attackBuildingTarget && (unit.attackBuildingTarget as any).alive) {
-            targetDist = Math.hypot(unit.attackBuildingTarget.x - unit.x, unit.attackBuildingTarget.y - unit.y);
-        }
-        // Switch to SWORD only when target is within melee range
-        if (targetDist <= unit.centurionSwordRange + 10 && unit.centurionMode === 'spear') {
-            unit.centurionMode = 'sword';
-            unit.civRange = unit.centurionSwordRange;
-            unit.centurionMeleeHits = 0;
-            particles?.emit({
-                x: unit.x, y: unit.y - 6, count: 5, spread: 4,
-                speed: [15, 40], angle: [0, Math.PI * 2],
-                life: [0.2, 0.4], size: [2, 3],
-                colors: ['#ccc', '#ffd700', '#fff'],
-                gravity: 0, shape: 'star',
-            });
-        } else if (targetDist > unit.centurionSwordRange + 20 && unit.centurionMode === 'sword') {
-            unit.centurionMode = 'spear';
-            unit.civRange = unit.centurionSpearRange;
-        }
-    } else {
-        // Not attacking — default to spear mode
-        if (unit.centurionMode === 'sword') {
-            unit.centurionMode = 'spear';
-            unit.civRange = unit.centurionSpearRange;
+    unit.centurionMode = 'spear';
+    // Mặc định tầm đánh là cận chiến (32px) để Bách Phu luôn chủ động áp sát đâm đối thủ
+    let range = 32;
+
+    if (unit.attackTarget || unit.attackBuildingTarget) {
+        const targetX = unit.attackTarget ? unit.attackTarget.x : unit.attackBuildingTarget!.x;
+        const targetY = unit.attackTarget ? unit.attackTarget.y : unit.attackBuildingTarget!.y;
+        const dist = Math.hypot(targetX - unit.x, targetY - unit.y);
+
+        // Nếu mục tiêu ở xa (> 60px) và Đinh Ba đã sẵn sàng (hoặc chuẩn bị ném xong), 
+        // Bách Phu sẽ dừng lại ở tầm 150px để quăng Đinh Ba.
+        if (dist > 60 && unit.centurionPilumCooldown <= 1.0) {
+            range = unit.centurionSpearRange; // 150px
         }
     }
+    unit.civRange = range;
 }
 
-// ---- Pilum throw at unit ----
 function throwPilumAtUnit(unit: Unit, particles: any, allUnits: Unit[]): void {
     const target = unit.attackTarget!;
     const dx = target.x - unit.x, dy = target.y - unit.y;
     const dist = Math.hypot(dx, dy);
-    if (dist > unit.centurionSpearRange) return;
 
-    unit.centurionPilumCooldown = 3.0;
+    // Only throw if target is within spear range BUT outside of melee minimum (e.g., > 40px)
+    // If they are closer, standard melee attack from CenturionStrategy will handle it instead.
+    if (dist > unit.centurionSpearRange || dist <= 40) return;
+
+    unit.centurionPilumCooldown = 3.0; // Cooldown ném lao
     if (target.x > unit.x) unit.facingRight = true;
     else unit.facingRight = false;
 
@@ -105,13 +93,14 @@ function throwPilumAtUnit(unit: Unit, particles: any, allUnits: Unit[]): void {
     launchPilumProjectile(unit, particles, allUnits, impactX, impactY, false);
 }
 
-// ---- Pilum throw at building ----
 function throwPilumAtBuilding(unit: Unit, particles: any, allUnits: Unit[]): void {
     const bldg = unit.attackBuildingTarget!;
     const dx = bldg.x - unit.x, dy = bldg.y - unit.y;
     const dist = Math.hypot(dx, dy);
     const bldgRange = unit.centurionSpearRange + bldg.tileW * TILE_SIZE * 0.4;
-    if (dist > bldgRange) return;
+
+    // Only throw if building is within spear range BUT outside of melee minimum (e.g., > 40px)
+    if (dist > bldgRange || dist <= 40) return;
 
     unit.centurionPilumCooldown = 3.0;
     if (bldg.x > unit.x) unit.facingRight = true;
@@ -150,7 +139,7 @@ function launchPilumProjectile(
     });
 
     let elapsed = 0;
-    const intervalMs = 30; // 33 fps tick for projectile
+    const intervalMs = 30; // ~33 fps tick for projectile
     const capturedTeam = unit.team;
 
     // Parabola height control (higher arc for longer throws)
@@ -175,7 +164,6 @@ function launchPilumProjectile(
         const currZ = 4 * maxZ * t * (1 - t);
 
         // Calculate tangent angle for rotation (derivative of parabola)
-        // dz/dt = 4 * maxZ * (1 - 2t)
         const dz = 4 * maxZ * (1 - 2 * t);
 
         // Exact 2D screen velocity vector for flawless parabolic alignment
@@ -185,14 +173,16 @@ function launchPilumProjectile(
         // Use the exact trajectory angle so it flies straight like an arrow
         const renderAngle = Math.atan2(velY, velX);
 
-        // Render the Pilum mid-air using particles with exactly 1 tick lifespan
+        // Render the Majestic Pilum mid-air using particles with exactly 1 tick lifespan
         particles?.emit({
             x: currX, y: currY - currZ,
             count: 1, spread: 0,
             speed: [0, 0], angle: [renderAngle, renderAngle],
             life: [intervalMs / 1000, intervalMs / 1000 + 0.02],
             size: [3, 4], colors: ['#8B6914'],
-            gravity: 0, shape: 'spear',
+            gravity: 0, shape: 'trident',
+            rotation: renderAngle,
+            rotSpeed: 0
         });
 
         // Motion blur / trail

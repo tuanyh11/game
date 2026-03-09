@@ -43,7 +43,11 @@ export function unitChaseMove(
     unit.lastX = unit.x;
     unit.lastY = unit.y;
 
-    if (unit.stuckTimer > 0.4) {
+    // Stagger stuck threshold to prevent multiple clumped units from running A* on the same frame
+    // Base threshold 0.4s + deterministic jitter based on unit ID
+    const stuckThreshold = 0.4 + ((unit.id % 10) * 0.05);
+
+    if (unit.stuckTimer > stuckThreshold) {
         unit.pathWaypoints = [];
         unit.pathIndex = 0;
         unit.stuckTimer = 0;
@@ -282,8 +286,11 @@ export function unitDoMove(
     unit.lastX = unit.x;
     unit.lastY = unit.y;
 
+    // Stagger stuck threshold to prevent A* lag spikes from mass clumps
+    const stuckThreshold = 0.4 + ((unit.id % 10) * 0.05);
+
     // If stuck: clear path and let A* re-calculate a new route
-    if (unit.stuckTimer > 0.4) {
+    if (unit.stuckTimer > stuckThreshold) {
         unit.pathWaypoints = [];
         unit.pathIndex = 0;
         unit.stuckTimer = 0;

@@ -7,23 +7,40 @@ export class ChuKoNuStrategy extends BaseCombatStrategy {
     protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
         const { unit, particles } = context;
 
-        // Cẩm Y Vệ normal slash (Ming Jian - straight sword) + Cửu Tịch charge indicator
+        // Cẩm Y Vệ (ChuKoNu) - Tú Xuân Đao (Xiu Chun Dao)
         const isComboReady = unit.camYVeCooldown <= 0 && !unit.camYVeComboActive;
         const slashColors = isComboReady
-            ? ['#8b0000', '#ff0044', '#dd2222']  // dark crimson glow when charged
-            : ['#dd3333', '#ffd700', '#fff'];     // normal Jian flash
+            ? ['#8b0000', '#ff0033', '#ffffff']  // Dark blood crimson glow when charged
+            : ['#dd2222', '#ff8800', '#ffffff']; // Normal brutal slash
 
-        // Jian straight piercing slash/thrust geometry (thinner, faster, longer)
-        for (let sw = 0; sw < 5; sw++) {
-            const sa = atkAngle - 0.4 + sw * 0.2; // tighter arc than a dao
-            particles.emit({ x: target.x, y: target.y - 4, count: 1, spread: 2, speed: [100 + sw * 20, 200], angle: [sa - 0.05, sa + 0.05], life: [0.1, 0.25], size: [1.5, 6], colors: slashColors, gravity: 0, shape: 'rect' });
+        // Lưỡi đao chém phập mạn sườn (Thick, brutal arc)
+        for (let sw = 0; sw < 6; sw++) {
+            const sa = atkAngle - 0.6 + sw * 0.25;
+            particles.emit({
+                x: target.x, y: target.y - 4,
+                count: 1, spread: 2,
+                speed: [100 + sw * 15, 200],
+                angle: [sa - 0.05, sa + 0.05],
+                life: [0.15, 0.3],
+                size: [2, 5],
+                colors: slashColors,
+                gravity: 10, shape: 'rect'
+            });
         }
 
-        // Sparks (crimson when charged, gold normally)
+        // Máu me văng tung tóe (Bloody sparks)
         const sparkColors = isComboReady
-            ? ['#ff0044', '#8b0000', '#ff3333']
-            : ['#ffd700', '#fff', '#c9a84c'];
-        particles.emit({ x: target.x, y: target.y - 4, count: 5, spread: 4, speed: [40, 90], angle: [0, Math.PI * 2], life: [0.1, 0.3], size: [1.5, 3], colors: sparkColors, gravity: 50, shape: 'circle' });
+            ? ['#ff0033', '#8b0000', '#550000']
+            : ['#ff4444', '#dd2222', '#ffcc00'];
+        particles.emit({
+            x: target.x, y: target.y - 4,
+            count: 8, spread: 6,
+            speed: [40, 110], angle: [0, Math.PI * 2],
+            life: [0.15, 0.4],
+            size: [1.5, 4],
+            colors: sparkColors,
+            gravity: 60, shape: 'circle'
+        });
 
         // Crimson aura flicker when charged
         if (isComboReady) {

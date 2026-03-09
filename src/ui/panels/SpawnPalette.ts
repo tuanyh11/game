@@ -5,7 +5,8 @@
 
 import {
     C, UnitType, UNIT_DATA, CIVILIZATION_DATA, CivilizationType,
-    isCivElite, CIV_ELITE_UNIT, BuildingType, ResourceNodeType, BUILDING_DATA
+    isCivElite, CIV_ELITE_UNIT, BuildingType, ResourceNodeType, BUILDING_DATA,
+    isCivCavalry, CIV_UNIQUE_CAVALRY
 } from "../../config/GameConfig";
 import type { ClickArea } from "./CommandGrid";
 
@@ -48,6 +49,11 @@ export const SPAWN_ITEMS: SpawnItemDef[] = [
     { type: UnitType.Ninja, entityCategory: 'unit', label: 'Ninja', group: '⭐ Đặc Biệt (Unit)' },
     { type: UnitType.Centurion, entityCategory: 'unit', label: 'Bách Phu', group: '⭐ Đặc Biệt (Unit)' },
     { type: UnitType.Ulfhednar, entityCategory: 'unit', label: 'Chiến Binh Sói', group: '⭐ Đặc Biệt (Unit)' },
+    { type: UnitType.WarElephant, entityCategory: 'unit', label: 'Voi Chiến', group: '⭐ Đặc Biệt (Unit)' },
+    { type: UnitType.FireLancer, entityCategory: 'unit', label: 'Hỏa Thương', group: '⭐ Đặc Biệt (Unit)' },
+    { type: UnitType.Yabusame, entityCategory: 'unit', label: 'Yabusame', group: '⭐ Đặc Biệt (Unit)' },
+    { type: UnitType.Equites, entityCategory: 'unit', label: 'Equites', group: '⭐ Đặc Biệt (Unit)' },
+    { type: UnitType.BearRider, entityCategory: 'unit', label: 'Kỵ Binh Gấu', group: '⭐ Đặc Biệt (Unit)' },
 
     // Thử nghiệm
     { type: UnitType.TargetDummy, entityCategory: 'unit', label: 'Hình Nhân', group: '🧪 Thử Nghiệm (Unit)' },
@@ -296,6 +302,9 @@ export function renderSpawnPalette(
 
             if (isCivElite(ut)) {
                 return ut === CIV_ELITE_UNIT[ui.freeSpawnCiv];
+            }
+            if (isCivCavalry(ut)) {
+                return ut === CIV_UNIQUE_CAVALRY[ui.freeSpawnCiv];
             }
             if (isHeroGroup) {
                 const civHeroes: Record<CivilizationType, UnitType> = {

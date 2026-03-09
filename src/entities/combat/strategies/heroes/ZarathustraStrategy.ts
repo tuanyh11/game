@@ -33,13 +33,54 @@ export class ZarathustraStrategy extends BaseCombatStrategy {
                 particles.emit({ x: unit.x, y: unit.y, count: 20, spread: 10, speed: [40, 100], angle: [0, Math.PI * 2], life: [0.6, 1.4], size: [4, 8], colors: ['#ffd70066', '#ffee8844'], gravity: 0, shape: 'circle' });
                 particles.emit({ x: unit.x, y: unit.y - 8, count: 12, spread: 4, speed: [60, 140], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.8, 1.6], size: [3, 6], colors: ['#ffd700', '#fff'], gravity: -60, shape: 'star' });
                 break;
-            case 'batu_m0': { // Lửa Thánh — sacred fire 45 AOE
-                const t = unit.attackTarget; const fx = t ? t.x : unit.x + (unit.facingRight ? 60 : -60); const fy = t ? t.y : unit.y;
-                HeroSkillUtils.aoeDamage(unit, 45, aoeRange, 6, findNearestEnemy);
-                HeroSkillUtils.explodeVfx(fx, fy, particles, ['#ff2200', '#ff4400', '#ff6600', '#ffaa00']);
-                const fa = Math.atan2(fy - unit.y, fx - unit.x);
-                particles.emit({ x: unit.x, y: unit.y - 8, count: 12, spread: 2, speed: [220, 400], angle: [fa - 0.08, fa + 0.08], life: [0.08, 0.2], size: [3, 7], colors: ['#ff6600', '#ffaa00', '#fff'], gravity: 0, shape: 'circle' });
-                for (let i = 0; i < 5; i++) { const p = i / 5; particles.emit({ x: unit.x + (fx - unit.x) * p, y: unit.y + (fy - unit.y) * p - 4, count: 4, spread: 4, speed: [10, 30], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.3, 0.6], size: [2, 4], colors: ['#ff440088', '#ff880066'], gravity: -20, shape: 'circle' }); }
+            case 'batu_m0': { // Xuyên Thấu — 3 rapid piercing flaming arrows
+                const arrowCount = 3;
+                const delayMs = 150; // 150ms between shots
+
+                for (let step = 0; step < arrowCount; step++) {
+                    setTimeout(() => {
+                        // Check if unit is still alive to shoot
+                        if (!unit.alive) return;
+
+                        const maxRange = Math.max(unit.civRange * 1.5, 250);
+                        let t = unit.attackTarget;
+
+                        // If target exists but is too far, drop it
+                        if (t && t.alive) {
+                            const dist = Math.hypot(t.x - unit.x, t.y - unit.y);
+                            if (dist > maxRange) {
+                                t = null;
+                            }
+                        }
+
+                        // Find a new target within range if necessary
+                        if (!t || !t.alive) {
+                            if (findNearestEnemy) t = findNearestEnemy(unit.x, unit.y, unit.team, maxRange);
+                        }
+
+                        const arrowX = unit.x + (unit.facingRight ? 10 : -10);
+                        const arrowY = unit.y - 12;
+
+                        if (t && t.alive) {
+                            // Damage
+                            t.hp -= (unit.attack * 1.2); // 120% attack damage per arrow
+                            if (t.hp <= 0) unit.addHeroXp(Math.max(10, Math.floor(t.maxHp * 0.3)));
+
+                            // Angle
+                            const fa = Math.atan2(t.y - unit.y, t.x - unit.x);
+
+                            // Projectile
+                            particles.emit({ x: arrowX, y: arrowY, count: 1, spread: 0, speed: [650, 750], angle: [fa, fa], life: [0.35, 0.45], size: [16, 20], colors: ['#ffd700', '#ffee88', '#fff'], gravity: 0, shape: 'flaming_arrow' });
+
+                            // Hit explosion
+                            particles.emit({ x: t.x, y: t.y, count: 12, spread: 6, speed: [60, 180], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.2, 0.5], size: [2, 5], colors: ['#ff4400', '#ff8800', '#fff'], gravity: 30, shape: 'star' });
+                        } else {
+                            // Shoot forward blindly if no target
+                            const fa = unit.facingRight ? 0 : Math.PI;
+                            particles.emit({ x: arrowX, y: arrowY, count: 1, spread: 0, speed: [650, 750], angle: [fa, fa], life: [0.35, 0.45], size: [16, 20], colors: ['#ffd700', '#ffee88', '#fff'], gravity: 0, shape: 'flaming_arrow' });
+                        }
+                    }, step * delayMs);
+                }
                 break;
             }
             case 'batu_m1': { // Thiêu Đốt — DOT 8/s 5s
@@ -95,47 +136,45 @@ export class ZarathustraStrategy extends BaseCombatStrategy {
     protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
         const { unit, particles } = context;
 
-        // Arcane bolt projectile — brighter, larger
+        // Flaming Arrow Projectile
+        const arrowX = unit.x + (unit.facingRight ? 10 : -10);
+        const arrowY = unit.y - 12;
+
         particles.emit({
-            x: unit.x + (unit.facingRight ? 12 : -12),
-            y: unit.y - 10, count: 4, spread: 2,
-            speed: [260, 380],
-            angle: [atkAngle - 0.04, atkAngle + 0.04],
-            life: [0.12, 0.3], size: [4, 7],
-            colors: ['#aa44ff', '#cc66ff', '#ff44ff', '#fff'],
-            gravity: 0, shape: 'circle',
+            x: arrowX,
+            y: arrowY, count: 1, spread: 0,
+            speed: [550, 650], // Fast physical arrow
+            angle: [atkAngle, atkAngle],
+            life: [0.35, 0.45], size: [14, 16], // Size mapped to arrow scaling and life stretched for range
+            colors: ['#ffd700', '#ffee88', '#ffffff'], // Golden glowing arrow
+            gravity: 0, shape: 'flaming_arrow', // Realistic flaming arrow shape
         });
-        // Swirling arcane trail
+
+        // Fire trail burst at launch point
         particles.emit({
-            x: unit.x, y: unit.y - 8, count: 10, spread: 4,
-            speed: [80, 180],
-            angle: [atkAngle - 0.4, atkAngle + 0.4],
-            life: [0.1, 0.3], size: [1.5, 3.5],
-            colors: ['#cc88ff', '#ff88ff', '#8844ff', '#aa66ff', '#fff'],
-            gravity: 0, shape: 'star',
+            x: arrowX, y: arrowY, count: 6, spread: 4,
+            speed: [100, 200],
+            angle: [atkAngle - 0.2, atkAngle + 0.2],
+            life: [0.15, 0.3], size: [2, 4],
+            colors: ['#ff4400', '#ff8800', '#ffd700'],
+            gravity: 10, shape: 'circle',
         });
-        // Arcane explosion at target — bigger
+
+        // Flaming impact upon hitting target
         particles.emit({
-            x: target.x, y: target.y, count: 18, spread: 8,
-            speed: [50, 140], angle: [0, Math.PI * 2],
-            life: [0.2, 0.6], size: [2.5, 6],
-            colors: ['#aa44ff', '#ff44ff', '#cc88ff', '#fff'],
-            gravity: 15, shape: 'star',
+            x: target.x, y: target.y - 5, count: 15, spread: 6,
+            speed: [40, 160], angle: [-Math.PI * 0.8, -Math.PI * 0.2], // Upward splash
+            life: [0.2, 0.5], size: [2, 5],
+            colors: ['#ff4400', '#ff8800', '#ffd700', '#ffffff'],
+            gravity: 30, shape: 'star',
         });
-        // Inner flash at impact
+
+        // Ground ember ring
         particles.emit({
-            x: target.x, y: target.y, count: 6, spread: 3,
-            speed: [10, 40], angle: [0, Math.PI * 2],
-            life: [0.15, 0.3], size: [4, 8],
-            colors: ['#ffffff', '#eeddff', '#ffccff'],
-            gravity: 0, shape: 'circle',
-        });
-        // Purple ground ring
-        particles.emit({
-            x: target.x, y: target.y + 4, count: 10, spread: 12,
-            speed: [60, 120], angle: [0, Math.PI * 2],
-            life: [0.15, 0.4], size: [2, 4],
-            colors: ['#6622cc', '#8844ff', '#aa66ff'],
+            x: target.x, y: target.y + 4, count: 8, spread: 10,
+            speed: [30, 80], angle: [0, Math.PI * 2],
+            life: [0.2, 0.4], size: [1.5, 3],
+            colors: ['#cc4400', '#ff6600'],
             gravity: 50, shape: 'circle',
         });
     }

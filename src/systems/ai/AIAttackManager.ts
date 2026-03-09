@@ -54,7 +54,13 @@ export function sendAttackWave(ai: AIContext): void {
 
     // Only abort if enemy defense is MUCH stronger AND we haven't reached max wave
     const hasMaxArmy = military.length >= ai.params.maxWaveSize;
-    if (!hasMaxArmy && enemyDefensePower > ownPower * 2.0 && military.length < ai.params.maxWaveSize * 0.8) {
+
+    // Scale acceptable disadvantage by difficulty. The higher the number, the more reckless the AI is.
+    // Hard AI will charge even if enemy is 3x stronger. Normal AI tolerates 2x.
+    const acceptableDisadvantage = ai.difficulty === AIDifficulty.Hard ? 3.0 : 2.0;
+
+    // AI will also ignore the power disadvantage and just charge if its army is at least 50% of max size (very reckless)
+    if (!hasMaxArmy && enemyDefensePower > ownPower * acceptableDisadvantage && military.length < ai.params.maxWaveSize * 0.5) {
         ai.log(`⚠️ Địch phòng thủ mạnh! Chờ thêm quân... (${military.length}/${ai.params.maxWaveSize})`, '#ffaa00');
         return;
     }
@@ -204,35 +210,22 @@ export function rallyTroops(ai: AIContext): void {
     const baseX = ai.baseX;
     const baseY = ai.baseY;
 
-    // Check ally TC for guarding
-    const allyTCs = ai.entityManager.buildings.filter(
-        b => b.alive && b.type === BuildingType.TownCenter && b.team !== ai.team && ai.entityManager.isAlly(b.team, ai.team)
-    );
-    const isGuardingAlly = allyTCs.length > 0 && Math.floor(sharedIntel.gameTime / 60) % 2 === 1;
-
     // Calculate rally point for ATTACK units
-    if (isGuardingAlly) {
-        const allyTC = allyTCs[0];
-        const mapCenterX = (MAP_COLS * TILE_SIZE) / 2;
-        const mapCenterY = (MAP_ROWS * TILE_SIZE) / 2;
-        const allyThreatAngle = Math.atan2(mapCenterY - allyTC.y, mapCenterX - allyTC.x);
-
-        // Rally attack units in front of the ally TC, facing the map center
-        ai.rallyX = allyTC.x + Math.cos(allyThreatAngle) * TILE_SIZE * 8;
-        ai.rallyY = allyTC.y + Math.sin(allyThreatAngle) * TILE_SIZE * 8;
-    } else if (enemyBuildings.length > 0) {
+    if (enemyBuildings.length > 0) {
         let nearestBldg = enemyBuildings[0];
         let nearestDist = Infinity;
         for (const pb of enemyBuildings) {
             const d = Math.hypot(pb.x - baseX, pb.y - baseY);
             if (d < nearestDist) { nearestDist = d; nearestBldg = pb; }
         }
-        ai.rallyX = baseX + (nearestBldg.x - baseX) * 0.3;
-        ai.rallyY = baseY + (nearestBldg.y - baseY) * 0.3;
+        const angleToTarget = Math.atan2(nearestBldg.y - baseY, nearestBldg.x - baseX);
+        const rallyDist = TILE_SIZE * 15; // Stay close to home to rally
+        ai.rallyX = baseX + Math.cos(angleToTarget) * rallyDist;
+        ai.rallyY = baseY + Math.sin(angleToTarget) * rallyDist;
     } else {
         // Pick rally point slightly in front of base (toward center of map)
         const angleToCenter = Math.atan2((MAP_ROWS * TILE_SIZE) / 2 - ai.baseY, (MAP_COLS * TILE_SIZE) / 2 - ai.baseX);
-        const rallyDist = TILE_SIZE * 8;
+        const rallyDist = TILE_SIZE * 15; // Increased from 8 to 15 to pull them away from buildings
 
         // Check if we have a primary threat direction — rally toward it!
         const dtp = ai.getDefenseTrainingPriority();
@@ -268,9 +261,10 @@ export function rallyTroops(ai: AIContext): void {
         // with WIDER patrol radius so they're not stacked on TC
         if (buildingsToGuard.length > 0) {
             const assignedBuilding = buildingsToGuard[i % buildingsToGuard.length];
-            // Wider patrol radius (6-9 tiles instead of 3-5)
+            // assignedBuilding.
+            // Wider patrol radius (8-13 tiles instead of 6-9)
             const patrolAngle = (sharedIntel.gameTime * 0.3 + i * Math.PI * 2 / Math.max(1, ai.forceAllocation.garrisonUnits.length)) % (Math.PI * 2);
-            const patrolRadius = TILE_SIZE * (6 + (i % 4)); // 6-9 tiles radius
+            const patrolRadius = TILE_SIZE * (8 + (i % 6)); // 8-13 tiles radius
             const patrolX = assignedBuilding.x + Math.cos(patrolAngle) * patrolRadius;
             const patrolY = assignedBuilding.y + Math.sin(patrolAngle) * patrolRadius;
             // Only move if sufficiently far from patrol point
@@ -291,17 +285,21 @@ export function rallyTroops(ai: AIContext): void {
         }
     }
 
-    // === ATTACK + SUPPORT units: rally to staging area ===
+    // === ATTACK units ONLY: rally to staging area ===
+    // Support units are managed by AIAllianceManager
     const rallyUnits = [
         ...ai.forceAllocation.attackUnits,
-        ...ai.forceAllocation.supportUnits,
     ].filter(u => u.state === UnitState.Idle && !garrisonSet.has(u));
 
     for (const u of rallyUnits) {
         const dist = Math.hypot(u.x - ai.rallyX, u.y - ai.rallyY);
-        if (dist > TILE_SIZE * 4) {
-            const tx = ai.rallyX + (Math.random() - 0.5) * TILE_SIZE * 3;
-            const ty = ai.rallyY + (Math.random() - 0.5) * TILE_SIZE * 3;
+        // Ensure units don't constantly shuffle if they are "close enough" (within 10 tiles of rally center)
+        if (dist > TILE_SIZE * 10) {
+            // Give them a very wide spread radius (0-18 tiles) to prevent massive clumping
+            const angle = Math.random() * Math.PI * 2;
+            const spreadRadius = Math.random() * TILE_SIZE * 18;
+            const tx = ai.rallyX + Math.cos(angle) * spreadRadius;
+            const ty = ai.rallyY + Math.sin(angle) * spreadRadius;
             const cx = Math.max(TILE_SIZE * 2, Math.min(tx, (MAP_COLS - 2) * TILE_SIZE));
             const cy = Math.max(TILE_SIZE * 2, Math.min(ty, (MAP_ROWS - 2) * TILE_SIZE));
             ai.safeMoveTo(u, cx, cy);

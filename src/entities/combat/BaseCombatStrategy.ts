@@ -31,7 +31,7 @@ export abstract class BaseCombatStrategy implements ICombatStrategy {
 
             // Interrupt: switch to enemy unit if closer
             if (findNearestEnemy) {
-                const nearbyEnemy = findNearestEnemy(unit.x, unit.y, unit.team, unit.data.sight * TILE_SIZE * 0.6);
+                const nearbyEnemy = findNearestEnemy(unit.x, unit.y, unit.team, unit.data.sight * TILE_SIZE + TILE_SIZE * 2);
                 if (nearbyEnemy) {
                     unit.attackBuildingTarget = null;
                     unit.attackUnit(nearbyEnemy);
@@ -64,7 +64,8 @@ export abstract class BaseCombatStrategy implements ICombatStrategy {
             unit.attackTarget = null;
             unit.manualAttackCommand = false;
             if (findNearestEnemy) {
-                const aggroRange = unit.data.sight * TILE_SIZE * 0.8;
+                // Expanded aggroRange when chaining kills
+                const aggroRange = unit.data.sight * TILE_SIZE * 1.5;
                 const next = findNearestEnemy(unit.x, unit.y, unit.team, aggroRange);
                 if (next) {
                     unit.attackTarget = next;

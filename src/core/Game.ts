@@ -17,6 +17,7 @@ import { SettingsMenu } from "../ui/SettingsMenu";
 import { WORLD_W, WORLD_H, TILE_SIZE, UnitType, BuildingType, ResourceType, CivilizationType, CIVILIZATION_DATA, CIV_ELITE_UNIT } from "../config/GameConfig";
 import { Unit } from "../entities/Unit";
 import { ResourceCache } from "../entities/ResourceCache";
+import { audioSystem } from "../systems/AudioSystem";
 
 /** Configuration for each AI player slot from the lobby */
 export interface AISlotConfig {
@@ -415,6 +416,7 @@ export class Game implements ConsoleHost {
 
         // Update audio volume from settings
         const targetVol = this.settingsMenu.settings.musicVolume / 100;
+        audioSystem.setVolume(targetVol);
 
         // Camera always updates (even when paused, for Free Mode placement)
         this.camera.update(dt);

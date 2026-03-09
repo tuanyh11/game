@@ -3,6 +3,7 @@ import { CombatContext } from "../CombatTypes";
 import { Unit } from "../../Unit";
 import { Building } from "../../Building";
 import { CivilizationType, TILE_SIZE } from "../../../config/GameConfig";
+import { audioSystem } from "../../../systems/AudioSystem";
 
 export class ArcherStrategy extends BaseCombatStrategy {
 
@@ -63,6 +64,8 @@ export class ArcherStrategy extends BaseCombatStrategy {
 
     protected executeBuildingAttack(context: CombatContext, target: Building, dx: number, dy: number): void {
         const { unit, particles } = context;
+        audioSystem.playArrowSound();
+
         const atkAngle = Math.atan2(dy, dx);
         // Arrow hitting wall
         particles.emit({
@@ -79,6 +82,8 @@ export class ArcherStrategy extends BaseCombatStrategy {
     protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
         const { unit, particles } = context;
         const age = unit.age;
+
+        audioSystem.playArrowSound();
 
         // Arrow projectile
         particles.emit({

@@ -8,6 +8,7 @@ import {
     ResourceType, AGE_NAMES, AGE_COSTS, UnitState,
     UpgradeType, UPGRADE_DATA, CIVILIZATION_DATA, CIV_UNIT_MODIFIERS,
     isCivElite, CIV_ELITE_UNIT, CivilizationType,
+    CIV_UNIQUE_CAVALRY, isCivCavalry
 } from "../../config/GameConfig";
 import { PlayerState } from "../../systems/PlayerState";
 import { EntityManager } from "../../systems/EntityManager";
@@ -65,7 +66,7 @@ export function renderCommandGrid(
     } else if (hasVillager) {
         if (!sel.buildMenuOpen) {
             actions[8] = {
-                label: 'XÂY DỰNG', hotkey: 'B', cost: '', enabled: true,
+                label: '🔨', hotkey: 'B', cost: '', enabled: true,
                 action: () => { sel.buildMenuOpen = true; },
             };
         } else {
@@ -105,8 +106,13 @@ export function renderCommandGrid(
             const bCiv = b.civilization;
             const trainSpeedMult = CIVILIZATION_DATA[bCiv].bonuses.trainSpeed;
             const myElite = CIV_ELITE_UNIT[bCiv];
+            const myUniqueCav = CIV_UNIQUE_CAVALRY[bCiv];
             // Filter by the building's civilization
-            const filtered = trainable.filter(ut => !isCivElite(ut) || ut === myElite);
+            const filtered = trainable.filter(ut => {
+                if (isCivElite(ut) && ut !== myElite) return false;
+                if (isCivCavalry(ut) && ut !== myUniqueCav) return false;
+                return true;
+            });
             for (let i = 0; i < filtered.length; i++) {
                 const unitType = filtered[i];
                 const ud = UNIT_DATA[unitType];
@@ -346,8 +352,14 @@ export function drawCommandButton(
 
     // Label
     ctx.fillStyle = enabled ? C.uiText : '#4a3a2a';
-    ctx.font = "bold 10px 'Inter', sans-serif";
-    ctx.fillText(action.label, x + 4, y + 16);
+    if (action.label === '🔨') {
+        ctx.font = "24px 'Inter', sans-serif";
+        const w = ctx.measureText(action.label).width;
+        ctx.fillText(action.label, x + size / 2 - w / 2, y + size / 2 + 8);
+    } else {
+        ctx.font = "bold 10px 'Inter', sans-serif";
+        ctx.fillText(action.label, x + 4, y + 16);
+    }
 
     // Cost
     if (action.cost) {

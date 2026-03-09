@@ -44,6 +44,13 @@ export enum UnitType {
     Centurion = 'centurion',      // La Mã — Centurion
     Ulfhednar = 'ulfhednar',      // Viking — Chiến Binh Sói
 
+    // Civilization-unique cavalry (Age 3, trained from Stable)
+    WarElephant = 'warElephant', // Ba Tư
+    FireLancer = 'fireLancer',   // Đại Minh
+    Yabusame = 'yabusame',       // Yamato
+    Equites = 'equites',         // La Mã
+    BearRider = 'bearRider',       // Viking
+
     // Test Dummy
     TargetDummy = 'targetDummy',
 }
@@ -173,7 +180,15 @@ export function isInfantryType(type: UnitType): boolean {
 
 // Helper: check if a unit type is cavalry
 export function isCavalryType(type: UnitType): boolean {
-    return type === UnitType.Scout || type === UnitType.Knight;
+    return type === UnitType.Scout || type === UnitType.Knight
+        || type === UnitType.WarElephant || type === UnitType.FireLancer
+        || type === UnitType.Yabusame || type === UnitType.Equites || type === UnitType.BearRider;
+}
+
+// Helper: check if a unit type is a civ-unique cavalry
+export function isCivCavalry(type: UnitType): boolean {
+    return type === UnitType.WarElephant || type === UnitType.FireLancer
+        || type === UnitType.Yabusame || type === UnitType.Equites || type === UnitType.BearRider;
 }
 
 // Helper: check if a unit type is ranged
@@ -187,13 +202,22 @@ export function isCivElite(type: UnitType): boolean {
         || type === UnitType.Ninja || type === UnitType.Centurion || type === UnitType.Ulfhednar;
 }
 
-// Map: which civ owns which elite unit
+// Map: which civ owns which elite unit (from Barracks)
 export const CIV_ELITE_UNIT: Record<CivilizationType, UnitType> = {
     [CivilizationType.BaTu]: UnitType.Immortal,
     [CivilizationType.DaiMinh]: UnitType.ChuKoNu,
     [CivilizationType.Yamato]: UnitType.Ninja,
     [CivilizationType.LaMa]: UnitType.Centurion,
     [CivilizationType.Viking]: UnitType.Ulfhednar,
+};
+
+// Map: which civ owns which unique cavalry (from Stable)
+export const CIV_UNIQUE_CAVALRY: Record<CivilizationType, UnitType> = {
+    [CivilizationType.BaTu]: UnitType.WarElephant,
+    [CivilizationType.DaiMinh]: UnitType.FireLancer,
+    [CivilizationType.Yamato]: UnitType.Yabusame,
+    [CivilizationType.LaMa]: UnitType.Equites,
+    [CivilizationType.Viking]: UnitType.BearRider,
 };
 
 // ============================================================
@@ -213,7 +237,7 @@ export interface CivUnitModifier {
 export const CIV_UNIT_MODIFIERS: Partial<Record<CivilizationType, Partial<Record<UnitType, CivUnitModifier>>>> = {
     // ---- BA TƯ: Strong cavalry & economy, average infantry ----
     [CivilizationType.BaTu]: {
-        [UnitType.Swordsman]: { attack: 1.10, speed: 1.05, name: 'Bất Tử' },         // Immortal — faster scimitar
+        [UnitType.Swordsman]: { attack: 1.10, speed: 1.05, name: 'Cấm Quân' },         // Elite swordsman
         [UnitType.Scout]: { speed: 1.10, name: 'Kỵ Sĩ Sa Mạc' },                 // Desert rider — fastest scout
         [UnitType.Knight]: { attack: 1.20, hp: 1.15, name: 'Kỵ Binh Nặng' },      // Heavy cavalry — strongest
         [UnitType.HeroZarathustra]: { attack: 1.12, hp: 0.93, range: 1.05, name: '🔥 Zarathustra' },         // Pháp sư lửa thánh — AOE cực mạnh
@@ -287,7 +311,10 @@ export const BUILDING_DATA: Record<BuildingType, BuildingData> = {
     },
     [BuildingType.Stable]: {
         name: 'Chuồng Ngựa', cost: { wood: 175, gold: 50 }, size: [4, 4], hp: 1200,
-        trainable: [UnitType.Scout, UnitType.Knight], ageRequired: 2,
+        trainable: [
+            UnitType.Scout, UnitType.Knight,
+            UnitType.WarElephant, UnitType.FireLancer, UnitType.Yabusame, UnitType.Equites, UnitType.BearRider
+        ], ageRequired: 2,
     },
     [BuildingType.Tower]: {
         name: 'Tháp Canh', cost: { stone: 125, wood: 50 }, size: [3, 3], hp: 1500, ageRequired: 2,
@@ -328,25 +355,31 @@ export interface UnitData {
 
 export const UNIT_DATA: Record<UnitType, UnitData> = {
     [UnitType.Villager]: { name: 'Dân', cost: { food: 50 }, hp: 25, speed: 90, attack: 3, range: 24, attackSpeed: 2.0, sight: 6, trainTime: 25, ageRequired: 1 },
-    [UnitType.Spearman]: { name: 'Lính Giáo', cost: { food: 35, wood: 25 }, hp: 60, speed: 80, attack: 8, range: 32, attackSpeed: 1.4, sight: 7, trainTime: 20, ageRequired: 1 },
-    [UnitType.Archer]: { name: 'Cung Thủ', cost: { food: 25, gold: 45 }, hp: 35, speed: 80, attack: 5, range: 120, attackSpeed: 1.6, sight: 9, trainTime: 30, ageRequired: 2 },
+    [UnitType.Spearman]: { name: 'Lính Giáo', cost: { food: 35, wood: 25 }, hp: 60, speed: 80, attack: 8, range: 32, attackSpeed: 1.4, sight: 10, trainTime: 20, ageRequired: 1 },
+    [UnitType.Archer]: { name: 'Cung Thủ', cost: { food: 25, gold: 45 }, hp: 35, speed: 80, attack: 5, range: 120, attackSpeed: 1.6, sight: 10, trainTime: 30, ageRequired: 2 },
     [UnitType.Scout]: { name: 'Trinh Sát', cost: { food: 80 }, hp: 75, speed: 120, attack: 4, range: 30, attackSpeed: 1.0, sight: 12, trainTime: 30, ageRequired: 1 },
-    [UnitType.Swordsman]: { name: 'Kiếm Sĩ', cost: { food: 60, gold: 30 }, hp: 80, speed: 70, attack: 12, range: 28, attackSpeed: 1.2, sight: 6, trainTime: 25, ageRequired: 2 },
-    [UnitType.Knight]: { name: 'Kỵ Sĩ', cost: { food: 60, gold: 75 }, hp: 120, speed: 140, attack: 14, range: 35, attackSpeed: 1.8, sight: 8, trainTime: 35, ageRequired: 3 },
+    [UnitType.Swordsman]: { name: 'Kiếm Sĩ', cost: { food: 60, gold: 30 }, hp: 80, speed: 70, attack: 12, range: 28, attackSpeed: 1.2, sight: 10, trainTime: 25, ageRequired: 2 },
+    [UnitType.Knight]: { name: 'Kỵ Sĩ', cost: { food: 60, gold: 75 }, hp: 120, speed: 140, attack: 14, range: 35, attackSpeed: 1.8, sight: 10, trainTime: 35, ageRequired: 3 },
     // Unique Heroes (max level 6)
     [UnitType.HeroSpartacus]: { name: '🗡️ Spartacus', cost: { gold: 250 }, hp: 280, speed: 100, attack: 35, range: 38, attackSpeed: 1.0, sight: 10, trainTime: 55, ageRequired: 2 },
     [UnitType.HeroZarathustra]: { name: '🔥 Zarathustra', cost: { gold: 250 }, hp: 160, speed: 90, attack: 30, range: 180, attackSpeed: 1.2, sight: 12, trainTime: 55, ageRequired: 2 },
     [UnitType.HeroQiJiguang]: { name: '🛡️ T. Kế Quang', cost: { gold: 250 }, hp: 250, speed: 95, attack: 32, range: 45, attackSpeed: 1.1, sight: 10, trainTime: 55, ageRequired: 2 },
-    [UnitType.HeroMusashi]: { name: '⚔️ Musashi', cost: { gold: 250 }, hp: 200, speed: 110, attack: 40, range: 35, attackSpeed: 0.7, sight: 9, trainTime: 55, ageRequired: 2 },
+    [UnitType.HeroMusashi]: { name: '⚔️ Musashi', cost: { gold: 250 }, hp: 175, speed: 110, attack: 45, range: 35, attackSpeed: 0.9, sight: 9, trainTime: 55, ageRequired: 2 },
     [UnitType.HeroRagnar]: { name: '🪓 Ragnar', cost: { gold: 250 }, hp: 240, speed: 90, attack: 35, range: 40, attackSpeed: 1.1, sight: 10, trainTime: 55, ageRequired: 2 },
 
     // Civ-unique elite units
-    [UnitType.Immortal]: { name: 'Phù Thuỷ Tối Thượng', cost: { food: 50, gold: 65 }, hp: 65, speed: 65, attack: 14, range: 220, attackSpeed: 1.8, sight: 14, trainTime: 35, ageRequired: 3 },
-    [UnitType.ChuKoNu]: { name: 'Cẩm Y Vệ', cost: { food: 55, gold: 50 }, hp: 70, speed: 100, attack: 13, range: 28, attackSpeed: 0.8, sight: 9, trainTime: 28, ageRequired: 3 },
+    [UnitType.Immortal]: { name: 'Bất Tử Quân', cost: { food: 60, gold: 55 }, hp: 55, speed: 80, attack: 7, range: 120, attackSpeed: 1.3, sight: 10, trainTime: 32, ageRequired: 3 },
+    [UnitType.ChuKoNu]: { name: 'Cẩm Y Vệ', cost: { food: 55, gold: 50 }, hp: 85, speed: 115, attack: 13, range: 28, attackSpeed: 0.8, sight: 10, trainTime: 28, ageRequired: 3 },
     [UnitType.Ninja]: { name: 'Ninja', cost: { food: 50, gold: 60 }, hp: 50, speed: 130, attack: 15, range: 26, attackSpeed: 0.9, sight: 10, trainTime: 32, ageRequired: 3 },
-    [UnitType.Centurion]: { name: 'Centurion', cost: { food: 80, gold: 50 }, hp: 150, speed: 65, attack: 10, range: 130, attackSpeed: 1.5, sight: 10, trainTime: 35, ageRequired: 3 },
-    [UnitType.Ulfhednar]: { name: 'Chiến Binh Sói', cost: { food: 55, gold: 45 }, hp: 90, speed: 90, attack: 13, range: 28, attackSpeed: 1.0, sight: 7, trainTime: 30, ageRequired: 3 },
+    [UnitType.Centurion]: { name: 'Centurion', cost: { food: 80, gold: 50 }, hp: 135, speed: 65, attack: 10, range: 80, attackSpeed: 1.5, sight: 10, trainTime: 35, ageRequired: 3 },
+    [UnitType.Ulfhednar]: { name: 'Chiến Binh Sói', cost: { food: 55, gold: 45 }, hp: 90, speed: 90, attack: 13, range: 28, attackSpeed: 1.0, sight: 10, trainTime: 30, ageRequired: 3 },
 
+    // Civ-unique cavalry (Stable)
+    [UnitType.WarElephant]: { name: '🐘 Voi Chiến', cost: { food: 120, gold: 80 }, hp: 300, speed: 60, attack: 18, range: 35, attackSpeed: 2.2, sight: 10, trainTime: 45, ageRequired: 3 },
+    [UnitType.FireLancer]: { name: '🎇 Hỏa Thương', cost: { food: 70, gold: 60 }, hp: 110, speed: 135, attack: 25, range: 35, attackSpeed: 1.8, sight: 10, trainTime: 35, ageRequired: 3 },
+    [UnitType.Yabusame]: { name: '🏹 Yabusame', cost: { food: 60, gold: 70 }, hp: 90, speed: 145, attack: 10, range: 140, attackSpeed: 1.2, sight: 11, trainTime: 30, ageRequired: 3 },
+    [UnitType.Equites]: { name: '🛡️ Equites', cost: { food: 65, gold: 60 }, hp: 130, speed: 130, attack: 12, range: 35, attackSpeed: 1.5, sight: 10, trainTime: 32, ageRequired: 3 },
+    [UnitType.BearRider]: { name: '🐻 Kỵ Binh Gấu', cost: { food: 75, gold: 45 }, hp: 170, speed: 110, attack: 22, range: 30, attackSpeed: 1.4, sight: 10, trainTime: 28, ageRequired: 3 },
 
     [UnitType.TargetDummy]: { name: 'Hình Nhân', cost: {}, hp: 999999999, speed: 0, attack: 0, range: 0, attackSpeed: 0, sight: 4, trainTime: 1, ageRequired: 1 },
 };

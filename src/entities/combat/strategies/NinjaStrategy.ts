@@ -68,21 +68,26 @@ export class NinjaStrategy extends BaseCombatStrategy {
     protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
         const { unit, particles } = context;
 
-        // Katana slash wave — wide purple arc
-        for (let sw = 0; sw < 6; sw++) {
-            const sa = atkAngle - 1.0 + sw * 0.35;
-            particles.emit({ x: target.x, y: target.y - 4, count: 1, spread: 2, speed: [80 + sw * 15, 160], angle: [sa - 0.05, sa + 0.05], life: [0.12, 0.35], size: [2, 4], colors: ['#aa44ff', '#8800ff', '#ddd'], gravity: 5, shape: 'rect' });
+        // Ninja Reverse-grip fast slashes
+        const slashColors = ['#aa44ff', '#8800ff', '#1a1a2e', '#ffffff'];
+        // Vết chém vòng cung mượt và gắt (fast curve arc)
+        for (let sw = 0; sw < 5; sw++) {
+            const sa = atkAngle - 0.8 + sw * 0.4;
+            particles.emit({
+                x: target.x, y: target.y - 4,
+                count: 1, spread: 3,
+                speed: [120 + sw * 10, 220],
+                angle: [sa - 0.05, sa + 0.05],
+                life: [0.1, 0.25],
+                size: [1.5, 4],
+                colors: slashColors,
+                gravity: 0, shape: 'rect'
+            });
         }
+        // Xoẹt kiếm mỏng cực nhanh (X-cut)
+        particles.emit({ x: target.x, y: target.y - 4, count: 2, spread: 1, speed: [180, 250], angle: [atkAngle - 0.3, atkAngle + 0.3], life: [0.05, 0.15], size: [1, 8], colors: ['#fff', '#ddbbff'], gravity: 0, shape: 'rect' });
 
-        // Shadow dash trail from attacker to target
-        const midX = (unit.x + target.x) / 2;
-        const midY = (unit.y + target.y) / 2;
-        particles.emit({ x: midX, y: midY - 4, count: 6, spread: 4, speed: [50, 100], angle: [atkAngle - 0.2, atkAngle + 0.2], life: [0.1, 0.3], size: [2, 4], colors: ['#1a1a2e', '#2a2a4e', '#4400aa'], gravity: 0, shape: 'rect' });
-
-        // Impact sparks on target
-        particles.emit({ x: target.x, y: target.y - 6, count: 5, spread: 4, speed: [40, 90], angle: [0, Math.PI * 2], life: [0.1, 0.3], size: [1.5, 3], colors: ['#fff', '#ddd', '#aaa'], gravity: 50, shape: 'circle' });
-
-        // Purple impact burst
-        particles.emit({ x: target.x, y: target.y - 4, count: 10, spread: 6, speed: [60, 150], angle: [0, Math.PI * 2], life: [0.2, 0.5], size: [2, 5], colors: ['#8800ff', '#6600cc', '#aa44ff', '#ff00ff'], gravity: 15, shape: 'star' });
+        // Tàn ảnh bóng tối vỡ ra nát vụn (Shadow spark shatter)
+        particles.emit({ x: target.x, y: target.y - 6, count: 6, spread: 5, speed: [40, 100], angle: [0, Math.PI * 2], life: [0.2, 0.4], size: [2, 4], colors: ['#1a1a2e', '#2a2a4e', '#8800ff'], gravity: -10, shape: 'star' });
     }
 }

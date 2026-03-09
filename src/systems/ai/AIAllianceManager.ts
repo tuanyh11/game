@@ -71,47 +71,35 @@ export function checkAllyStatus(ai: AIContext): void {
     }
 
     // ==== PROACTIVE PATROL: Send support units near ally base ====
+    // DISABLED (TIER-1 FIX): This feature makes units run back and forth aimlessly during peacetime,
+    // cluttering the map and causing pathing lag. Units will now stay home until an emergency is reported.
+    /*
     if (ai.waveState === 'gathering' && !ownBaseUnderAttack && ai.forceAllocation.supportUnits.length > 0) {
         // Find nearest ally TC/building
-        const allyTC = ai.entityManager.buildings.find(
-            b => b.alive && b.built && b.type === BuildingType.TownCenter &&
-                b.team !== ai.team && ai.entityManager.isAlly(ai.team, b.team)
-        );
-        if (allyTC) {
-            const idleSupporters = ai.forceAllocation.supportUnits.filter(
-                u => u.state === UnitState.Idle
-            );
+        ...
+    }
+    */
 
-            // Calculate the threat vector for the ally (where are enemies most likely coming from?)
-            // We use the center of the map as a generic threat direction if no specific threat is known.
-            const mapCenterX = (MAP_COLS * TILE_SIZE) / 2;
-            const mapCenterY = (MAP_ROWS * TILE_SIZE) / 2;
-            const allyThreatAngle = Math.atan2(mapCenterY - allyTC.y, mapCenterX - allyTC.x);
-
-            // Patrol around ally base, biased towards the threat direction
-            for (let i = 0; i < Math.min(3, idleSupporters.length); i++) {
-                const u = idleSupporters[i];
-                const distToAlly = Math.hypot(u.x - allyTC.x, u.y - allyTC.y);
-
-                // We want them to stand in front of the ally TC, facing the enemy
-                const patrolX = allyTC.x + Math.cos(allyThreatAngle) * TILE_SIZE * 8;
-                const patrolY = allyTC.y + Math.sin(allyThreatAngle) * TILE_SIZE * 8;
-
-                if (distToAlly > TILE_SIZE * 20) {
-                    // Move toward ally base front line
-                    const spread = (Math.random() - 0.5) * TILE_SIZE * 4;
-                    ai.safeMoveTo(u,
-                        patrolX + Math.cos(allyThreatAngle + Math.PI / 2) * spread,
-                        patrolY + Math.sin(allyThreatAngle + Math.PI / 2) * spread
-                    );
-                } else if (distToAlly > TILE_SIZE * 5) {
-                    // Patrol slightly if already near the front line
-                    const patrolSpread = (Math.random() - 0.5) * Math.PI / 2; // Fan out
-                    ai.safeMoveTo(u,
-                        allyTC.x + Math.cos(allyThreatAngle + patrolSpread) * TILE_SIZE * (6 + Math.random() * 4),
-                        allyTC.y + Math.sin(allyThreatAngle + patrolSpread) * TILE_SIZE * (6 + Math.random() * 4)
-                    );
-                }
+    // ==== GUARD SUPPORT TARGET ====
+    if (ai.waveState === 'supporting' && ai.supportTarget) {
+        const idleSupporters = ai.forceAllocation.supportUnits.filter(u => u.state === UnitState.Idle);
+        for (let i = 0; i < idleSupporters.length; i++) {
+            const u = idleSupporters[i];
+            const distToTarget = Math.hypot(u.x - ai.supportTarget.x, u.y - ai.supportTarget.y);
+            if (distToTarget > TILE_SIZE * 12) {
+                // Move towards support target (wide spread to avoid clumping while traveling)
+                const spread = (Math.random() - 0.5) * TILE_SIZE * 15;
+                ai.safeMoveTo(u,
+                    ai.supportTarget.x + Math.cos(i) * spread,
+                    ai.supportTarget.y + Math.sin(i) * spread
+                );
+            } else if (distToTarget > TILE_SIZE * 3) {
+                // Active patrol
+                const patrolSpread = (Math.random() - 0.5) * Math.PI * 2;
+                ai.safeMoveTo(u,
+                    ai.supportTarget.x + Math.cos(patrolSpread) * TILE_SIZE * (7 + Math.random() * 7),
+                    ai.supportTarget.y + Math.sin(patrolSpread) * TILE_SIZE * (7 + Math.random() * 7)
+                );
             }
         }
     }
@@ -133,11 +121,12 @@ export function checkAllyStatus(ai: AIContext): void {
         (b.severity * (1 - (now - b.timestamp) / 30)) > (a.severity * (1 - (now - a.timestamp) / 30)) ? b : a
     );
 
-    // Allow re-support if new threat is more severe than current support target
-    if (ai.waveState === 'supporting' && ai.supportTimer > 0) {
-        if (ai.supportTarget) {
-            const distToNewThreat = Math.hypot(ai.supportTarget.x - worstThreat.x, ai.supportTarget.y - worstThreat.y);
-            if (distToNewThreat < TILE_SIZE * 15) return;
+    // Determine if this is a new threat area
+    let isNewThreatArea = true;
+    if (ai.waveState === 'supporting' && ai.supportTimer > 0 && ai.supportTarget) {
+        const distToNewThreat = Math.hypot(ai.supportTarget.x - worstThreat.x, ai.supportTarget.y - worstThreat.y);
+        if (distToNewThreat < TILE_SIZE * 15) {
+            isNewThreatArea = false;
         }
     }
 
@@ -159,16 +148,35 @@ export function checkAllyStatus(ai: AIContext): void {
     let sent = 0;
     for (const u of availableMilitary) {
         const dist = Math.hypot(u.x - worstThreat.x, u.y - worstThreat.y);
-        if (u.state === UnitState.Attacking && dist < TILE_SIZE * 10) continue;
+
+        // Skip units already engaged near the threat
+        if (u.state === UnitState.Attacking && dist < TILE_SIZE * 15) continue;
+
+        // Prevent stuttering: skip units already moving toward the threat area
+        if (u.state === UnitState.Moving && u.pathWaypoints && u.pathWaypoints.length > 0) {
+            const dest = u.pathWaypoints[u.pathWaypoints.length - 1];
+            if (Math.hypot(dest.x - worstThreat.x, dest.y - worstThreat.y) < TILE_SIZE * 15) {
+                // If they are moving toward it, just check for enemies on the way to be safe
+                const enemyOnTheWay = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 10);
+                if (enemyOnTheWay) u.attackUnit(enemyOnTheWay);
+                continue;
+            }
+        }
 
         const enemyNearThreat = ai.findNearestEnemyUnit(worstThreat.x, worstThreat.y, TILE_SIZE * 15);
         if (enemyNearThreat) {
             u.attackUnit(enemyNearThreat);
         } else {
-            ai.safeMoveTo(u,
-                worstThreat.x + (Math.random() - 0.5) * TILE_SIZE * 4,
-                worstThreat.y + (Math.random() - 0.5) * TILE_SIZE * 4
-            );
+            // ATTACK-MOVE Logic
+            const enemyOnTheWay = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 10);
+            if (enemyOnTheWay) {
+                u.attackUnit(enemyOnTheWay);
+            } else {
+                ai.safeMoveTo(u,
+                    worstThreat.x + (Math.random() - 0.5) * TILE_SIZE * 6,
+                    worstThreat.y + (Math.random() - 0.5) * TILE_SIZE * 6
+                );
+            }
         }
         sent++;
     }
@@ -177,9 +185,13 @@ export function checkAllyStatus(ai: AIContext): void {
         ai.waveState = 'supporting';
         ai.supportTarget = { x: worstThreat.x, y: worstThreat.y };
         ai.supportTimer = 45;
+        // STATE LOCK: Prevent gathering or base defense from immediately pulling these units back
         ai.waveResetTimer = 45;
-        const urgency = isEmergency ? '🚨 KHẨN CẤP' : (isCritical ? '⚠️ GẤP' : '🚑');
-        ai.log(`${urgency} Chi viện đồng minh ${sent} lính! (giữ nhà: ${ai.forceAllocation.garrisonUnits.length})`, "#00ffcc");
+
+        if (isNewThreatArea || sent >= 4 || isEmergency) {
+            const urgency = isEmergency ? '🚨 KHẨN CẤP' : (isCritical ? '⚠️ GẤP' : '🚑');
+            ai.log(`${urgency} Cử thêm ${sent} lính cứu đồng minh! (Giữ nhà: ${ai.forceAllocation.garrisonUnits.length})`, "#00ffcc");
+        }
     }
 
     // ===== SUPPORT → COUNTER-ATTACK TRANSITION =====

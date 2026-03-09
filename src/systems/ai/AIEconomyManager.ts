@@ -67,20 +67,50 @@ export function autoGather(ai: AIContext): void {
         const v = villagers[i];
         const targetType = needs[i % needs.length].type;
 
-        const nearestRes = ai.findNearestResourceOfType(v.x, v.y, targetType);
+        let nearestRes = ai.findNearestResourceOfType(v.x, v.y, targetType);
+
+        // --- DISTANCE LIMIT LOGIC ---
+        // If the AI wants berries, but the nearest berry is halfway across the map (> 20 tiles), reject it!
+        // It's better to stay near the base and build farms.
+        let rejectedBecauseTooFar = false;
+        if (nearestRes && targetType === ResourceNodeType.BerryBush) {
+            const dist = Math.hypot(nearestRes.x - baseX, nearestRes.y - baseY);
+            if (dist > TILE_SIZE * 20) {
+                nearestRes = null;
+                rejectedBecauseTooFar = true;
+            }
+        }
+
         if (nearestRes) {
             v.gatherFrom(nearestRes, () =>
-                ai.entityManager.findNearestDropOff(v.x, v.y, nearestRes.resourceType, ai.team)
+                ai.entityManager.findNearestDropOff(v.x, v.y, nearestRes!.resourceType, ai.team)
             );
         } else {
             // Fallback: if food needed, try farm; otherwise any resource
-            if (targetType === ResourceNodeType.BerryBush || targetType === ResourceNodeType.Farm) {
+            if (targetType === ResourceNodeType.BerryBush || targetType === ResourceNodeType.Farm || rejectedBecauseTooFar) {
                 // Try to find a farm resource node
                 const farmRes = ai.findNearestResourceOfType(v.x, v.y, ResourceNodeType.Farm);
                 if (farmRes) {
                     v.gatherFrom(farmRes, () =>
                         ai.entityManager.findNearestDropOff(v.x, v.y, farmRes.resourceType, ai.team)
                     );
+                } else if (rejectedBecauseTooFar) {
+                    // We need food, but berries are too far and no farms are built yet.
+                    // -> Gather WOOD so the autoBuild system can afford to build Farms!
+                    const woodRes = ai.findNearestResourceOfType(v.x, v.y, ResourceNodeType.Tree);
+                    if (woodRes) {
+                        v.gatherFrom(woodRes, () =>
+                            ai.entityManager.findNearestDropOff(v.x, v.y, woodRes.resourceType, ai.team)
+                        );
+                    } else {
+                        // Total fallback
+                        const any = ai.findNearestResource(v.x, v.y);
+                        if (any) {
+                            v.gatherFrom(any, () =>
+                                ai.entityManager.findNearestDropOff(v.x, v.y, any.resourceType, ai.team)
+                            );
+                        }
+                    }
                 }
                 // else: wait for autoBuild to create farms
             } else {
@@ -177,11 +207,48 @@ export function smartVillagerManagement(ai: AIContext): void {
         // Villager is gathering but target resource is dead/depleted
         if (v.state === UnitState.Gathering && v.targetResource && !v.targetResource.alive) {
             // Resource depleted! Find alternative immediately
-            const sameType = ai.findNearestResourceOfType(v.x, v.y, v.targetResource.nodeType);
+            let sameType = ai.findNearestResourceOfType(v.x, v.y, v.targetResource.nodeType);
+
+            // --- DISTANCE LIMIT LOGIC ---
+            // If the AI wants berries, but the nearest berry is halfway across the map (> 20 tiles), reject it!
+            let rejectedBecauseTooFar = false;
+            if (sameType && sameType.nodeType === ResourceNodeType.BerryBush) {
+                const aiTC = aiBuildings.find(b => b.type === BuildingType.TownCenter);
+                if (aiTC) {
+                    const dist = Math.hypot(sameType.x - aiTC.x, sameType.y - aiTC.y);
+                    if (dist > TILE_SIZE * 20) {
+                        sameType = null;
+                        rejectedBecauseTooFar = true;
+                    }
+                }
+            }
+
             if (sameType) {
                 v.gatherFrom(sameType, () =>
-                    ai.entityManager.findNearestDropOff(v.x, v.y, sameType.resourceType, ai.team)
+                    ai.entityManager.findNearestDropOff(v.x, v.y, sameType!.resourceType, ai.team)
                 );
+            } else if (rejectedBecauseTooFar) {
+                // Berries too far! Try Farm, else Wood.
+                const farmRes = ai.findNearestResourceOfType(v.x, v.y, ResourceNodeType.Farm);
+                if (farmRes) {
+                    v.gatherFrom(farmRes, () =>
+                        ai.entityManager.findNearestDropOff(v.x, v.y, farmRes.resourceType, ai.team)
+                    );
+                } else {
+                    const woodRes = ai.findNearestResourceOfType(v.x, v.y, ResourceNodeType.Tree);
+                    if (woodRes) {
+                        v.gatherFrom(woodRes, () =>
+                            ai.entityManager.findNearestDropOff(v.x, v.y, woodRes.resourceType, ai.team)
+                        );
+                    } else {
+                        const anyRes = ai.findNearestResource(v.x, v.y);
+                        if (anyRes) {
+                            v.gatherFrom(anyRes, () =>
+                                ai.entityManager.findNearestDropOff(v.x, v.y, anyRes.resourceType, ai.team)
+                            );
+                        }
+                    }
+                }
             } else {
                 // No resource of same type — fallback to any resource
                 const anyRes = ai.findNearestResource(v.x, v.y);
@@ -543,13 +610,22 @@ export function autoBuild(ai: AIContext): void {
         }).length;
 
         // Need farms if: berries are running out, food is low, or not enough farms for villagers
+        // OR if berries are depleted and we have idle villagers doing nothing
         const needsFarms = berriesDepleted ||
             (berriesRunningOut && isFoodLow) ||
             isFoodCritical ||
-            (foodGatherers.length < 2 && farmResources.length === 0 && nearbyBerryCount === 0);
+            (foodGatherers.length < 2 && farmResources.length === 0 && nearbyBerryCount === 0) ||
+            (berriesDepleted && idleFoodlessVillagers > 0);
 
-        // How many to build this tick (1 normally, 2 when critical)
-        const farmsToBuild = isFoodCritical && berriesDepleted ? 2 : 1;
+        // How many to build this tick (1 normally, 2-3 when critical or many idles)
+        let farmsToBuild = 1;
+        if (isFoodCritical && berriesDepleted) {
+            farmsToBuild = 2;
+        }
+        // If berries are completely gone and we have a lot of idle units, spam farms!
+        if (berriesDepleted && idleFoodlessVillagers >= 3) {
+            farmsToBuild = Math.min(3, Math.ceil(idleFoodlessVillagers / 2));
+        }
 
         if (needsFarms && activeFarms.length < maxFarms && farmResources.length < maxFarms) {
             for (let fb = 0; fb < farmsToBuild; fb++) {

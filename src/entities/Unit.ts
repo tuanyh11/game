@@ -13,12 +13,12 @@ import {
     isInfantryType, isCavalryType, isRangedType, isCivElite
 } from "../config/GameConfig";
 import { ResourceNode } from "./ResourceNode";
-
-export { HeroSkill, getHeroSkills, HERO_SKILLS, HERO_XP_TABLE, HERO_MAX_LEVEL } from "../config/HeroSkillsData";
 import { HeroSkill, getHeroSkills, HERO_XP_TABLE, HERO_MAX_LEVEL } from "../config/HeroSkillsData";
+export { HeroSkill, getHeroSkills, HERO_SKILLS, HERO_XP_TABLE, HERO_MAX_LEVEL } from "../config/HeroSkillsData";
 
 import { Building } from "./Building";
 import { ParticleSystem } from "../effects/ParticleSystem";
+import { audioSystem } from "../systems/AudioSystem";
 
 // Shared types
 import type { TileMapRef } from "../types/TileMapRef";
@@ -230,6 +230,7 @@ export class Unit {
     }
     get isVillager() { return this.type === UnitType.Villager; }
     get isHero() { return this.type === UnitType.HeroSpartacus || this.type === UnitType.HeroZarathustra || this.type === UnitType.HeroQiJiguang || this.type === UnitType.HeroMusashi || this.type === UnitType.HeroRagnar; }
+    get isUnstoppable() { return this.type === UnitType.WarElephant; }
     get isCarrying() { return this.carriedAmount > 0; }
     get data() { return UNIT_DATA[this.type]; }
     get isDead() { return this.hp <= 0; }
@@ -464,6 +465,9 @@ export class Unit {
                     colors: ['#ff3333', '#882222', '#cc4444', '#660000'],
                     gravity: 80, shape: 'circle',
                 });
+
+                // Play synthetic retro death sound
+                audioSystem.playDeathSound();
             }
             this.deathTimer -= dt;
             return;
@@ -534,6 +538,17 @@ export class Unit {
             }
 
             case UnitState.Moving:
+                // Attack-Move for AI military units (stop and fight if enemy spotted)
+                if (!this.manualCommand && !this.isVillager && findNearestEnemy && !this.isCarrying) {
+                    const enemy = findNearestEnemy(this.x, this.y, this.team, this.data.sight * TILE_SIZE);
+                    if (enemy) {
+                        this.attackUnit(enemy);
+                        break;
+                    }
+                }
+                this.doMove(dt, particles, tileMap);
+                break;
+
             case UnitState.Returning:
                 this.doMove(dt, particles, tileMap);
                 break;

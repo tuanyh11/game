@@ -7,8 +7,16 @@ export class CenturionStrategy extends BaseCombatStrategy {
 
     protected shouldSkipStandardAttack(context: CombatContext): boolean {
         const { unit } = context;
-        // Don't do regular attacks in spear mode — pilum throw handles all damage in elite-abilities
-        return unit.centurionMode === 'spear';
+        if (unit.centurionMode === 'spear') {
+            let dist = 999;
+            if (unit.attackTarget) dist = Math.hypot(unit.attackTarget.x - unit.x, unit.attackTarget.y - unit.y);
+            else if (unit.attackBuildingTarget) dist = Math.hypot(unit.attackBuildingTarget.x - unit.x, unit.attackBuildingTarget.y - unit.y);
+
+            // Nếu kẻ địch ở xa (>40px), bỏ qua cận chiến để chờ ném Đinh Ba
+            // Nếu kẻ địch ở gần (<=40px), thực hiện đâm cận chiến bình thường
+            return dist > 40;
+        }
+        return false;
     }
 
     protected applyPreDamageModifiers(context: CombatContext, target: Unit, baseDamage: number): number {
@@ -78,16 +86,22 @@ export class CenturionStrategy extends BaseCombatStrategy {
     protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
         const { unit, particles } = context;
 
-        if (unit.centurionMode === 'spear') {
-            // Spear thrust — forward jab with spear trail
-            particles.emit({ x: unit.x + (unit.facingRight ? 12 : -12), y: unit.y - 6, count: 1, spread: 0, speed: [200, 250], angle: [atkAngle - 0.02, atkAngle + 0.02], life: [0.12, 0.2], size: [3, 4], colors: ['#8B6914'], gravity: 10, shape: 'spear' });
-            // Thrust dust
-            particles.emit({ x: target.x, y: target.y - 2, count: 4, spread: 4, speed: [20, 60], angle: [atkAngle - 0.5, atkAngle + 0.5], life: [0.1, 0.25], size: [1.5, 3], colors: ['#c9a84c', '#aa8844', '#ddd'], gravity: 20, shape: 'rect' });
-        } else {
-            // Sword slash — golden arc
-            particles.emit({ x: target.x, y: target.y - 4, count: 6, spread: 5, speed: [50, 110], angle: [atkAngle - 0.8, atkAngle + 0.8], life: [0.2, 0.5], size: [2, 5], colors: ['#ff4400', '#ffd700', '#fff'], gravity: 30, shape: 'rect' });
-            // Shield bash dust
-            particles.emit({ x: target.x, y: target.y + 4, count: 3, spread: 6, speed: [20, 50], angle: [-0.3, 0.3], life: [0.2, 0.4], size: [2, 4], colors: ['#8a7a60', '#aa9a80'], gravity: 40, shape: 'circle' });
-        }
+        // Bách Phu đâm ngọn giáo cực nặng
+        // Tia chớp xé gió của ngọn giáo (Lúc này là cây Đinh Ba)
+        particles.emit({
+            x: unit.x + (unit.facingRight ? 12 : -12),
+            y: unit.y - 6,
+            count: 1, spread: 0,
+            speed: [250, 300], angle: [atkAngle - 0.01, atkAngle + 0.01],
+            life: [0.15, 0.25], size: [2, 3], colors: ['#aaa', '#fff'],
+            gravity: 0, shape: 'trident',
+            rotation: atkAngle, rotSpeed: 0
+        });
+
+        // Cú đâm nảy lửa tứa máu/tia lửa
+        particles.emit({ x: target.x, y: target.y - 6, count: 8, spread: 5, speed: [50, 100], angle: [atkAngle - 0.8, atkAngle + 0.8], life: [0.15, 0.35], size: [2, 4], colors: ['#ff3300', '#ffccee', '#ddd'], gravity: 15, shape: 'star' });
+
+        // Bụi mù dưới đất do lực đâm sấn tới
+        particles.emit({ x: target.x, y: target.y, count: 5, spread: 6, speed: [20, 50], angle: [-0.5, 0.5], life: [0.2, 0.4], size: [2, 5], colors: ['#8a7a60', '#aa9a80', '#554433'], gravity: 30, shape: 'circle' });
     }
 }

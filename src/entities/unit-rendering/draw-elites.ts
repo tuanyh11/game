@@ -8,1019 +8,1532 @@ import { CivilizationType, UnitState, TILE_SIZE } from "../../config/GameConfig"
 import type { Unit } from "../Unit";
 import { getCivColors } from "./shared";
 
-/** Cẩm Y Vệ — Đại Minh imperial guard, red flying fish robe, concealed dao */
-export function drawChuKoNu(unit: Unit, ctx: CanvasRenderingContext2D, age: number, bob: number, moving: boolean): void {
-    const legOffset = moving ? Math.sin(unit.animTimer * 22) * 3.5 : 0;
-    let redBase = age >= 4 ? '#8a0a0a' : '#aa2222';
-    if (unit.slotColor) { const sc = unit.slotColor; const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16); redBase = `rgb(${Math.round(r * 0.7)},${Math.round(g * 0.7)},${Math.round(b2 * 0.7)})`; }
+/**
+ * Lấy góc quay của cánh tay/vũ khí dựa trên tiến trình đòn đánh (từ 0.0 đến 1.0).
+ * Đòn đánh tung ra vào đúng khoảnh khắc progress đạt 1.0 (sát thương được tính).
+ */
+function getAttackAngle(unit: Unit, idleRot: number, windupRot: number, strikeRot: number): number {
+    if (unit.state !== UnitState.Attacking) return idleRot;
 
-    // Legs — dark pants under robe
-    ctx.fillStyle = '#2a1a10';
-    ctx.fillRect(-3, 10 + bob, 3, 9 + legOffset);
-    ctx.fillRect(1, 10 + bob, 3, 9 - legOffset);
-    // Boots — black official boots
-    ctx.fillStyle = '#111';
-    ctx.fillRect(-4, 18 + bob + legOffset, 4, 3);
-    ctx.fillRect(0, 18 + bob - legOffset, 4, 3);
-    // Boot trim
-    ctx.fillStyle = '#333';
-    ctx.fillRect(-4, 18 + bob + legOffset, 4, 1);
-    ctx.fillRect(0, 18 + bob - legOffset, 4, 1);
+    // Progress từ 0.0 (vừa chém xong) đến 1.0 (chuẩn bị hit)
+    const progress = 1.0 - (unit.attackCooldown / unit.civAttackSpeed);
 
-    // Robe lower (飛魚服 — Flying Fish Robe) — flows below waist
-    ctx.fillStyle = redBase;
-    ctx.fillRect(-6, 5 + bob, 13, 8);
-    // Robe slit
-    ctx.fillStyle = '#1a0a0a';
-    ctx.fillRect(0, 8 + bob, 1, 5);
-
-    // Body — red flying fish robe
-    ctx.fillStyle = redBase;
-    ctx.fillRect(-6, -5 + bob, 13, 16);
-    // Robe pattern — diagonal cross pattern
-    ctx.fillStyle = 'rgba(255,200,50,0.15)';
-    for (let i = 0; i < 5; i++) {
-        ctx.fillRect(-5 + i * 2.5, -4 + bob + i * 2, 2, 2);
-    }
-    // Gold collar
-    ctx.fillStyle = age >= 4 ? '#ffd700' : '#c9a84c';
-    ctx.fillRect(-6, -5 + bob, 13, 2);
-    // Gold waist sash (玉带)
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(-6, 5 + bob, 13, 2);
-    ctx.fillStyle = age >= 4 ? '#ffd700' : '#dab84c';
-    ctx.fillRect(-2, 4 + bob, 5, 4); // belt buckle jade piece
-
-    // Dragon emblem on chest (龍紋)
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(-2, -2 + bob, 5, 5);
-    ctx.fillRect(-1, -3 + bob, 3, 1);
-    ctx.fillRect(-1, 3 + bob, 3, 1);
-    ctx.fillRect(-3, 0 + bob, 1, 2);
-    ctx.fillRect(3, 0 + bob, 1, 2);
-
-    // Arms — red sleeves with gold cuffs
-    ctx.fillStyle = redBase;
-    ctx.fillRect(-8, -3 + bob, 3, 10);
-    ctx.fillRect(6, -3 + bob, 3, 10);
-    // Gold cuffs
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(-8, 5 + bob, 3, 2);
-    ctx.fillRect(6, 5 + bob, 3, 2);
-    // Hands
-    ctx.fillStyle = '#e8c090';
-    ctx.fillRect(-8, 7 + bob, 3, 2);
-    ctx.fillRect(6, 7 + bob, 3, 2);
-
-    // Head — face
-    ctx.fillStyle = '#e8c090';
-    ctx.fillRect(-4, -13 + bob, 8, 9);
-    // Eyes — sharp, observant
-    ctx.fillStyle = '#111';
-    ctx.fillRect(-3, -9 + bob, 2, 1.5);
-    ctx.fillRect(1, -9 + bob, 2, 1.5);
-    // Eyebrows — thick, stern
-    ctx.fillStyle = '#222';
-    ctx.fillRect(-4, -11 + bob, 3, 1);
-    ctx.fillRect(1, -11 + bob, 3, 1);
-    // Mustache
-    ctx.fillStyle = '#333';
-    ctx.fillRect(-3, -5 + bob, 6, 1);
-    ctx.fillRect(-2, -4 + bob, 1, 1);
-    ctx.fillRect(1, -4 + bob, 1, 1);
-
-    // Elaborate Jinyiwei Hat (Conical / domed with wide brim) - Scaled down
-    ctx.fillStyle = redBase;
-    // Brim
-    ctx.beginPath();
-    ctx.ellipse(0, -14 + bob, 8.5, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.lineWidth = 1.0;
-    ctx.strokeStyle = '#c9a84c';
-    ctx.stroke();
-
-    // Dome
-    ctx.beginPath();
-    ctx.ellipse(0, -16.5 + bob, 5.5, 4, 0, Math.PI, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Gold emblem on hat
-    ctx.fillStyle = '#ffd700';
-    ctx.fillRect(-1.5, -17 + bob, 3, 2.5);
-    ctx.fillRect(-0.5, -18 + bob, 1, 4);
-
-    // Feather (Plume) on the hat
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.moveTo(3, -15 + bob);
-    ctx.quadraticCurveTo(7, -20 + bob, 10, -19 + bob);
-    ctx.quadraticCurveTo(8, -16 + bob, 4, -14 + bob);
-    ctx.fill();
-    ctx.fillStyle = '#ff3333'; // red tip on feather
-    ctx.beginPath();
-    ctx.moveTo(6, -17 + bob);
-    ctx.quadraticCurveTo(9, -20 + bob, 10, -19 + bob);
-    ctx.quadraticCurveTo(8, -16 + bob, 7, -16 + bob);
-    ctx.fill();
-
-    // Concealed Ming Jian sword (straight sword) on back/hip
-    ctx.save();
-    ctx.translate(-5, 3 + bob);
-    ctx.rotate(0.3);
-    // Straight Scabbard
-    ctx.fillStyle = '#1a0a0a';
-    ctx.fillRect(-1.5, -4, 3, 20);
-    // Gold fittings
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(-2, -4, 4, 2); // throat
-    ctx.fillRect(-2, 4, 4, 2);  // mid ring
-    ctx.fillRect(-2, 14, 4, 2); // tip (chape)
-    // Crossguard
-    ctx.fillStyle = '#ffd700';
-    ctx.fillRect(-3, -6, 6, 2);
-    // Handle (crimson wrap)
-    ctx.fillStyle = '#aa2222';
-    ctx.fillRect(-1, -11, 2, 5);
-    ctx.fillStyle = '#881111';
-    ctx.fillRect(-1, -10, 2, 1);
-    ctx.fillRect(-1, -8, 2, 1);
-    // Pommel
-    ctx.fillStyle = '#ffd700';
-    ctx.fillRect(-1.5, -12, 3, 2);
-    // Red tassel dropping from pommel
-    ctx.fillStyle = '#dd3333';
-    ctx.beginPath();
-    ctx.moveTo(0, -12);
-    ctx.quadraticCurveTo(-3, -16, -2, -18);
-    ctx.quadraticCurveTo(1, -15, 0, -12);
-    ctx.fill();
-    ctx.restore();
-
-    // Age 4: imperial golden aura
-    if (age >= 4) {
-        ctx.globalAlpha = 0.06 + Math.sin(unit.animTimer * 3) * 0.03;
-        ctx.fillStyle = '#ffd700';
-        ctx.beginPath();
-        ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-    }
-
-    // Upgrade badge
-    if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = '#ffd700';
-        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) {
-            ctx.fillRect(-8, 6 + bob - i * 4, 2, 2);
-        }
+    if (progress < 0.2) {
+        // Recovery: Thu vũ khí về sau khi chém trúng (Strike -> Idle)
+        let t = progress / 0.2;
+        return strikeRot * (1 - t) + idleRot * t;
+    } else if (progress < 0.8) {
+        // Wind-up: Vung vũ khí lấy đà (Idle -> Windup)
+        let t = (progress - 0.2) / 0.6;
+        return idleRot * (1 - t) + windupRot * t;
+    } else {
+        // Strike: Bổ/Chém dứt khoát nhanh (Windup -> Strike)
+        let t = (progress - 0.8) / 0.2;
+        // Thêm gia tốc Ease-In để đòn chém có độ nén và lực
+        t = t * t;
+        return windupRot * (1 - t) + strikeRot * t;
     }
 }
 
-/** Phù Thuỷ Tối Thượng — Persian Supreme Sorcerer, mystical robe, crystal staff */
-export function drawImmortal(unit: Unit, ctx: CanvasRenderingContext2D, age: number, bob: number, moving: boolean): void {
-    const legOffset = moving ? Math.sin(unit.animTimer * 18) * 3 : 0;
-    const casting = unit.magiCastActive;
-    let robeBase = casting ? '#1a2a5a' : (age >= 4 ? '#1e1040' : '#1a1a3a');
-    const goldAccent = casting ? '#88ccff' : '#c9a84c';
-    if (unit.slotColor && !casting) { const sc = unit.slotColor; const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16); robeBase = `rgb(${Math.round(r * 0.4)},${Math.round(g * 0.4)},${Math.round(b2 * 0.4)})`; }
+/** Cẩm Y Vệ — Đại Minh imperial guard, red flying fish robe, concealed dao */
+export function drawChuKoNu(unit: Unit, ctx: CanvasRenderingContext2D, age: number, bob: number, moving: boolean): void {
+    ctx.save();
+    ctx.scale(0.85, 0.85); // Thu nhỏ 15%
+    ctx.save();
+    ctx.translate(0, 4); // Anchor point balance
 
-    // ── MYSTICAL TRAIL / MIST (behind body) ──
-    if (moving || casting) {
-        ctx.globalAlpha = 0.15;
-        ctx.fillStyle = casting ? '#4488ff' : '#6644aa';
-        for (let t = 0; t < 3; t++) {
-            const tx = -6 - t * 4 + Math.sin(unit.animTimer * 4 + t) * 3;
-            const ty = 4 + bob + t * 3;
-            ctx.beginPath();
-            ctx.arc(tx, ty, 4 - t, 0, Math.PI * 2);
-            ctx.fill();
+    let attackState = false;
+    if (unit.state === UnitState.Attacking) {
+        const target = unit.attackTarget || unit.attackBuildingTarget;
+        if (target) {
+            const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+            const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+            if (dist <= unit.civRange + bldgRadius + 20) {
+                attackState = true;
+            }
         }
-        ctx.globalAlpha = 1;
     }
+    const walkBob = moving ? Math.sin(bob * 0.5) * 2.5 : 0;
+    const legSwing = moving ? Math.sin(bob * 0.6) * 5 : 0;
 
-    // ── ROBE — flowing mystical robe ──
-    // Lower robe / skirt
-    ctx.fillStyle = robeBase;
-    ctx.fillRect(-7, 5 + bob, 14, 14 + legOffset * 0.3);
-    // Robe flutter at bottom
-    ctx.fillRect(-8, 16 + bob, 4, 4 + Math.sin(unit.animTimer * 5) * 2);
-    ctx.fillRect(5, 16 + bob, 4, 3 - Math.sin(unit.animTimer * 5) * 2);
-    // Gold trim on robe bottom
-    ctx.fillStyle = goldAccent;
-    ctx.fillRect(-7, 17 + bob, 14, 1);
+    let attackProgress = 0;
+    let attackRot = 0;
 
-    // Upper robe / tunic
-    ctx.fillStyle = robeBase;
-    ctx.fillRect(-6, -5 + bob, 12, 12);
-    // Rune patterns on chest
-    ctx.fillStyle = casting ? '#44aaff' : '#4444aa';
-    ctx.fillRect(-4, -3 + bob, 1, 6);
-    ctx.fillRect(3, -3 + bob, 1, 6);
-    ctx.fillRect(-2, -1 + bob, 4, 1);
-    ctx.fillRect(-2, 2 + bob, 4, 1);
-    // Center orb on chest
-    ctx.fillStyle = casting ? '#88ddff' : '#8866cc';
-    ctx.fillRect(-1, -1 + bob, 2, 2);
-
-    // Gold collar / sash
-    ctx.fillStyle = goldAccent;
-    ctx.fillRect(-6, -5 + bob, 12, 2);
-    ctx.fillRect(-3, -3 + bob, 6, 1);
-
-    // ── SLEEVES — wide sorcerer sleeves ──
-    ctx.fillStyle = robeBase;
-    ctx.fillRect(-10, -4 + bob, 4, 12);
-    ctx.fillRect(6, -4 + bob, 4, 12);
-    // Sleeve flare at wrist
-    ctx.fillRect(-11, 5 + bob, 5, 4);
-    ctx.fillRect(6, 5 + bob, 5, 4);
-    // Gold trim on sleeves
-    ctx.fillStyle = goldAccent;
-    ctx.fillRect(-11, 5 + bob, 5, 1);
-    ctx.fillRect(6, 5 + bob, 5, 1);
-    // Hands peeking from sleeves
-    ctx.fillStyle = '#d4a87a';
-    ctx.fillRect(-10, 7 + bob, 3, 2);
-    ctx.fillRect(7, 7 + bob, 3, 2);
-
-    // ── HEAD — face ──
-    ctx.fillStyle = '#d4a87a';
-    ctx.fillRect(-4, -12 + bob, 8, 9);
-    // Arcane eyes — glowing
-    ctx.fillStyle = casting ? '#ff4400' : (age >= 4 ? '#ffaa00' : '#888');
-    ctx.fillRect(-3, -9 + bob, 2, 2);
-    ctx.fillRect(1, -9 + bob, 2, 2);
-    // Eye glow during cast
-    if (casting) {
-        ctx.globalAlpha = 0.4;
-        ctx.fillStyle = '#ff6600';
-        ctx.fillRect(-4, -10 + bob, 3, 3);
-        ctx.fillRect(1, -10 + bob, 3, 3);
-        ctx.globalAlpha = 1;
-    }
-    // Mystical beard (long, white/grey)
-    ctx.fillStyle = age >= 4 ? '#ddd' : '#999';
-    ctx.fillRect(-3, -5 + bob, 6, 3);
-    ctx.fillRect(-2, -3 + bob, 4, 3);
-    ctx.fillRect(-1, -1 + bob, 2, 2);
-
-    // ── ZOROASTRIAN MAGI ATTIRE ──
-    // Matha (traditional white/cream cap)
-    ctx.fillStyle = '#f5f5f0';
-    ctx.fillRect(-5, -20 + bob, 10, 8);
-    // Cap folds/texture
-    ctx.fillStyle = '#e0e0d8';
-    ctx.fillRect(-4, -18 + bob, 8, 2);
-    ctx.fillRect(-5, -14 + bob, 10, 2);
-    // Golden flame symbol on the cap
-    ctx.fillStyle = '#ffaa00';
-    ctx.beginPath();
-    ctx.moveTo(0, -18 + bob);
-    ctx.quadraticCurveTo(-2, -15 + bob, 0, -14 + bob);
-    ctx.quadraticCurveTo(2, -15 + bob, 0, -18 + bob);
-    ctx.fill();
-
-    // Padam (white cloth veil over mouth to protect sacred fire)
-    ctx.fillStyle = '#fdfdfd';
-    ctx.fillRect(-5, -6 + bob, 10, 5);
-    // Veil folds
-    ctx.fillStyle = '#e8e8e8';
-    ctx.fillRect(-3, -5 + bob, 1, 4);
-    ctx.fillRect(2, -5 + bob, 1, 4);
-
-    // ── SACRED FIRE SCEPTER (Afarghanyu) ──
-    const staffFloat = Math.sin(unit.animTimer * 3) * 1.5;
-    // Staff shaft
-    ctx.fillStyle = '#3a2010';
-    ctx.fillRect(9, -20 + bob + staffFloat, 2, 28);
-    // Gold spiral wrapping
-    ctx.fillStyle = '#daa520';
-    for (let i = 0; i < 8; i++) {
-        ctx.fillRect(9, -18 + bob + staffFloat + i * 3, 2, 1);
-    }
-    // Base pommel
-    ctx.fillStyle = '#ffd700';
-    ctx.fillRect(8, 7 + bob + staffFloat, 4, 2);
-    // Golden fire Chalice/Urn at the top
-    ctx.fillStyle = '#daa520';
-    ctx.fillRect(8, -22 + bob + staffFloat, 4, 2); // urn base
-    ctx.fillStyle = '#ffd700';
-    ctx.beginPath();
-    ctx.moveTo(6, -26 + bob + staffFloat);
-    ctx.lineTo(14, -26 + bob + staffFloat);
-    ctx.lineTo(12, -22 + bob + staffFloat);
-    ctx.lineTo(8, -22 + bob + staffFloat);
-    ctx.closePath();
-    ctx.fill();
-    // Raging Eternal Flame (Atar) inside the chalice
-    ctx.fillStyle = casting ? '#ff2200' : '#ff4400';
-    ctx.beginPath();
-    ctx.moveTo(10, -32 + bob + staffFloat);
-    ctx.quadraticCurveTo(5, -28 + bob + staffFloat, 10, -26 + bob + staffFloat);
-    ctx.quadraticCurveTo(15, -28 + bob + staffFloat, 10, -32 + bob + staffFloat);
-    ctx.fill();
-    // Inner bright yellow flame
-    ctx.fillStyle = casting ? '#ffffff' : '#ffcc00';
-    ctx.globalAlpha = 0.6 + Math.sin(unit.animTimer * 12) * 0.4;
-    ctx.beginPath();
-    ctx.moveTo(10, -30 + bob + staffFloat);
-    ctx.quadraticCurveTo(7, -27 + bob + staffFloat, 10, -26 + bob + staffFloat);
-    ctx.quadraticCurveTo(13, -27 + bob + staffFloat, 10, -30 + bob + staffFloat);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // Orbiting fire embers around staff crystal
-    if (casting || age >= 4) {
-        for (let p = 0; p < 3; p++) {
-            const pAngle = unit.animTimer * (casting ? 8 : 4) + p * (Math.PI * 2 / 3);
-            const pr = casting ? 7 : 5;
-            const px = 10 + Math.cos(pAngle) * pr;
-            const py = -26 + bob + staffFloat + Math.sin(pAngle) * pr;
-            ctx.fillStyle = casting ? '#ff8800' : '#ffcc00';
-            ctx.fillRect(px - 1, py - 1, 2, 2);
+    if (attackState) {
+        attackProgress = 1.0 - (unit.attackCooldown / unit.civAttackSpeed);
+        // Chém từ đầu xuống không vượt quá chân (Từ trên đỉnh đầu chém thẳng xuống)
+        // sword vung ra không quá 75 độ (Khoảng 75 độ tính từ phương thẳng đứng)
+        if (attackProgress < 0.3) {
+            // Rút kiếm vung lên trên đầu
+            attackRot = (-Math.PI / 1.2) * (attackProgress / 0.3);
+        } else if (attackProgress < 0.5) {
+            // Giữ thế trên đỉnh đầu
+            attackRot = -Math.PI / 1.1; // Góc cao vung qua đầu
+        } else {
+            // Chém gập xuống phía trước nhưng không quá chân (không quá 75 độ = ~1.3 radians)
+            let t = (attackProgress - 0.5) / 0.5;
+            attackRot = -Math.PI / 1.1 + (Math.PI / 1.1 + Math.PI / 3) * t;
         }
     }
 
-    // ── CASTING AURA ──
-    if (casting) {
-        // Ice ring
-        ctx.globalAlpha = 0.25 + Math.sin(unit.animTimer * 6) * 0.1;
-        ctx.strokeStyle = '#44aaff';
-        ctx.lineWidth = 2;
+    if (moving && !attackState) {
+        ctx.scale(1, 1 - Math.abs(walkBob) * 0.02);
+        ctx.rotate(0.05);
+    }
+
+    const robeBase = ctx.createLinearGradient(0, -10, 0, 15);
+    robeBase.addColorStop(0, age >= 4 ? '#4a0808' : '#730c0c');
+    robeBase.addColorStop(1, age >= 4 ? '#7c0c0c' : '#9e1a1a');
+
+    const goldAccent = ctx.createLinearGradient(-5, 0, 5, 0);
+    goldAccent.addColorStop(0, '#8a6608');
+    goldAccent.addColorStop(0.5, '#ffd700');
+    goldAccent.addColorStop(1, '#a67c00');
+
+    const steelMetal = age >= 4 ? '#fff' : '#ddd';
+    const darkLeather = '#1a1a1a';
+    const skinTone = '#d2a688';
+
+    // ---- RIGHT ARM & XIU CHUN DAO (Sword) ----
+    // Drawn first (in background)
+    ctx.save();
+    ctx.translate(-2, -4 + walkBob);
+
+    if (attackState) {
+        ctx.rotate(attackRot); // Slash rotation
+    } else {
+        // Idle/Moving: Right arm reaches across body to hold sword hilt in the scabbard
+        // Scabbard is on the left side (front), so right arm sweeps forward and down
+        const reachRot = (80 * Math.PI / 180) + (moving ? Math.sin(bob * 0.6) * 0.05 : 0);
+        ctx.rotate(reachRot);
+    }
+
+    // Arm Sleeve
+    ctx.fillStyle = robeBase; ctx.fillRect(-2, 0, 4, 8);
+    // Bracer
+    ctx.fillStyle = darkLeather; ctx.fillRect(-1.5, 4, 3, 6);
+    ctx.fillStyle = goldAccent; ctx.fillRect(-1.5, 4, 3, 1); ctx.fillRect(-1.5, 9, 3, 1);
+    // Glove
+    ctx.fillStyle = '#4a3320'; ctx.fillRect(-1.5, 10, 3, 3);
+
+    // Active Weapon (Xiu Chun Dao) - Drawn only if attacking, OR if we want it in hand
+    // "thanh kiếm phải ở trong vỏ, khi rút ra vỏ vẫn trong tay nhưng kiếm đã ra khỏi vỏ và chém"
+    if (attackState) {
+        ctx.translate(0, 13); // Center on hand
+
+        ctx.fillStyle = '#3a2010'; ctx.fillRect(-1, 0, 2, -6); // Hilt
+        ctx.fillStyle = goldAccent;
+        ctx.beginPath(); ctx.arc(0, -6, 1.5, 0, Math.PI * 2); ctx.fill(); // Pommel
+        ctx.fillRect(-2.5, 0, 5, 1.5); // Guard
+
+        // Brutal curved blade
+        ctx.fillStyle = '#888';
         ctx.beginPath();
-        ctx.arc(0, 2 + bob, 18 + Math.sin(unit.animTimer * 8) * 3, 0, Math.PI * 2);
-        ctx.stroke();
-        // Heal ring (green)
-        ctx.strokeStyle = '#44ff88';
-        ctx.beginPath();
-        ctx.arc(0, 2 + bob, 14 + Math.sin(unit.animTimer * 6 + 1) * 2, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-    } else if (age >= 4) {
-        ctx.globalAlpha = 0.08 + Math.sin(unit.animTimer * 3) * 0.04;
-        ctx.fillStyle = '#8866cc';
-        ctx.beginPath();
-        ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2);
+        ctx.moveTo(-1, 1.5);
+        ctx.lineTo(-1, 16); // Back edge straight
+        ctx.quadraticCurveTo(0, 20, 2, 18); // Fierce tip
+        ctx.lineTo(2, 1.5); // Sharp edge
         ctx.fill();
+
+        // Edge gleam
+        ctx.fillStyle = steelMetal; ctx.fillRect(1, 2, 1, 15);
+        ctx.fillStyle = '#222'; ctx.fillRect(-0.5, 3, 0.5, 10); // Blood groove
+
+        // Motion blur and blood
+        if (attackProgress > 0.6) {
+            ctx.globalAlpha = 0.4;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.moveTo(1, 15); ctx.quadraticCurveTo(12, 12, 6, 2); ctx.lineTo(2, 2); ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = 'rgba(200, 0, 0, 0.8)';
+            ctx.beginPath(); ctx.arc(1.5, 12, 1.5, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+    ctx.restore();
+
+    // ---- LEGS & BOOTS ----
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-5 + legSwing, 6, 4.5, 11);
+    ctx.fillRect(1 - legSwing, 6, 4.5, 11);
+
+    ctx.fillStyle = age >= 4 ? goldAccent : '#333';
+    ctx.fillRect(-5.5 + legSwing, 10, 5.5, 6);
+    ctx.fillRect(0.5 - legSwing, 10, 5.5, 6);
+
+    ctx.fillStyle = '#050505';
+    ctx.beginPath(); ctx.ellipse(-3 + legSwing, 18, 4.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(3 - legSwing, 18, 4.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#eee';
+    ctx.fillRect(-6 + legSwing, 19, 5, 1);
+    ctx.fillRect(1 - legSwing, 19, 5, 1);
+
+    // ---- LOWER ROBE (Flying Fish Skirt) ----
+    ctx.fillStyle = robeBase;
+    ctx.beginPath();
+    ctx.moveTo(-6.5, 2 + walkBob);
+    ctx.lineTo(6.5, 2 + walkBob);
+    ctx.lineTo(10, 11 + walkBob);
+    ctx.lineTo(-10, 11 + walkBob);
+    ctx.fill();
+
+    ctx.strokeStyle = goldAccent; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-10, 11 + walkBob); ctx.lineTo(10, 11 + walkBob); ctx.stroke();
+
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-1, 5 + walkBob, 2, 7);
+
+    // ---- UPPER TORSO (Flying Fish Tunic & Belt) ----
+    ctx.fillStyle = robeBase;
+    ctx.fillRect(-7, -7 + walkBob, 14, 11);
+
+    if (age >= 4) {
+        ctx.fillStyle = '#ffd700'; ctx.globalAlpha = 0.5;
+        ctx.beginPath(); ctx.arc(0, -2 + walkBob, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillRect(-3, -3 + walkBob, 6, 1);
+        ctx.fillRect(-1, -4 + walkBob, 2, 4);
         ctx.globalAlpha = 1;
     }
 
-    // ── UPGRADE MARKS ──
-    if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = '#ffd700';
-        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++)
-            ctx.fillRect(-9, 6 + bob - i * 4, 2, 2);
+    ctx.fillStyle = darkLeather;
+    ctx.fillRect(-7.5, 2 + walkBob, 15, 3.5);
+    ctx.fillStyle = age >= 4 ? goldAccent : '#ddd';
+    ctx.fillRect(-3, 1.5 + walkBob, 6, 4.5);
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-1, 2.5 + walkBob, 2, 2.5);
+
+    ctx.fillStyle = '#bb1111';
+    ctx.beginPath();
+    ctx.moveTo(-6, 5 + walkBob);
+    ctx.quadraticCurveTo(-8, 10 + walkBob, -5 - legSwing * 0.5, 14 + walkBob);
+    ctx.lineTo(-4 - legSwing * 0.5, 14 + walkBob);
+    ctx.lineTo(-4, 5 + walkBob);
+    ctx.fill();
+
+    ctx.fillStyle = darkLeather;
+    ctx.beginPath(); ctx.moveTo(-8, -7 + walkBob); ctx.lineTo(8, -7 + walkBob); ctx.lineTo(3, 0 + walkBob); ctx.lineTo(-3, 0 + walkBob); ctx.fill();
+    ctx.strokeStyle = goldAccent; ctx.lineWidth = 1; ctx.stroke();
+
+    // ---- LEFT ARM & SCABBARD ----
+    // Left holding scabbard at angle
+    ctx.save();
+    ctx.translate(4.5, -4 + walkBob);
+    // Arm resting, holding scabbard naturally 
+    const leftArmRot = moving && !attackState ? (15 * Math.PI / 180) + Math.sin(bob * 0.8) * 0.05 : (20 * Math.PI / 180);
+    ctx.rotate(leftArmRot);
+
+    // Sleeve
+    ctx.fillStyle = robeBase; ctx.fillRect(-2, 0, 4, 8);
+    // Bracer
+    ctx.fillStyle = darkLeather; ctx.fillRect(-1.5, 4, 3, 5);
+    ctx.fillStyle = goldAccent; ctx.fillRect(-1.5, 4, 3, 1); ctx.fillRect(-1.5, 8, 3, 1);
+    // Hand
+    ctx.fillStyle = skinTone; ctx.fillRect(-1, 9, 2.5, 2.5);
+
+    // Scabbard 
+    // "Vỏ kiếm để chéo với đai lưng khoảng 15 độ"
+    // Scabbard angle roughly horizontal-ish, tilted up by ~15-20 degrees
+    ctx.translate(0.5, 10);
+    ctx.rotate(-70 * Math.PI / 180); // Tilting scabbard out forward
+
+    ctx.fillStyle = '#1a0d00';
+    ctx.beginPath(); ctx.roundRect(-2, -5, 4, 24, 1); ctx.fill(); // Scabbard Body
+
+    ctx.fillStyle = goldAccent;
+    ctx.fillRect(-2.5, -4, 5, 2); // Mouth
+    ctx.fillRect(-2.5, 14, 5, 3); // Tip
+
+    ctx.strokeStyle = '#d00'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-2, 2); ctx.lineTo(-4, 8); ctx.stroke();
+
+    // If NOT attacking, the sword is INSIDE the scabbard!
+    if (!attackState) {
+        ctx.translate(0, -4);
+        ctx.fillStyle = '#3a2010'; ctx.fillRect(-1, -6, 2, 6); // Hilt
+        ctx.fillStyle = goldAccent;
+        ctx.beginPath(); ctx.arc(0, -6, 1.5, 0, Math.PI * 2); ctx.fill(); // Pommel
+        ctx.beginPath(); ctx.ellipse(0, 0, 3.5, 1.5, 0, 0, Math.PI * 2); ctx.fill(); // Guard
     }
+    ctx.restore();
+
+    // ---- HEAD, MASK & HAT (Doupeng) ----
+    ctx.fillStyle = '#111'; ctx.fillRect(-3.5, -9 + walkBob, 7, 2.5);
+    ctx.fillStyle = skinTone; ctx.fillRect(-3.5, -14 + walkBob, 7, 5);
+
+    if (age >= 4) {
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath(); ctx.moveTo(-4, -13 + walkBob); ctx.lineTo(4, -13 + walkBob); ctx.lineTo(3, -9 + walkBob); ctx.lineTo(-3, -9 + walkBob); ctx.fill();
+        ctx.fillStyle = goldAccent;
+        ctx.fillRect(-1.5, -10 + walkBob, 1, 1); ctx.fillRect(0.5, -10 + walkBob, 1, 1);
+        ctx.fillRect(-3.5, -13 + walkBob, 7, 0.5);
+        ctx.fillStyle = '#ff1111';
+        ctx.fillRect(-2, -12 + walkBob, 1.5, 1); ctx.fillRect(0.5, -12 + walkBob, 1.5, 1);
+    } else {
+        ctx.fillStyle = '#000'; ctx.fillRect(-2.5, -12.5 + walkBob, 1.5, 1.5); ctx.fillRect(1, -12.5 + walkBob, 1.5, 1.5);
+        ctx.fillStyle = '#fff'; ctx.fillRect(-2.5, -12.5 + walkBob, 0.5, 0.5); ctx.fillRect(1, -12.5 + walkBob, 0.5, 0.5);
+    }
+
+    // Ming Doupeng (Hat)
+    ctx.fillStyle = '#181614';
+    ctx.beginPath(); ctx.ellipse(0, -15 + walkBob, 9, 3, 0, 0, Math.PI * 2); ctx.fill(); // Brim
+    ctx.beginPath(); ctx.moveTo(-5.5, -15 + walkBob); ctx.lineTo(5.5, -15 + walkBob); ctx.lineTo(0, -21 + walkBob); ctx.fill(); // Dome
+
+    // Tassels
+    ctx.fillStyle = goldAccent;
+    ctx.beginPath(); ctx.arc(0, -21 + walkBob, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#e60000'; ctx.lineWidth = 1;
+    const sway = Math.sin(unit.animTimer * 6) * 1.5;
+    ctx.beginPath(); ctx.moveTo(-5, -15 + walkBob); ctx.quadraticCurveTo(-6, -10 + walkBob, -5 - sway, -6 + walkBob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(5, -15 + walkBob); ctx.quadraticCurveTo(6, -10 + walkBob, 5 - sway, -6 + walkBob); ctx.stroke();
+
+    if (age >= 4) {
+        ctx.globalAlpha = 0.12 + Math.sin(unit.animTimer * 4) * 0.04;
+        const aura = ctx.createRadialGradient(0, walkBob, 6, 0, walkBob, 20);
+        aura.addColorStop(0, '#ff0033'); aura.addColorStop(1, 'transparent');
+        ctx.fillStyle = aura; ctx.fillRect(-20, -20 + walkBob, 40, 40);
+        ctx.globalAlpha = 1;
+    }
+
+    if (unit.upgradeLevel > 0) {
+        ctx.fillStyle = goldAccent;
+        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) {
+            ctx.beginPath(); ctx.arc(-11, 6 + walkBob - i * 4, 1.2, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+    ctx.restore();
+    ctx.restore(); // Restore outer scale wrapper
+}
+
+/** Bất Tử Quân — Persian Immortal Elite, golden scale armor, turban, wicker shield and shamshir */
+export function drawImmortal(unit: Unit, ctx: CanvasRenderingContext2D, age: number, bob: number, moving: boolean): void {
+    ctx.save();
+    ctx.scale(0.85, 0.85); // Thu nhỏ 15%
+    let attackState = false;
+    if (unit.state === UnitState.Attacking) {
+        const target = unit.attackTarget || unit.attackBuildingTarget;
+        if (target) {
+            const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+            const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+            if (dist <= unit.civRange + bldgRadius + 20) {
+                attackState = true;
+            }
+        }
+    }
+    const isBlocking = unit.magiCastActive || unit.passiveCooldown > 0; // Guarding while casting or shielding
+    const walkBob = moving ? Math.sin(bob * 0.5) * 2.5 : 0;
+    const legSwing = moving ? Math.sin(bob * 0.6) * 5 : 0;
+    const robeSway = moving ? Math.cos(bob * 0.3) * 3 : Math.sin(unit.animTimer * 2) * 1;
+
+    // Animation Phase for Shamshir/Kopis
+    let attackRot = 0;
+    let attackProgress = 0;
+    if (attackState) {
+        attackProgress = 1.0 - (unit.attackCooldown / unit.civAttackSpeed);
+        // Correct overhead downward slash
+        if (attackProgress < 0.2) {
+            // Recover from previous strike
+            let recoverT = attackProgress / 0.2;
+            attackRot = (Math.PI / 4) * (1 - recoverT) + (-Math.PI / 8) * recoverT;
+        } else if (attackProgress < 0.7) {
+            // Windup backwards (overhead)
+            let windupT = (attackProgress - 0.2) / 0.5;
+            attackRot = (-Math.PI / 8) * (1 - windupT) + (-Math.PI / 1.1) * windupT;
+        } else {
+            // Brutal downward chop
+            let strikeT = (attackProgress - 0.7) / 0.3;
+            // Add ease-in for impact
+            strikeT = strikeT * strikeT;
+            attackRot = (-Math.PI / 1.1) * (1 - strikeT) + (Math.PI / 3) * strikeT;
+        }
+    }
+
+    // Colors & Materials
+    const goldArmorColor = ctx.createLinearGradient(-8, -5, 8, 5);
+    goldArmorColor.addColorStop(0, age >= 4 ? '#b8860b' : '#8a6608');
+    goldArmorColor.addColorStop(0.5, age >= 4 ? '#ffe55c' : '#d4af37');
+    goldArmorColor.addColorStop(1, '#b8860b');
+
+    const darkGold = '#5c4304';
+    const clothBase = ctx.createLinearGradient(0, -10, 0, 15);
+    clothBase.addColorStop(0, '#590a0a');
+    clothBase.addColorStop(1, '#2e0505');
+
+    const turbanColor = '#1a1a1a'; // Dark turban
+    const skinTone = '#a67b5b'; // Persian tan
+
+    let magicAura = 0;
+    if (unit.magiCastActive) {
+        magicAura = Math.random() * 0.5 + 0.5; // Pulsing glow
+    }
+
+    ctx.save();
+    ctx.translate(0, 3);
+
+    // Combat leaning posture
+    if (moving && !attackState) {
+        ctx.scale(1, 1 - Math.abs(walkBob) * 0.02);
+        ctx.rotate(0.08);
+    } else if (attackState) {
+        ctx.rotate(0.12);
+    }
+
+    // ── MAGICAL AURA (WHEN CASTING) ──
+    if (unit.magiCastActive) {
+        ctx.globalAlpha = magicAura * 0.6;
+        const aura = ctx.createRadialGradient(0, 5, 5, 0, 5, 25);
+        aura.addColorStop(0, '#ffaa00');
+        aura.addColorStop(1, 'transparent');
+        ctx.fillStyle = aura;
+        ctx.beginPath(); ctx.arc(0, 5, 25, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+
+    // ── LEGS & LONG ROBE ──
+    ctx.fillStyle = clothBase;
+
+    // Rear leg
+    ctx.beginPath(); ctx.ellipse(-4 + legSwing, 12, 4.5, 6, 0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111'; // Boots
+    ctx.beginPath(); ctx.ellipse(-4 + legSwing, 17, 3.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = goldArmorColor; ctx.fillRect(-6 + legSwing, 12, 4, 4);
+
+    // Flowing Robe Tail (Áo choàng dài chấm gót)
+    ctx.fillStyle = clothBase;
+    ctx.beginPath();
+    ctx.moveTo(-7, 5 + walkBob);
+    ctx.quadraticCurveTo(-14 + robeSway, 10 + walkBob, -12 + robeSway, 18 + walkBob);
+    ctx.lineTo(-4 + robeSway, 18 + walkBob);
+    ctx.lineTo(8, 5 + walkBob);
+    ctx.fill();
+
+    // Front leg
+    ctx.fillStyle = clothBase;
+    ctx.beginPath(); ctx.ellipse(4 - legSwing, 12, 4.5, 6, -0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.ellipse(4 - legSwing, 17, 3.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = goldArmorColor; ctx.fillRect(2 - legSwing, 12, 4, 4);
+
+    // ── TORSO (Golden Scale Armor) ──
+    ctx.fillStyle = '#111'; // Undershirt
+    ctx.fillRect(-7.5, -2 + walkBob, 15, 12);
+
+    // Scale Armor Cuirass (Áo giáp vảy vàng)
+    ctx.fillStyle = goldArmorColor;
+    ctx.beginPath();
+    ctx.moveTo(-8, -6 + walkBob);
+    ctx.lineTo(8, -6 + walkBob);
+    ctx.lineTo(9.5, 6 + walkBob);
+    ctx.lineTo(0, 10 + walkBob); // Pointed waist
+    ctx.lineTo(-9.5, 6 + walkBob);
+    ctx.fill();
+
+    // Draw individual scales
+    ctx.strokeStyle = darkGold;
+    ctx.lineWidth = 0.5;
+    for (let y = -5; y <= 8; y += 2.5) {
+        ctx.beginPath();
+        for (let x = -7; x <= 7; x += 3.5) {
+            // Offset every other row
+            const ox = (Math.abs(y % 5) === 0) ? x + 1.75 : x;
+            if (Math.abs(ox) < 9 - (y * 0.2)) {
+                ctx.arc(ox, y + walkBob, 1.8, 0, Math.PI);
+            }
+        }
+        ctx.stroke();
+    }
+
+    // Golden Belt and Sash
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-8, 5 + walkBob, 16, 2.5);
+    ctx.fillStyle = darkGold;
+    ctx.fillRect(-2.5, 4.5 + walkBob, 5, 3.5);
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(-1.5, 5.5 + walkBob, 3, 1.5);
+
+    // Red Sash
+    ctx.fillStyle = '#8b0000';
+    ctx.beginPath(); ctx.moveTo(0, 7.5 + walkBob); ctx.quadraticCurveTo(4, 12, 6, 17 + walkBob); ctx.lineTo(2, 17 + walkBob); ctx.lineTo(-1, 7.5 + walkBob); ctx.fill();
+
+    // ── LEFT HAND & PERSIAN RECURVE BOW ──
+    ctx.save();
+    ctx.translate(5, 0 + walkBob);
+    if (attackState) {
+        // Raise bow to aim
+        const liftProgress = Math.min(attackProgress * 3, 1.0);
+        ctx.rotate((-20 * Math.PI / 180) * liftProgress);
+        ctx.translate(-2 * liftProgress, -6 * liftProgress);
+    } else {
+        const leftArmRot = moving ? Math.sin(bob * 0.8) * 0.1 : (10 * Math.PI / 180);
+        ctx.rotate(leftArmRot);
+    }
+
+    ctx.fillStyle = clothBase; ctx.fillRect(0, 0, 3.5, 8); // Sleeve
+    ctx.fillStyle = goldArmorColor; ctx.fillRect(-0.5, 0, 4.5, 3); // Pauldron
+    ctx.fillStyle = darkGold; ctx.fillRect(0.5, 5, 2.5, 3); // Bracer
+
+    ctx.translate(1, 9);
+    ctx.fillStyle = skinTone; ctx.fillRect(-1, 0, 2.5, 3); // Hand
+
+    // The Bow (Golden Recurve)
+    ctx.strokeStyle = goldArmorColor;
+    ctx.lineWidth = 2.5;
+
+    // Bow string dynamic tension
+    let bowPull = 0;
+    if (attackState && attackProgress < 0.9) {
+        // String pulled back relative to attack progress
+        bowPull = Math.min(attackProgress * 10, 8); // max pull of 8 pixels
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(0, -18);
+    // Upper limb
+    ctx.quadraticCurveTo(8, -10, 2, 0);
+    // Lower limb
+    ctx.quadraticCurveTo(8, 10, 0, 18);
+    ctx.stroke();
+
+    // Bow string
+    ctx.strokeStyle = '#eee';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -18);
+    ctx.lineTo(-bowPull, 0); // Pull point
+    ctx.lineTo(0, 18);
+    ctx.stroke();
+
+    // Arrow knocked on the bow
+    if (attackState && attackProgress < 0.9) {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-bowPull, -0.5, 20 + bowPull, 1); // Arrow shaft
+        ctx.fillStyle = '#fff'; // Fletching
+        ctx.fillRect(-bowPull, -1.5, 3, 3);
+        ctx.fillStyle = '#888'; // Arrowhead
+        ctx.beginPath(); ctx.moveTo(20, -1.5); ctx.lineTo(24, 0); ctx.lineTo(20, 1.5); ctx.fill();
+    }
+    ctx.restore();
+
+    // ── RIGHT HAND (Draws the bow string) ──
+    ctx.save();
+    ctx.translate(-4, -1 + walkBob);
+
+    if (attackState) {
+        // Arm pulls back based on attack progress
+        const pullProgress = Math.min(attackProgress * 3, 1.0);
+        const release = attackProgress > 0.9;
+
+        if (release) {
+            ctx.rotate(20 * Math.PI / 180); // Follow through
+            ctx.translate(2, 4);
+        } else {
+            ctx.rotate((-45 * Math.PI / 180) * pullProgress); // Arm pulling back
+            ctx.translate(-4 * pullProgress, -4 * pullProgress);
+        }
+    } else {
+        const armRot = moving ? -Math.sin(bob * 0.6) * 0.5 : -0.1;
+        ctx.rotate(armRot);
+    }
+
+    // Arm sleeve
+    ctx.fillStyle = clothBase; ctx.fillRect(-2, 0, 4, 8);
+    ctx.fillStyle = goldArmorColor; ctx.fillRect(-2.5, -2, 5, 4); // Pauldron
+    ctx.fillStyle = darkGold; ctx.fillRect(-1.5, 4, 3, 4); // Bracer
+    ctx.fillStyle = skinTone; ctx.fillRect(-1, 8, 2, 2.5); // Hand
+
+    // Quiver on the back (visible over right shoulder)
+    ctx.restore(); // Undo arm transforms to draw quiver on the back
+    if (!attackState) {
+        ctx.save();
+        ctx.translate(-5, -5 + walkBob);
+        ctx.rotate(-45 * Math.PI / 180);
+        ctx.fillStyle = darkGold;
+        ctx.fillRect(-2, -5, 4, 18); // Quiver body
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-2, -5, 4, 2); // Quiver rim
+
+        // Arrows sticking out
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(-1.5, -9, 1, 4);
+        ctx.fillRect(0.5, -8, 1, 3);
+        ctx.restore();
+    }
+
+    // ── HEAD & TURBAN ──
+    ctx.fillStyle = skinTone; ctx.fillRect(-3, -10 + walkBob, 6, 4); // Neck
+
+    // Turban base
+    ctx.fillStyle = turbanColor;
+    ctx.beginPath(); ctx.arc(0, -12 + walkBob, 5.5, 0, Math.PI * 2); ctx.fill();
+
+    // Turban wraps (Khăn quấn)
+    ctx.fillStyle = '#0a0a0a';
+    ctx.beginPath(); ctx.ellipse(0, -14 + walkBob, 6.5, 3.5, -0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.ellipse(0, -15 + walkBob, 5.5, 3, 0.2, 0, Math.PI * 2); ctx.fill();
+
+    // Golden pin/jewel on turban
+    ctx.fillStyle = '#d4af37';
+    ctx.beginPath(); ctx.arc(0, -14 + walkBob, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ff2222';
+    ctx.beginPath(); ctx.arc(0, -14 + walkBob, 0.8, 0, Math.PI * 2); ctx.fill();
+
+    // Iron Mesh Mask (Mặt nạ lưới sắt bao phủ nửa dưới khuôn mặt)
+    if (age >= 4) {
+        ctx.fillStyle = 'rgba(20, 20, 20, 0.8)'; // Dark veil base
+        ctx.beginPath(); ctx.moveTo(-5, -10 + walkBob); ctx.lineTo(5, -10 + walkBob); ctx.lineTo(3, -5 + walkBob); ctx.lineTo(-3, -5 + walkBob); ctx.fill();
+
+        ctx.strokeStyle = '#777'; ctx.lineWidth = 0.5;
+        // Draw mesh grid
+        for (let x = -4; x <= 4; x += 1.5) { ctx.beginPath(); ctx.moveTo(x, -10 + walkBob); ctx.lineTo(x * 0.6, -5 + walkBob); ctx.stroke(); }
+        for (let y = -9; y <= -5; y += 1.5) { ctx.beginPath(); ctx.moveTo(-4 + (y + 10) * 0.5, y + walkBob); ctx.lineTo(4 - (y + 10) * 0.5, y + walkBob); ctx.stroke(); }
+    } else {
+        // Red scarf covering mouth
+        ctx.fillStyle = '#8b0000';
+        ctx.beginPath(); ctx.moveTo(-5, -10 + walkBob); ctx.lineTo(5, -10 + walkBob); ctx.lineTo(4, -6 + walkBob); ctx.lineTo(-4, -6 + walkBob); ctx.fill();
+    }
+
+    // Cold, piercing eyes
+    ctx.fillStyle = unit.magiCastActive ? '#ffaa00' : '#fff'; // Glows golden when casting
+    ctx.fillRect(-2.5, -12 + walkBob, 1.5, 1);
+    ctx.fillRect(1.5, -12 + walkBob, 1.5, 1);
+    if (!unit.magiCastActive) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-2, -12 + walkBob, 0.5, 0.5);
+        ctx.fillRect(2, -12 + walkBob, 0.5, 0.5);
+    } else {
+        // Eye flares
+        ctx.fillStyle = 'rgba(255, 170, 0, 0.5)';
+        ctx.beginPath(); ctx.arc(-2, -11.5 + walkBob, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(2, -11.5 + walkBob, 2, 0, Math.PI * 2); ctx.fill();
+    }
+
+    if (unit.upgradeLevel > 0) {
+        ctx.fillStyle = goldArmorColor;
+        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) {
+            ctx.beginPath(); ctx.arc(12, 4 + walkBob - i * 4, 1.5, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    ctx.restore();
+    ctx.restore(); // Restore outer scale wrapper
 }
 
 
 /** Ninja — Yamato shinobi, sleek dark outfit, katana, flowing scarf */
 export function drawNinja(unit: Unit, ctx: CanvasRenderingContext2D, age: number, bob: number, moving: boolean): void {
-    const legOffset = moving ? Math.sin(unit.animTimer * 24) * 4 : 0;
-    const windSway = Math.sin(unit.animTimer * 3) * 2;
-    let darkBase = age >= 4 ? '#0e0e28' : '#16162e';
-    let accentColor = age >= 4 ? '#cc2244' : '#882244';
-    if (unit.slotColor) { const sc = unit.slotColor; const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16); darkBase = `rgb(${Math.round(r * 0.3)},${Math.round(g * 0.3)},${Math.round(b2 * 0.3)})`; accentColor = sc; }
-
-    // ---- Flowing scarf (behind body, dynamic) ----
-    ctx.fillStyle = accentColor;
     ctx.save();
-    ctx.translate(-3, -13 + bob);
-    ctx.rotate(Math.sin(unit.animTimer * 5) * 0.15);
-    ctx.fillRect(-2, 0, 3, 14 + windSway);
-    ctx.fillRect(-3, 10 + windSway, 3, 6);
-    ctx.fillRect(-4, 14 + windSway, 2, 4);
-    ctx.globalAlpha = 0.5;
-    ctx.fillRect(-5, 16 + windSway, 2, 3);
-    ctx.globalAlpha = 1;
-    ctx.restore();
+    ctx.scale(0.85, 0.85); // Thu nhỏ 15%
+    let attackState = false;
+    if (unit.state === UnitState.Attacking) {
+        const target = unit.attackTarget || unit.attackBuildingTarget;
+        if (target) {
+            const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+            const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+            if (dist <= unit.civRange + bldgRadius + 20) {
+                attackState = true;
+            }
+        }
+    }
+    const walkBob = moving ? Math.sin(bob * 0.5) * 2 : 0;
+    const legSwing = moving ? Math.sin(bob * 0.7) * 4.5 : 0;
+    const windSway = Math.sin(unit.animTimer * 5) * 2.5;
 
-    // ---- Legs — slim tabi pants with wraps ----
-    ctx.fillStyle = darkBase;
-    ctx.fillRect(-3, 10 + bob, 3, 9 + legOffset);
-    ctx.fillRect(1, 10 + bob, 3, 9 - legOffset);
-    // Tabi split-toe boots
-    ctx.fillStyle = '#0a0a1a';
-    ctx.fillRect(-4, 18 + bob + legOffset, 2, 3);
-    ctx.fillRect(-2, 18 + bob + legOffset, 2, 3);
-    ctx.fillRect(0, 18 + bob - legOffset, 2, 3);
-    ctx.fillRect(2, 18 + bob - legOffset, 2, 3);
-    // Shin wraps (sarashi)
-    ctx.fillStyle = '#3a3a4e';
-    for (let s = 0; s < 3; s++) {
-        ctx.fillRect(-3, 11 + bob + s * 3 + legOffset * (s % 2 === 0 ? 1 : 0), 3, 1);
-        ctx.fillRect(1, 11 + bob + s * 3 - legOffset * (s % 2 === 0 ? 1 : 0), 3, 1);
+    // Advanced Stealth Materials
+    let darkBase = ctx.createLinearGradient(0, -10, 0, 15);
+    darkBase.addColorStop(0, age >= 4 ? '#050508' : '#111114');
+    darkBase.addColorStop(1, age >= 4 ? '#1a1a24' : '#222228');
+
+    let clothHighlight = age >= 4 ? '#252535' : '#33333d';
+    let obiColor = unit.slotColor || (age >= 4 ? '#990000' : '#881111');
+    const skinTone = '#ffcdaf';
+
+    // Animation Phase
+    let attackRot = 0;
+    let attackProgress = 0;
+    if (attackState) {
+        attackProgress = 1.0 - (unit.attackCooldown / unit.civAttackSpeed);
+        if (attackProgress < 0.2) {
+            // Recover
+            let t = attackProgress / 0.2;
+            attackRot = (-Math.PI / 4) * (1 - t) + (-Math.PI / 8) * t;
+        } else if (attackProgress < 0.7) {
+            // Windup arm HIGH UP (overhead ready to stab/slash down)
+            let t = (attackProgress - 0.2) / 0.5;
+            attackRot = (-Math.PI / 8) * (1 - t) + (-Math.PI * 0.85) * t;
+        } else {
+            // Lightning fast downward strike
+            let t = (attackProgress - 0.7) / 0.3;
+            t = t * t; // ease in
+            attackRot = (-Math.PI * 0.85) * (1 - t) + (-Math.PI / 4) * t;
+        }
     }
 
-    // Kunai holster on right thigh
-    ctx.fillStyle = '#2a2a3e';
-    ctx.fillRect(3, 11 + bob - legOffset, 2, 5);
-    ctx.fillStyle = '#888';
-    ctx.fillRect(3, 11 + bob - legOffset, 1, 3);
-
-    // ---- Katana on back (diagonal, behind body) ----
-    ctx.save();
-    ctx.translate(3, -4 + bob);
-    ctx.rotate(-0.45);
-    // Scabbard (saya)
-    ctx.fillStyle = '#1a0a0a';
-    ctx.fillRect(-1.5, -24, 3, 22);
-    ctx.fillStyle = accentColor;
-    ctx.fillRect(-1.5, -24, 3, 1); // scabbard top accent
-    ctx.fillRect(-1.5, -3, 3, 1); // scabbard bottom accent
-    // Handle (tsuka) — wrapped
-    ctx.fillStyle = '#2a1a10';
-    ctx.fillRect(-1.5, -2, 3, 8);
-    // Diamond wrap pattern on handle
-    ctx.fillStyle = '#444';
-    ctx.fillRect(-1, -1, 1, 1);
-    ctx.fillRect(0.5, 1, 1, 1);
-    ctx.fillRect(-1, 3, 1, 1);
-    ctx.fillRect(0.5, 5, 1, 1);
-    // Guard (tsuba) — ornate
-    ctx.fillStyle = age >= 4 ? '#c9a84c' : '#887744';
-    ctx.fillRect(-3, -3, 6, 2);
-    // Pommel
-    ctx.fillStyle = accentColor;
-    ctx.fillRect(-1, 6, 2, 1);
-    ctx.restore();
-
-    // ---- Body — tight shinobi shozoku ----
-    ctx.fillStyle = darkBase;
-    ctx.fillRect(-5, -4 + bob, 11, 15);
-    // Chest armor plate (subtle)
-    ctx.fillStyle = age >= 4 ? '#1a1a3a' : '#1e1e36';
-    ctx.fillRect(-4, -3 + bob, 9, 6);
-    // Diagonal chest strap
-    ctx.fillStyle = '#3a3a4e';
-    for (let i = 0; i < 6; i++) {
-        ctx.fillRect(-4 + i * 1.5, -3 + bob + i * 2, 1.5, 2);
-    }
-    // Obi (waist sash)
-    ctx.fillStyle = accentColor;
-    ctx.fillRect(-5, 7 + bob, 11, 3);
-    ctx.fillStyle = age >= 4 ? '#dd3355' : '#993355';
-    ctx.fillRect(-4, 7 + bob, 3, 3); // knot
-    // Smoke bomb pouch on belt
-    ctx.fillStyle = '#333';
-    ctx.fillRect(3, 7 + bob, 3, 2);
-    ctx.fillStyle = '#555';
-    ctx.fillRect(3, 7 + bob, 1.5, 1.5);
-    ctx.fillRect(4.5, 7 + bob, 1.5, 1.5);
-
-    // ---- Arms — wrapped with tekko (hand guards) ----
-    ctx.fillStyle = darkBase;
-    ctx.fillRect(-7, -2 + bob, 3, 10);
-    ctx.fillRect(5, -2 + bob, 3, 10);
-    // Arm wraps
-    ctx.fillStyle = '#3a3a4e';
-    ctx.fillRect(-7, 0 + bob, 3, 1);
-    ctx.fillRect(-7, 3 + bob, 3, 1);
-    ctx.fillRect(-7, 6 + bob, 3, 1);
-    ctx.fillRect(5, 0 + bob, 3, 1);
-    ctx.fillRect(5, 3 + bob, 3, 1);
-    ctx.fillRect(5, 6 + bob, 3, 1);
-    // Tekko (metal hand guards)
-    ctx.fillStyle = '#555';
-    ctx.fillRect(-8, 6 + bob, 4, 3);
-    ctx.fillRect(5, 6 + bob, 4, 3);
-    ctx.fillStyle = '#777';
-    ctx.fillRect(-8, 6 + bob, 4, 1);
-    ctx.fillRect(5, 6 + bob, 4, 1);
-
-    // ---- Head — masked shinobi hood (compact) ----
-    // Hood base (zukin)
-    ctx.fillStyle = '#0e0e1e';
-    ctx.fillRect(-4, -12 + bob, 8, 9);
-    // Face mask (men) — only eyes exposed
-    ctx.fillStyle = '#111';
-    ctx.fillRect(-4, -8 + bob, 8, 4);
-    // Skin around eyes
-    ctx.fillStyle = '#c9a87a';
-    ctx.fillRect(-3, -7 + bob, 6, 3);
-    // Eyes — sharp, intense
-    ctx.fillStyle = age >= 4 ? '#ff2244' : '#fff';
-    ctx.fillRect(-2, -6 + bob, 2, 2);
-    ctx.fillRect(1, -6 + bob, 2, 2);
-    // Pupils
-    ctx.fillStyle = age >= 4 ? '#aa0022' : '#111';
-    ctx.fillRect(-1, -6 + bob, 1, 2);
-    ctx.fillRect(2, -6 + bob, 1, 2);
-    // Eye glint
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(-2, -6 + bob, 0.5, 0.5);
-    ctx.fillRect(1, -6 + bob, 0.5, 0.5);
-
-    // Hood top — pointed
-    ctx.fillStyle = '#0a0a18';
-    ctx.fillRect(-4, -14 + bob, 8, 3);
-    ctx.fillRect(-3, -15 + bob, 6, 2);
-    ctx.fillRect(-2, -16 + bob, 4, 2);
-
-    // Hachimaki headband
-    ctx.fillStyle = accentColor;
-    ctx.fillRect(-5, -11 + bob, 10, 2);
-    // Headband tails (flowing)
-    ctx.save();
-    ctx.translate(5, -10 + bob);
-    ctx.rotate(Math.sin(unit.animTimer * 6) * 0.2);
-    ctx.fillStyle = accentColor;
-    ctx.fillRect(0, 0, 5, 2);
-    ctx.fillRect(3, 1, 4, 1.5);
-    ctx.globalAlpha = 0.6;
-    ctx.fillRect(6, 2, 3, 1);
-    ctx.globalAlpha = 1;
-    ctx.restore();
-
-    // ---- Shuriken on chest (iconic) ----
-    if (age >= 3) {
-        ctx.fillStyle = '#aaa';
-        ctx.save();
-        ctx.translate(-1, 2 + bob);
-        ctx.rotate(unit.animTimer * 0.5);
-        ctx.fillRect(-1, -4, 2, 8);  // vertical
-        ctx.fillRect(-4, -1, 8, 2);  // horizontal
-        // Points
-        ctx.fillRect(-2, -3, 1, 1);
-        ctx.fillRect(1, 2, 1, 1);
-        ctx.fillRect(-3, 1, 1, 1);
-        ctx.fillRect(2, -2, 1, 1);
-        ctx.restore();
-    }
-
-    // ---- Age 4: Shadow aura with purple energy ----
-    if (age >= 4) {
-        ctx.globalAlpha = 0.08 + Math.sin(unit.animTimer * 4) * 0.04;
-        ctx.fillStyle = '#6600cc';
-        ctx.beginPath();
-        ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2);
-        ctx.fill();
-        // Inner glow
-        ctx.fillStyle = '#aa00ff';
-        ctx.beginPath();
-        ctx.arc(0, 0 + bob, 8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-    }
-
-    // ---- Moving: shadow afterimages ----
+    // Shadow Clone Afterimages
     if (moving) {
-        ctx.globalAlpha = 0.08;
-        ctx.fillStyle = '#4400aa';
-        ctx.fillRect(-8, -4 + bob, 3, 14);
-        ctx.globalAlpha = 0.04;
-        ctx.fillRect(-12, -2 + bob, 3, 10);
+        ctx.globalAlpha = 0.15 + Math.sin(unit.animTimer * 20) * 0.05;
+        ctx.save(); ctx.translate(-8, 0); ctx.rotate(-0.05); ctx.fillStyle = '#000000'; ctx.fillRect(-4, -10, 8, 20); ctx.restore();
+        ctx.save(); ctx.translate(-16, 0); ctx.rotate(-0.1); ctx.fillStyle = '#0a0a0a'; ctx.fillRect(-3, -8, 6, 16); ctx.restore();
+        ctx.globalAlpha = 1;
+
+        // Speed lines
+        ctx.globalAlpha = 0.4;
+        ctx.strokeStyle = age >= 4 ? '#8a2be2' : '#4169e1';
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 3; i++) {
+            ctx.beginPath();
+            const trailY = Math.random() * 20 - 5;
+            const trailLen = 10 + Math.random() * 8;
+            ctx.moveTo(-5, trailY + walkBob); ctx.lineTo(-5 - trailLen, trailY + walkBob); ctx.stroke();
+        }
         ctx.globalAlpha = 1;
     }
 
-    // Upgrade stars
-    if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = '#8800ff';
-        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++)
-            ctx.fillRect(-7, 6 + bob - i * 4, 2, 2);
+    ctx.save();
+    // Aggressive stealth crouch
+    if (moving && !attackState) {
+        ctx.scale(1, 1 - Math.abs(walkBob) * 0.03);
+        ctx.rotate(0.2); // Chạy thì chúi người
+        ctx.translate(0, 4);
+    } else if (attackState) {
+        ctx.rotate(0.15); // Lean into attack
+        ctx.translate(0, 4);
+    } else {
+        // Đứng yên thì thẳng người, oai vệ, nhịp thở bồng bềnh
+        ctx.rotate(0);
+        ctx.translate(0, 4 + Math.sin(unit.animTimer * 5) * 0.5);
     }
+
+    // Flowing Headband Tails
+    ctx.fillStyle = obiColor;
+    ctx.save();
+    ctx.translate(-2, -12 + walkBob);
+    ctx.rotate((moving ? 0.4 : 0.1) + Math.sin(unit.animTimer * 8) * 0.3);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-8, -3 - windSway, -14 - windSway * 2, -5 + Math.cos(unit.animTimer * 10) * 2); ctx.quadraticCurveTo(-6, 2, 0, 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, 1); ctx.quadraticCurveTo(-5, 0 - windSway, -11 - windSway * 1.5, -2 + Math.sin(unit.animTimer * 9) * 2); ctx.quadraticCurveTo(-4, 3, 0, 3); ctx.fill();
+    ctx.restore();
+
+    // ── LEGS ──
+    ctx.fillStyle = darkBase;
+    ctx.fillRect(-5.5 + legSwing, 6, 4.5, 11);
+    ctx.fillRect(1.5 - legSwing, 6, 4.5, 11);
+
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+        ctx.beginPath(); ctx.moveTo(-5.5 + legSwing, 10 + i * 2); ctx.lineTo(-1 + legSwing, 11.5 + i * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-1 + legSwing, 10 + i * 2); ctx.lineTo(-5.5 + legSwing, 11.5 + i * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(1.5 - legSwing, 10 + i * 2); ctx.lineTo(6 - legSwing, 11.5 + i * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(6 - legSwing, 10 + i * 2); ctx.lineTo(1.5 - legSwing, 11.5 + i * 2); ctx.stroke();
+    }
+
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(-6.5 + legSwing, 17, 5.5, 2);
+    ctx.fillRect(0.5 - legSwing, 17, 5.5, 2);
+    ctx.fillStyle = skinTone;
+    ctx.fillRect(-2 + legSwing, 17, 0.5, 1);
+    ctx.fillRect(5 - legSwing, 17, 0.5, 1);
+
+    // ── TORSO ──
+    ctx.fillStyle = darkBase;
+    ctx.beginPath(); ctx.moveTo(-6.5, -6 + walkBob); ctx.lineTo(6.5, -6 + walkBob); ctx.lineTo(5.5, 7 + walkBob); ctx.lineTo(-5.5, 7 + walkBob); ctx.fill();
+
+    ctx.strokeStyle = clothHighlight; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-3, -6 + walkBob); ctx.lineTo(1, 2 + walkBob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, -6 + walkBob); ctx.lineTo(-1, 2 + walkBob); ctx.stroke();
+
+    if (age >= 4) {
+        ctx.fillStyle = '#222'; ctx.fillRect(-2.5, -7 + walkBob, 5, 2.5);
+        ctx.fillStyle = '#888';
+        for (let i = 0; i < 3; i++) {
+            ctx.fillRect(-2, -6.5 + i + walkBob, 4, 0.5);
+            ctx.fillRect(-1.5 + i * 1.5, -7 + walkBob, 0.5, 2);
+        }
+    }
+
+    ctx.fillStyle = obiColor; ctx.fillRect(-6.5, 4.5 + walkBob, 13, 3.5);
+    ctx.fillStyle = '#660000'; ctx.fillRect(-4, 4 + walkBob, 4, 4); ctx.fillRect(-4, 8 + walkBob, 2, 3);
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-6.5, 5 + walkBob, 3, 4); ctx.fillRect(4.5, 5 + walkBob, 2.5, 4);
+    ctx.fillStyle = '#555'; ctx.fillRect(-5.5, 6 + walkBob, 1, 1);
+
+    // ── LEFT ARM (Shuriken / Defensive Posture) ──
+    ctx.save();
+    ctx.translate(4, -2 + walkBob);
+
+    if (attackState && attackProgress < 0.5) {
+        ctx.rotate(-Math.PI / 4); // Throwing/preparing motion
+        ctx.translate(2, -2);
+    } else {
+        const leftRot = moving ? (20 * Math.PI / 180) + Math.sin(bob * 0.8) * 0.1 : (30 * Math.PI / 180);
+        ctx.rotate(leftRot);
+    }
+
+    ctx.fillStyle = darkBase; ctx.fillRect(0, 0, 3.5, 8);
+    ctx.fillStyle = clothHighlight; ctx.fillRect(0, 4, 3.5, 4);
+    ctx.fillStyle = skinTone; ctx.fillRect(0.5, 8, 2.5, 2.5);
+    ctx.fillStyle = '#111'; ctx.fillRect(0.5, 8, 2.5, 1.5);
+
+    if (attackState && attackProgress < 0.5) {
+        ctx.fillStyle = '#eee';
+        ctx.beginPath(); ctx.moveTo(1.5, 10); ctx.lineTo(2.5, 12); ctx.lineTo(4, 12.5); ctx.lineTo(2.5, 13); ctx.lineTo(1.5, 15); ctx.lineTo(0.5, 13); ctx.lineTo(-1, 12.5); ctx.lineTo(0.5, 12); ctx.fill();
+    }
+    ctx.restore();
+
+    // ── RIGHT ARM & REVERSE-GRIP NINJATO ──
+    ctx.save();
+    ctx.translate(-4.5, -2 + walkBob);
+
+    if (attackState) {
+        ctx.rotate(attackRot);
+        ctx.translate(-4, -2);
+    } else {
+        const walkRot = moving ? -Math.sin(bob * 0.6) * 0.5 : -0.1;
+        ctx.rotate(walkRot);
+    }
+
+    ctx.fillStyle = darkBase; ctx.fillRect(-2, 0, 3.5, 8);
+    ctx.fillStyle = clothHighlight; ctx.fillRect(-2, 5, 3.5, 4);
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(-2, 7); ctx.lineTo(1.5, 7); ctx.stroke();
+
+    ctx.fillStyle = skinTone; ctx.fillRect(-1.5, 9, 2.5, 2.5);
+    ctx.fillStyle = '#111'; ctx.fillRect(-1.5, 9, 2.5, 1.5);
+
+    if (attackState) {
+        ctx.translate(-1, 10);
+        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-1.5, -5, 2.5, 7);
+        ctx.fillStyle = '#a1a1a1';
+        ctx.beginPath(); ctx.moveTo(-1.5, -4); ctx.lineTo(-0.25, -3); ctx.lineTo(1, -4); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-1.5, -2); ctx.lineTo(-0.25, -1); ctx.lineTo(1, -2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-1.5, 0); ctx.lineTo(-0.25, 1); ctx.lineTo(1, 0); ctx.fill();
+
+        ctx.fillStyle = '#444'; ctx.fillRect(-2, -6, 3.5, 1.5);
+        ctx.fillStyle = '#0a0a0a'; ctx.fillRect(-3, 2, 5.5, 2);
+
+        const bladeColor = ctx.createLinearGradient(-1, 0, 1, 0);
+        bladeColor.addColorStop(0, '#555'); bladeColor.addColorStop(0.5, '#eee'); bladeColor.addColorStop(1, '#888');
+
+        ctx.fillStyle = bladeColor;
+        ctx.beginPath(); ctx.moveTo(-1.5, 4); ctx.lineTo(-1.5, 16); ctx.lineTo(1, 14); ctx.lineTo(1, 4); ctx.fill();
+
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(0, 4);
+        for (let i = 5; i < 14; i += 2) { ctx.lineTo(0.5, i); ctx.lineTo(-0.5, i + 1); }
+        ctx.stroke();
+
+        if (age >= 4) {
+            ctx.shadowColor = '#8a2be2'; ctx.shadowBlur = 5 + Math.sin(unit.animTimer * 10) * 3;
+            ctx.strokeStyle = '#d8b2ff'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(1, 4); ctx.lineTo(1, 14); ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-1.5, 4); ctx.lineTo(-1.5, 16); ctx.lineTo(0.5, 16); ctx.fill();
+
+        // Speed motion blur on slash
+        if (attackProgress > 0.5) {
+            ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.4;
+            ctx.beginPath(); ctx.moveTo(1, 14); ctx.lineTo(8, 12); ctx.lineTo(1, 6); ctx.fill();
+            ctx.globalAlpha = 1;
+
+            ctx.fillStyle = '#990000'; ctx.globalAlpha = 0.8;
+            ctx.beginPath(); ctx.arc(-0.5, 12, 1.5, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    }
+    ctx.restore();
+
+    // ---- SCABBARD (Saya) SLUNG ON BACK ----
+    ctx.save();
+    ctx.translate(0, -4 + walkBob);
+    ctx.rotate(Math.PI / 3.5);
+
+    ctx.fillStyle = '#050505'; ctx.beginPath(); ctx.roundRect(-2, -8, 4, 30, 1.5); ctx.fill();
+    ctx.fillStyle = obiColor; ctx.fillRect(-2, -5, 4, 1.5); ctx.fillRect(-2, 3, 4, 1.5);
+    ctx.fillStyle = '#333'; ctx.fillRect(-2, 21, 4, 1.5);
+
+    if (!attackState) {
+        ctx.translate(0, -8);
+        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-1.5, -8, 3, 8);
+        ctx.fillStyle = '#a1a1a1';
+        ctx.beginPath(); ctx.moveTo(-1.5, -6); ctx.lineTo(0, -5); ctx.lineTo(1.5, -6); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-1.5, -4); ctx.lineTo(0, -3); ctx.lineTo(1.5, -4); ctx.fill();
+        ctx.fillStyle = '#444'; ctx.fillRect(-2, -9, 4, 1.5);
+        ctx.fillStyle = '#0a0a0a'; ctx.fillRect(-3, -1, 6, 1.5);
+    }
+    ctx.restore();
+
+    // ── HEAD ──
+    ctx.fillStyle = darkBase; ctx.beginPath(); ctx.arc(0, -12 + walkBob, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-2, -16 + walkBob); ctx.lineTo(1, -16 + walkBob); ctx.lineTo(0, -12 + walkBob); ctx.fill();
+
+    ctx.fillStyle = skinTone; ctx.fillRect(-3, -13 + walkBob, 7, 3);
+    ctx.fillStyle = clothHighlight; ctx.fillRect(-4, -10 + walkBob, 9, 5);
+    ctx.beginPath(); ctx.moveTo(-4, -10 + walkBob); ctx.lineTo(-1, -12 + walkBob); ctx.lineTo(5, -10 + walkBob); ctx.fill();
+
+    ctx.fillStyle = '#fff'; ctx.fillRect(-2, -12 + walkBob, 2, 1); ctx.fillRect(2, -12 + walkBob, 2, 1);
+    ctx.fillStyle = '#111'; ctx.fillRect(-1, -12 + walkBob, 1, 1); ctx.fillRect(2, -12 + walkBob, 1, 1);
+
+    if (age >= 4) {
+        ctx.globalAlpha = 0.6 + Math.sin(unit.animTimer * 10) * 0.4;
+        ctx.fillStyle = '#ff1133';
+        ctx.fillRect(-1.5, -12 + walkBob, 1.5, 1.5); ctx.fillRect(2.5, -12 + walkBob, 1.5, 1.5);
+
+        if (moving) {
+            ctx.beginPath(); ctx.moveTo(-1, -11.5 + walkBob); ctx.quadraticCurveTo(-6, -12 + walkBob, -10 - Math.random() * 4, -13 + walkBob); ctx.lineTo(-1, -10.5 + walkBob); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    if (unit.upgradeLevel > 0) {
+        ctx.fillStyle = '#6600cc';
+        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) ctx.fillRect(-9, 4 + walkBob - i * 3, 2, 2);
+    }
+    ctx.restore();
+    ctx.restore(); // Restore outer scale wrapper
 }
 
 /** Centurion — La Mã commander, red-crested helmet, scutum shield, gladius */
 export function drawCenturion(unit: Unit, ctx: CanvasRenderingContext2D, age: number, bob: number, moving: boolean): void {
-    const legOffset = moving ? Math.sin(unit.animTimer * 20) * 3 : 0;
-    let tunicColor = '#8a2222';
-    let shieldColor = '#aa2222';
-    let shieldLight = '#cc3333';
-    if (unit.slotColor) { const sc = unit.slotColor; const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16); tunicColor = `rgb(${Math.round(r * 0.6)},${Math.round(g * 0.6)},${Math.round(b2 * 0.6)})`; shieldColor = `rgb(${Math.round(r * 0.7)},${Math.round(g * 0.7)},${Math.round(b2 * 0.7)})`; shieldLight = sc; }
+    ctx.save();
+    ctx.scale(0.85, 0.85); // Thu nhỏ 15%
+    const attackState = unit.state === UnitState.Attacking;
+    const walkBob = moving ? Math.sin(bob * 0.5) * 2 : 0;
+    const legSwing = moving ? Math.sin(bob * 0.6) * 5 : 0;
 
-    let bodyTilt = 0;
-    let frontLegLift = 0;
-    let frontLegFwd = 0;
+    // Animation Phase (Gladius/Spear)
+    let attackRot = 0;
+    let attackProgress = 0;
+    let attackThrust = 0;
+    if (attackState) {
+        attackProgress = 1.0 - (unit.attackCooldown / unit.civAttackSpeed);
+    }
 
-    if (unit.centurionMode === 'spear' && unit.state === UnitState.Attacking) {
+    let isRangedThrow = false;
+    let isMeleeThrust = false;
+
+    if (unit.centurionMode === 'spear') {
         const cd = unit.centurionPilumCooldown;
-        if (cd > 2.7) {
-            bodyTilt = 0.2 * ((3.0 - cd) / 0.3);
-        } else if (cd > 1.0) {
-            bodyTilt = 0;
-        } else if (cd > 0.15) {
+        isRangedThrow = cd > 0 && cd < 3.0 && Boolean(
+            (unit.attackTarget && Math.hypot(unit.attackTarget.x - unit.x, unit.attackTarget.y - unit.y) > 40) ||
+            (unit.attackBuildingTarget && Math.hypot(unit.attackBuildingTarget.x - unit.x, unit.attackBuildingTarget.y - unit.y) > 40)
+        );
+        isMeleeThrust = attackState && !isRangedThrow;
+    }
+
+    if (isRangedThrow) {
+        const cd = unit.centurionPilumCooldown;
+        if (cd > 0.15) {
             const prepProgress = 1 - ((cd - 0.15) / 0.85);
-            bodyTilt = -0.25 * prepProgress;
-            frontLegLift = prepProgress * 6;
-            frontLegFwd = prepProgress * 3;
+            attackRot = (-Math.PI / 6) - prepProgress * (Math.PI / 3);
         } else {
             const swingProgress = cd <= 0 ? 1 : 1 - (cd / 0.15);
-            bodyTilt = -0.25 + (0.45 * swingProgress);
-            frontLegLift = 6 * (1 - swingProgress);
-            frontLegFwd = 3 * (1 - swingProgress);
+            attackRot = (-Math.PI / 2) + swingProgress * Math.PI;
         }
-    }
-
-    ctx.save();
-    if (bodyTilt !== 0) {
-        ctx.translate(0, 16 + bob);
-        ctx.rotate(bodyTilt);
-        ctx.translate(0, -(16 + bob));
-    }
-
-    // Legs — tunic + sandals
-    ctx.fillStyle = tunicColor;
-    ctx.fillRect(-4, 10 + bob, 4, 7 + legOffset);
-    ctx.fillRect(1 + frontLegFwd, 10 + bob - frontLegLift, 4, 7 - legOffset);
-    // Greaves (shin armor)
-    ctx.fillStyle = age >= 4 ? '#c9a84c' : '#aa8844';
-    ctx.fillRect(-4, 13 + bob + legOffset, 4, 4);
-    ctx.fillRect(1 + frontLegFwd, 13 + bob - legOffset - frontLegLift, 4, 4);
-    // Sandals
-    ctx.fillStyle = '#5a3020';
-    ctx.fillRect(-5, 16 + bob + legOffset, 5, 3);
-    ctx.fillRect(0 + frontLegFwd, 16 + bob - legOffset - frontLegLift, 5, 3);
-
-    // Large Scutum shield (behind body, on RIGHT side)
-    ctx.fillStyle = shieldColor;
-    ctx.fillRect(5, -8 + bob, 7, 20); // Changed from -12 to 5
-    ctx.fillStyle = shieldLight;
-    ctx.fillRect(6, -7 + bob, 5, 18); // Changed from -11 to 6
-    // Shield golden eagle emblem
-    ctx.fillStyle = '#ffd700';
-    ctx.fillRect(7, -2 + bob, 3, 3);  // Changed from -10 to 7
-    ctx.fillRect(6, -1 + bob, 5, 1);  // Changed from -11 to 6
-    ctx.fillRect(7, 1 + bob, 1, 3);   // Changed from -10 to 7
-    ctx.fillRect(9, 1 + bob, 1, 3);   // Changed from -8 to 9
-    // Shield boss (center circle)
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(7, 0 + bob, 3, 3);   // Changed from -10 to 7
-
-    // Body — tunic with segmented armor (lorica segmentata)
-    ctx.fillStyle = shieldLight;
-    ctx.fillRect(-6, -5 + bob, 12, 16);
-    // Metal segmented plates
-    ctx.fillStyle = age >= 4 ? '#c9a84c' : '#aa8844';
-    ctx.fillRect(-6, -5 + bob, 12, 2);
-    ctx.fillRect(-6, -1 + bob, 12, 2);
-    ctx.fillRect(-6, 3 + bob, 12, 2);
-    ctx.fillRect(-6, 7 + bob, 12, 2);
-    // Belt
-    ctx.fillStyle = '#5a3020';
-    ctx.fillRect(-6, 8 + bob, 12, 2);
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(-2, 8 + bob, 4, 2); // belt buckle
-
-    // Cape (moved to left side)
-    ctx.fillStyle = shieldColor;
-    ctx.fillRect(-9, -4 + bob, 4, 16);
-
-    // Shoulder armor
-    ctx.fillStyle = age >= 4 ? '#c9a84c' : '#aa8844';
-    ctx.fillRect(-8, -5 + bob, 4, 5);
-    ctx.fillRect(4, -5 + bob, 4, 5);
-
-    // Head
-    ctx.fillStyle = '#d4a87a';
-    ctx.fillRect(-4, -12 + bob, 8, 9);
-    ctx.fillStyle = '#222';
-    ctx.fillRect(-2, -8 + bob, 2, 2);
-    ctx.fillRect(1, -8 + bob, 2, 2);
-
-    // Centurion helmet with red crest (transverse)
-    ctx.fillStyle = age >= 4 ? '#c9a84c' : '#aa8844';
-    ctx.fillRect(-5, -16 + bob, 10, 6);
-    // Face guard
-    ctx.fillRect(-5, -11 + bob, 2, 4);
-    ctx.fillRect(3, -11 + bob, 2, 4);
-    // Nose guard
-    ctx.fillStyle = '#888';
-    ctx.fillRect(-1, -11 + bob, 2, 5);
-    // CREST (transverse — goes side to side, not front to back)
-    ctx.fillStyle = shieldLight;
-    ctx.fillRect(-7, -19 + bob, 14, 4);
-    ctx.fillStyle = shieldColor;
-    ctx.fillRect(-6, -20 + bob, 12, 2);
-
-    // Weapon — mode-dependent
-    if (unit.centurionShielding) {
-        // ⚔ SHIELD RAISED STANCE (Holding up shield on RIGHT arm)
-        ctx.fillStyle = shieldColor;
-        ctx.fillRect(-2, -12 + bob, 10, 24); // Moved visual center to right
-        ctx.fillStyle = shieldLight;
-        ctx.fillRect(-1, -11 + bob, 8, 22);
-        ctx.fillStyle = '#ffd700';
-        ctx.fillRect(1, -2 + bob, 4, 4);
-        ctx.fillRect(0, -1 + bob, 6, 2);
-        ctx.fillStyle = '#ffee88';
-        ctx.fillRect(1, 0 + bob, 4, 3);
-        // Spear overhead (moved to LEFT arm)
-        ctx.fillStyle = '#8B6914';
-        ctx.fillRect(-8, -20 + bob, 2, 26);
-        ctx.fillStyle = '#ccc';
-        ctx.beginPath();
-        ctx.moveTo(-7, -22 + bob);
-        ctx.lineTo(-9, -18 + bob);
-        ctx.lineTo(-5, -18 + bob);
-        ctx.closePath();
-        ctx.fill();
-        // Golden glow
-        ctx.globalAlpha = 0.15 + Math.sin(unit.animTimer * 6) * 0.08;
-        ctx.fillStyle = '#ffd700';
-        ctx.beginPath();
-        ctx.arc(0, 0 + bob, 18, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
+    } else if (isMeleeThrust) {
+        if (attackProgress < 0.3) {
+            let t = attackProgress / 0.3;
+            attackRot = Math.PI / 2.5;
+            attackThrust = 3 * t;
+        } else if (attackProgress < 0.6) {
+            let t = (attackProgress - 0.3) / 0.3;
+            t = 1 - Math.pow(1 - t, 3);
+            attackRot = Math.PI / 2.5 - 0.1 * t;
+            attackThrust = 3 - 38 * t;
+        } else {
+            let t = (attackProgress - 0.6) / 0.4;
+            attackRot = (Math.PI / 2.5 - 0.1) * (1 - t) + (Math.PI / 3.5) * t;
+            attackThrust = -35 * (1 - t);
+        }
     } else if (unit.centurionMode === 'sword') {
-        // ⚔ SWORD MODE — Gladius (on LEFT arm)
-        ctx.fillStyle = '#ccc';
-        ctx.fillRect(-9, -4 + bob, 2, 14);
-        ctx.fillStyle = '#eee';
-        ctx.fillRect(-9, -3 + bob, 2, 2); // blade shine
-        ctx.fillStyle = '#888';
-        ctx.beginPath();
-        ctx.moveTo(-8, -6 + bob);
-        ctx.lineTo(-10, -3 + bob);
-        ctx.lineTo(-6, -3 + bob);
-        ctx.closePath();
-        ctx.fill();
-        // Guard
-        ctx.fillStyle = '#c9a84c';
-        ctx.fillRect(-11, -4 + bob, 6, 2);
-        // Pommel
-        ctx.fillRect(-10, 10 + bob, 4, 3);
-        // Melee hit counter glow (shows progress to explosion)
-        if (unit.centurionMeleeHits > 0) {
-            for (let hi = 0; hi < unit.centurionMeleeHits; hi++) {
-                ctx.fillStyle = hi >= 3 ? '#ff4400' : '#ffaa00';
-                ctx.fillRect(-8 + hi * 4, -24 + bob, 3, 3);
+        if (attackState) {
+            if (attackProgress < 0.2) {
+                let t = attackProgress / 0.2;
+                attackRot = (Math.PI / 4) * (1 - t) + (-Math.PI / 10) * t;
+            } else if (attackProgress < 0.6) {
+                let t = (attackProgress - 0.2) / 0.4;
+                attackRot = (-Math.PI / 10) * (1 - t) + (-Math.PI / 1.5) * t; // Windup overhead
+            } else {
+                let t = (attackProgress - 0.6) / 0.4;
+                t = t * t;
+                attackRot = (-Math.PI / 1.5) * (1 - t) + (Math.PI / 6) * t; // Strike down
             }
         }
-        // Red combat aura
-        ctx.globalAlpha = 0.06;
-        ctx.fillStyle = '#ff2200';
-        ctx.beginPath();
-        ctx.arc(0, 0 + bob, 14, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-    } else {
-        // 🏹 SPEAR MODE — Pilum (only draw on body when NOT attacking AND NOT on cooldown)
-        const isAttackingInRange = unit.state === UnitState.Attacking && (
-            (unit.attackTarget && unit.attackTarget.alive && Math.hypot(unit.attackTarget.x - unit.x, unit.attackTarget.y - unit.y) <= unit.centurionSpearRange) ||
-            (unit.attackBuildingTarget && unit.attackBuildingTarget.alive && Math.hypot(unit.attackBuildingTarget.x - unit.x, unit.attackBuildingTarget.y - unit.y) <= unit.centurionSpearRange + (unit.attackBuildingTarget.tileW * TILE_SIZE * 0.4))
-        );
-        if (!isAttackingInRange && unit.centurionPilumCooldown <= 0) {
-            ctx.fillStyle = '#8B6914';
-            ctx.fillRect(-9, -14 + bob, 2, 28); // Moved to left side (-9 instead of 7)
-
-            // Iron shank
-            ctx.fillStyle = '#a0a8b8';
-            ctx.fillRect(-8.5, -26 + bob, 1, 12);
-
-            // Weight block
-            ctx.fillStyle = '#4a3a2a';
-            ctx.fillRect(-10, -15 + bob, 4, 3);
-            ctx.fillStyle = '#8a8888';
-            ctx.fillRect(-10.5, -14 + bob, 5, 1);
-
-            // Spearhead
-            ctx.fillStyle = '#ccc';
-            ctx.beginPath();
-            ctx.moveTo(-8, -32 + bob);
-            ctx.lineTo(-10, -26 + bob);
-            ctx.lineTo(-6, -26 + bob);
-            ctx.closePath();
-            ctx.fill();
-
-            // Head shine
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(-8, -31 + bob, 0.5, 5);
-        }
     }
 
-    // Age 4 imperial glow
-    if (age >= 4) {
-        ctx.globalAlpha = 0.07 + Math.sin(unit.animTimer * 3) * 0.04;
-        ctx.fillStyle = '#ff4444';
+    const ironColor = '#8899aa';
+    const brassColor = age >= 4 ? '#ffd700' : '#b8860b';
+    const darkRed = '#8b0000';
+    const brightRed = '#cc0000';
+    const skinTone = '#d29676';
+    const leather = '#5a3a1a';
+
+    ctx.save();
+    ctx.translate(0, 4);
+
+    if (moving && !attackState) {
+        ctx.rotate(0.05);
+    }
+
+    if (age >= 3) {
+        ctx.fillStyle = darkRed;
+        const capeWave = moving ? Math.sin(bob * 0.8) * 3 : 0;
         ctx.beginPath();
-        ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2);
+        ctx.moveTo(-5, -6 + walkBob);
+        ctx.quadraticCurveTo(-15, 0, -12 + capeWave, 16 + walkBob);
+        ctx.lineTo(-6 + capeWave, 18 + walkBob);
+        ctx.lineTo(2, 6 + walkBob);
         ctx.fill();
+    }
+
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-5 + legSwing, 8, 4.5, 9);
+    ctx.fillRect(1 - legSwing, 8, 4.5, 9);
+
+    if (age >= 4) {
+        ctx.fillStyle = brassColor;
+        ctx.fillRect(-5.5 + legSwing, 10, 5.5, 6);
+        ctx.fillRect(0.5 - legSwing, 10, 5.5, 6);
+    } else {
+        ctx.fillStyle = skinTone;
+        ctx.fillRect(-4.5 + legSwing, 10, 3.5, 6);
+        ctx.fillRect(1.5 - legSwing, 10, 3.5, 6);
+    }
+
+    ctx.fillStyle = '#4a2f1d';
+    ctx.fillRect(-5.5 + legSwing, 17, 5.5, 2);
+    ctx.fillRect(0.5 - legSwing, 17, 5.5, 2);
+    ctx.fillStyle = skinTone;
+    ctx.fillRect(-4.5 + legSwing, 17.5, 1, 1);
+    ctx.fillRect(2.5 - legSwing, 17.5, 1, 1);
+
+    ctx.fillStyle = darkRed;
+    ctx.fillRect(-6, 2 + walkBob, 12, 6);
+    ctx.fillStyle = leather;
+    for (let x = -5; x <= 5; x += 3) {
+        ctx.fillRect(x, 4 + walkBob, 2, 6);
+        ctx.fillStyle = brassColor;
+        ctx.fillRect(x, 8 + walkBob, 2, 1);
+        ctx.fillStyle = leather;
+    }
+
+    ctx.fillStyle = darkRed;
+    ctx.fillRect(-6.5, -6 + walkBob, 13, 10);
+    ctx.fillStyle = ironColor;
+    ctx.fillRect(-7, -5 + walkBob, 14, 9);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    for (let y = -4; y <= 3; y += 2) {
+        ctx.fillRect(-7, y + walkBob, 14, 0.5);
+    }
+
+    ctx.fillStyle = leather;
+    ctx.fillRect(-7.5, 2 + walkBob, 15, 3);
+    ctx.fillStyle = brassColor;
+    ctx.fillRect(-2, 1.5 + walkBob, 4, 4);
+    for (let x = -2; x <= 2; x += 2) {
+        ctx.fillRect(x, 5 + walkBob, 1, 5);
+        ctx.beginPath(); ctx.arc(x + 0.5, 10 + walkBob, 1, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // LEFT ARM & SCUTUM SHIELD
+    ctx.save();
+    ctx.translate(5, -2 + walkBob);
+
+    if (unit.centurionShielding) {
+        ctx.translate(-2, 0);
+    } else {
+        const shieldBob = moving ? Math.sin(bob * 0.8) * 1 : 0;
+        ctx.translate(0, shieldBob);
+    }
+
+    ctx.fillStyle = brightRed;
+    if (unit.slotColor) {
+        ctx.fillStyle = unit.slotColor;
+    }
+
+    ctx.beginPath();
+    ctx.roundRect(-4, -14, 12, 30, 2);
+    ctx.fill();
+
+    ctx.strokeStyle = brassColor; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(-4, -14, 12, 30, 2); ctx.stroke();
+
+    ctx.fillStyle = ironColor;
+    ctx.fillRect(-1, -2, 6, 6);
+    ctx.fillStyle = brassColor;
+    ctx.beginPath(); ctx.arc(2, 1, 2, 0, Math.PI * 2); ctx.fill();
+
+    if (age >= 3) {
+        ctx.beginPath(); ctx.moveTo(-1, 1); ctx.lineTo(-3, -4); ctx.lineTo(-3, -8); ctx.lineTo(-1, -4); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-1, 1); ctx.lineTo(-3, 6); ctx.lineTo(-3, 10); ctx.lineTo(-1, 6); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(5, 1); ctx.lineTo(7, -4); ctx.lineTo(7, -8); ctx.lineTo(5, -4); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(5, 1); ctx.lineTo(7, 6); ctx.lineTo(7, 10); ctx.lineTo(5, 6); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(2, -2); ctx.lineTo(1, -10); ctx.lineTo(3, -12); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(2, 4); ctx.lineTo(3, 12); ctx.lineTo(1, 14); ctx.fill();
+    }
+    ctx.restore();
+
+    // RIGHT ARM & WEAPON
+    ctx.save();
+    ctx.translate(-6, -3 + walkBob);
+
+    let currentRot = moving && !attackState ? -Math.sin(bob * 0.6) * 0.2 : 0;
+    if (attackState || isRangedThrow) {
+        currentRot = attackRot;
+    } else if (unit.centurionMode === 'spear') {
+        currentRot = Math.PI / 4;
+    }
+    ctx.rotate(currentRot);
+
+    ctx.fillStyle = ironColor;
+    ctx.fillRect(-3, -3, 6, 5);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(-3, -1, 6, 0.5); ctx.fillRect(-3, 1, 6, 0.5);
+
+    ctx.fillStyle = skinTone;
+    ctx.fillRect(-2, 2, 4, 7);
+    ctx.fillStyle = leather; ctx.fillRect(-2.5, 5, 5, 4);
+    ctx.fillStyle = brassColor; ctx.fillRect(-2.5, 6, 5, 1);
+    ctx.fillStyle = skinTone; ctx.fillRect(-1.5, 9, 3, 3);
+
+    if (unit.centurionMode === 'spear') {
+        if (unit.centurionPilumCooldown <= 1.5 || !isRangedThrow) {
+            ctx.translate(0, 10 + attackThrust);
+            if (isRangedThrow && attackState) {
+                ctx.translate(0, -10);
+            }
+
+            ctx.fillStyle = '#5a3020'; ctx.fillRect(-1, -12, 2, 24);
+            ctx.fillStyle = ironColor; ctx.fillRect(-0.5, -28, 1, 16);
+            ctx.beginPath(); ctx.moveTo(0, -32); ctx.lineTo(-1.5, -28); ctx.lineTo(1.5, -28); ctx.fill();
+            ctx.fillStyle = '#444';
+            ctx.beginPath(); ctx.moveTo(-2, -12); ctx.lineTo(2, -12); ctx.lineTo(1, -9); ctx.lineTo(-1, -9); ctx.fill();
+        }
+    } else {
+        ctx.translate(0, 11);
+        ctx.fillStyle = '#3a2010'; ctx.fillRect(-1.5, -3, 3, -4);
+        ctx.fillStyle = brassColor;
+        ctx.beginPath(); ctx.arc(0, -7, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0, -3, 4, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.fillStyle = ironColor;
+        ctx.beginPath(); ctx.moveTo(-2, -1); ctx.lineTo(-1.5, 12); ctx.lineTo(0, 16); ctx.lineTo(1.5, 12); ctx.lineTo(2, -1); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.5;
+        ctx.beginPath(); ctx.moveTo(0, -1); ctx.lineTo(0, 16); ctx.lineTo(-1.5, 12); ctx.lineTo(-2, -1); ctx.fill(); ctx.globalAlpha = 1;
+
+        if (attackState && attackProgress > 0.6) {
+            ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.4;
+            ctx.beginPath(); ctx.moveTo(0, 16); ctx.quadraticCurveTo(8, 12, 4, -2); ctx.lineTo(-2, -1); ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = 'rgba(200, 0, 0, 0.7)';
+            ctx.beginPath(); ctx.arc(0, 14, 1.5, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+    ctx.restore();
+
+    // HEAD & GALEA
+    ctx.fillStyle = skinTone;
+    ctx.fillRect(-3, -11 + walkBob, 6, 6);
+
+    ctx.fillStyle = ironColor;
+    ctx.beginPath(); ctx.arc(0, -12 + walkBob, 5.5, Math.PI, 0); ctx.fill();
+    ctx.fillRect(-6, -12 + walkBob, 12, 3);
+
+    ctx.fillStyle = brassColor;
+    ctx.fillRect(-6.5, -11 + walkBob, 13, 1.5);
+    ctx.fillRect(-4, -13 + walkBob, 8, 1);
+
+    ctx.fillStyle = ironColor;
+    ctx.beginPath(); ctx.moveTo(-5.5, -9 + walkBob); ctx.lineTo(-3.5, -4 + walkBob); ctx.lineTo(-2.5, -4 + walkBob); ctx.lineTo(-2.5, -9 + walkBob); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(5.5, -9 + walkBob); ctx.lineTo(3.5, -4 + walkBob); ctx.lineTo(2.5, -4 + walkBob); ctx.lineTo(2.5, -9 + walkBob); ctx.fill();
+
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-2, -9 + walkBob, 1, 1); ctx.fillRect(1, -9 + walkBob, 1, 1);
+
+    // TRANSVERSAL CREST
+    ctx.save();
+    ctx.translate(0, -17 + walkBob);
+
+    ctx.fillStyle = brassColor;
+    ctx.fillRect(-1.5, 0, 3, 3);
+
+    const plumeGradient = ctx.createLinearGradient(-10, 0, 10, 0);
+    plumeGradient.addColorStop(0, '#7a0000');
+    plumeGradient.addColorStop(0.5, brightRed);
+    plumeGradient.addColorStop(1, '#7a0000');
+    ctx.fillStyle = plumeGradient;
+
+    ctx.beginPath();
+    ctx.moveTo(-9, 0);
+    ctx.quadraticCurveTo(-12, -8, -6, -10);
+    ctx.quadraticCurveTo(0, -12, 6, -10);
+    ctx.quadraticCurveTo(12, -8, 9, 0);
+    ctx.quadraticCurveTo(6, -2, 0, -2);
+    ctx.quadraticCurveTo(-6, -2, -9, 0);
+    ctx.fill();
+
+    ctx.strokeStyle = '#550000'; ctx.lineWidth = 0.5;
+    for (let c = -8; c <= 8; c += 2) {
+        ctx.beginPath(); ctx.moveTo(c, -2); ctx.lineTo(c * 1.2, -9); ctx.stroke();
+    }
+    ctx.restore();
+
+    if (typeof unit.centurionMeleeHits === 'number' && unit.centurionMeleeHits > 0) {
+        ctx.fillStyle = unit.centurionMeleeHits >= 3 ? '#ff2222' : '#ffaa00';
+        ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 4;
+        ctx.beginPath(); ctx.arc(-14, -20 + bob, 3 + unit.centurionMeleeHits, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    if (age >= 4) {
+        ctx.globalAlpha = 0.05 + Math.sin(unit.animTimer * 3) * 0.03;
+        ctx.fillStyle = '#ff3333';
+        ctx.beginPath(); ctx.arc(0, 0 + bob, 20, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1;
     }
 
     if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = '#ffd700';
-        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++)
-            ctx.fillRect(8, 6 + bob - i * 4, 2, 2);
+        ctx.fillStyle = brassColor;
+        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) {
+            ctx.beginPath(); ctx.arc(12, 6 + bob - i * 4, 1.5, 0, Math.PI * 2); ctx.fill();
+        }
     }
 
     ctx.restore();
+    ctx.restore(); // Restore outer scale wrapper
 }
 
-/** Ulfhednar — Thunder warrior (Thor-inspired), winged helmet, sword, armored */
+
+/** Viking Ulfhednar — Sói cuồng nộ, đội lốt chó sói, cởi trần xăm mình, song rìu đẫm máu */
 export function drawUlfhednar(unit: Unit, ctx: CanvasRenderingContext2D, age: number, bob: number, moving: boolean): void {
-    const legOffset = moving ? Math.sin(unit.animTimer * 22) * 4 : 0;
-    const rage = unit.ulfhednarRageActive;
-    let capeColor = rage ? '#2255cc' : '#aa2222';
-    let capeHighlight = rage ? '#3366dd' : '#cc3333';
-    if (unit.slotColor && !rage) { capeColor = unit.slotColor; const sc = unit.slotColor; const r = parseInt(sc.slice(1, 3), 16), g = parseInt(sc.slice(3, 5), 16), b2 = parseInt(sc.slice(5, 7), 16); capeHighlight = `rgb(${Math.min(255, r + 40)},${Math.min(255, g + 40)},${Math.min(255, b2 + 40)})`; }
-
-    // ── RED CAPE (behind body) ──
-    ctx.fillStyle = capeColor;
-    ctx.fillRect(-10, -6 + bob, 5, 20);
-    ctx.fillRect(6, -6 + bob, 5, 18);
-    // Cape bottom flutter
-    const capeFlutter = Math.sin(unit.animTimer * 6) * 2;
-    ctx.fillRect(-11, 12 + bob + capeFlutter, 6, 4);
-    ctx.fillRect(6, 11 + bob - capeFlutter, 6, 4);
-    // Cape highlight
-    ctx.fillStyle = capeHighlight;
-    ctx.fillRect(-10, -6 + bob, 5, 3);
-    ctx.fillRect(6, -6 + bob, 5, 3);
-
-    // ── LEGS — armored boots ──
-    ctx.fillStyle = '#4a4a4a';
-    ctx.fillRect(-4, 10 + bob, 4, 8 + legOffset);
-    ctx.fillRect(1, 10 + bob, 4, 8 - legOffset);
-    // Metal shin guards
-    ctx.fillStyle = '#777';
-    ctx.fillRect(-4, 11 + bob + legOffset, 4, 3);
-    ctx.fillRect(1, 11 + bob - legOffset, 4, 3);
-    // Boots
-    ctx.fillStyle = '#333';
-    ctx.fillRect(-5, 17 + bob + legOffset, 5, 3);
-    ctx.fillRect(0, 17 + bob - legOffset, 5, 3);
-    ctx.fillStyle = '#555';
-    ctx.fillRect(-5, 17 + bob + legOffset, 5, 1);
-    ctx.fillRect(0, 17 + bob - legOffset, 5, 1);
-
-    // ── BODY — chainmail armor over tunic ──
-    // Dark tunic base
-    ctx.fillStyle = rage ? '#1a2a4a' : '#2a2a3a';
-    ctx.fillRect(-6, -4 + bob, 12, 15);
-    // Chainmail overlay
-    ctx.fillStyle = rage ? '#5588bb' : '#666';
-    ctx.fillRect(-6, -4 + bob, 12, 10);
-    // Chainmail pattern (small dots)
-    ctx.fillStyle = rage ? '#6699cc' : '#888';
-    for (let cy = 0; cy < 4; cy++) {
-        for (let cx = 0; cx < 5; cx++) {
-            ctx.fillRect(-5 + cx * 2.5, -3 + cy * 2.5 + bob, 1, 1);
-        }
-    }
-    // Armor chest plate center
-    ctx.fillStyle = rage ? '#4477aa' : '#777';
-    ctx.fillRect(-3, -3 + bob, 6, 8);
-    ctx.fillStyle = rage ? '#5588bb' : '#888';
-    ctx.fillRect(-2, -2 + bob, 4, 6);
-
-    // ── GOLDEN BELT with emblem ──
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(-6, 8 + bob, 12, 3);
-    ctx.fillStyle = '#dab85c';
-    ctx.fillRect(-6, 8 + bob, 12, 1);
-    // Belt buckle — lightning bolt emblem
-    ctx.fillStyle = rage ? '#88ccff' : '#ffd700';
-    ctx.fillRect(-1, 8 + bob, 2, 3);
-    ctx.fillRect(-2, 9 + bob, 1, 1);
-    ctx.fillRect(1, 9 + bob, 1, 1);
-
-    // ── ARMS — muscular with metal bracers ──
-    ctx.fillStyle = '#c4a070'; // skin
-    ctx.fillRect(-9, -3 + bob, 3, 10);
-    ctx.fillRect(6, -3 + bob, 3, 10);
-    // Metal bracers/gauntlets
-    ctx.fillStyle = rage ? '#5588bb' : '#777';
-    ctx.fillRect(-9, 2 + bob, 3, 4);
-    ctx.fillRect(6, 2 + bob, 3, 4);
-    ctx.fillStyle = rage ? '#6699cc' : '#999';
-    ctx.fillRect(-9, 2 + bob, 3, 1);
-    ctx.fillRect(6, 2 + bob, 3, 1);
-    // Shoulder pauldrons
-    ctx.fillStyle = rage ? '#5588bb' : '#888';
-    ctx.fillRect(-9, -4 + bob, 4, 3);
-    ctx.fillRect(6, -4 + bob, 4, 3);
-    ctx.fillStyle = rage ? '#6699cc' : '#aaa';
-    ctx.fillRect(-9, -4 + bob, 4, 1);
-    ctx.fillRect(6, -4 + bob, 4, 1);
-
-    // ── HEAD — face ──
-    ctx.fillStyle = '#c4a070';
-    ctx.fillRect(-4, -12 + bob, 8, 9);
-    // Eyes — glowing electric during rage
-    ctx.fillStyle = rage ? '#44ddff' : (age >= 4 ? '#ff6600' : '#fff');
-    ctx.fillRect(-3, -8 + bob, 2, 2);
-    ctx.fillRect(1, -8 + bob, 2, 2);
-    ctx.fillStyle = rage ? '#88eeff' : '#111';
-    ctx.fillRect(-2, -8 + bob, 1, 2);
-    ctx.fillRect(2, -8 + bob, 1, 2);
-    // Golden beard (Thor-like)
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(-3, -5 + bob, 6, 3);
-    ctx.fillRect(-2, -3 + bob, 4, 2);
-    ctx.fillRect(-1, -3 + bob, 2, 2);
-
-    // ── VIKING HELMET — winged ──
-    ctx.fillStyle = '#888';
-    ctx.fillRect(-5, -16 + bob, 10, 6);
-    // Helmet dome
-    ctx.fillStyle = '#999';
-    ctx.fillRect(-4, -17 + bob, 8, 3);
-    ctx.fillRect(-3, -18 + bob, 6, 2);
-    // Helmet brim
-    ctx.fillStyle = '#777';
-    ctx.fillRect(-6, -11 + bob, 12, 2);
-    // Nose guard
-    ctx.fillStyle = '#aaa';
-    ctx.fillRect(-1, -12 + bob, 2, 4);
-    // ── HELMET WINGS — iconic! ──
-    const wingColor = rage ? '#44aaff' : '#ccc';
-    const wingGlow = rage ? '#88ddff' : '#ddd';
-    // Left wing
-    ctx.fillStyle = wingColor;
-    ctx.fillRect(-9, -18 + bob, 3, 2);
-    ctx.fillRect(-11, -20 + bob, 3, 3);
-    ctx.fillRect(-12, -22 + bob, 2, 3);
-    ctx.fillStyle = wingGlow;
-    ctx.fillRect(-10, -19 + bob, 2, 1);
-    ctx.fillRect(-12, -22 + bob, 1, 2);
-    // Right wing
-    ctx.fillStyle = wingColor;
-    ctx.fillRect(6, -18 + bob, 3, 2);
-    ctx.fillRect(8, -20 + bob, 3, 3);
-    ctx.fillRect(10, -22 + bob, 2, 3);
-    ctx.fillStyle = wingGlow;
-    ctx.fillRect(8, -19 + bob, 2, 1);
-    ctx.fillRect(11, -22 + bob, 1, 2);
-
-    // ── SWORD — large Viking sword ──
-    const swordBob = rage ? Math.sin(unit.animTimer * 10) * 1.5 : 0;
-    // Blade
-    ctx.fillStyle = rage ? '#88ccff' : '#ccc';
-    ctx.fillRect(9, -12 + bob + swordBob, 2, 18);
-    // Blade edge highlight
-    ctx.fillStyle = rage ? '#aaddff' : '#eee';
-    ctx.fillRect(9, -12 + bob + swordBob, 1, 18);
-    // Sword tip
-    ctx.fillStyle = rage ? '#88ccff' : '#ccc';
-    ctx.beginPath();
-    ctx.moveTo(10, -14 + bob + swordBob);
-    ctx.lineTo(9, -12 + bob + swordBob);
-    ctx.lineTo(11, -12 + bob + swordBob);
-    ctx.closePath();
-    ctx.fill();
-    // Cross-guard
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(7, 5 + bob + swordBob, 6, 2);
-    // Grip
-    ctx.fillStyle = '#5a3a1a';
-    ctx.fillRect(9, 7 + bob + swordBob, 2, 4);
-    // Pommel
-    ctx.fillStyle = '#c9a84c';
-    ctx.fillRect(8, 11 + bob + swordBob, 4, 2);
-
-    // Sword lightning crackle during rage
-    if (rage) {
-        ctx.globalAlpha = 0.7 + Math.sin(unit.animTimer * 15) * 0.3;
-        ctx.strokeStyle = '#88eeff';
-        ctx.lineWidth = 1;
-        const sx = 10, sy = -10 + bob + swordBob;
-        ctx.beginPath();
-        ctx.moveTo(sx, sy);
-        ctx.lineTo(sx - 2, sy + 4);
-        ctx.lineTo(sx + 2, sy + 7);
-        ctx.lineTo(sx - 1, sy + 12);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-    }
-
-    // ── RAGE EFFECTS — electric aura ──
-    if (rage || age >= 4) {
-        const pulseSpeed = rage ? 8 : 5;
-        ctx.globalAlpha = rage ? (0.2 + Math.sin(unit.animTimer * pulseSpeed) * 0.1) : (0.1 + Math.sin(unit.animTimer * 5) * 0.06);
-        ctx.fillStyle = rage ? '#4488ff' : '#ff6600';
-        ctx.beginPath();
-        ctx.arc(0, 0 + bob, rage ? 20 : 16, 0, Math.PI * 2);
-        ctx.fill();
-        // Rotating electric arcs during rage
-        if (rage) {
-            ctx.globalAlpha = 0.7;
-            ctx.strokeStyle = '#88ccff';
-            ctx.lineWidth = 1.5;
-            for (let arc = 0; arc < 4; arc++) {
-                const arcAngle = unit.animTimer * 5 + arc * (Math.PI * 0.5);
-                const r1 = 12 + Math.sin(unit.animTimer * 14 + arc * 2) * 5;
-                ctx.beginPath();
-                ctx.moveTo(Math.cos(arcAngle) * 4, bob + Math.sin(arcAngle) * 4);
-                ctx.lineTo(Math.cos(arcAngle + 0.2) * r1, bob + Math.sin(arcAngle + 0.2) * r1);
-                ctx.lineTo(Math.cos(arcAngle + 0.5) * (r1 + 2), bob + Math.sin(arcAngle + 0.5) * (r1 + 2));
-                ctx.stroke();
+    ctx.save();
+    ctx.scale(0.85, 0.85); // Thu nhỏ 15%
+    let attackState = false;
+    if (unit.state === UnitState.Attacking) {
+        const target = unit.attackTarget || unit.attackBuildingTarget;
+        if (target) {
+            const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+            const bldgRadius = unit.attackBuildingTarget ? unit.attackBuildingTarget.tileW * 32 * 0.4 : 0;
+            if (dist <= unit.civRange + bldgRadius + 20) {
+                attackState = true;
             }
-            // Inner glow ring
-            ctx.globalAlpha = 0.15;
-            ctx.fillStyle = '#88ddff';
-            ctx.beginPath();
-            ctx.arc(0, -2 + bob, 10, 0, Math.PI * 2);
-            ctx.fill();
+        }
+    }
+    const legOffset = moving ? Math.sin(unit.animTimer * 22) * 5 : 0;
+    const breatheSway = Math.sin(unit.animTimer * 5) * 1.5;
+
+    const rage = unit.ulfhednarRageActive;
+    let bloodHue = rage ? '#ff0000' : '#880000';
+    let tattooColor = rage ? ctx.createLinearGradient(0, -5, 0, 5) : '#1a4e6e';
+    if (rage) {
+        (tattooColor as CanvasGradient).addColorStop(0, '#00ffff');
+        (tattooColor as CanvasGradient).addColorStop(1, '#0088ff');
+    }
+
+    const skinColor = '#c28359';
+    const shadowSkin = '#8f5a38';
+
+    let attackProgress = 0;
+    if (attackState) {
+        attackProgress = 1.0 - (unit.attackCooldown / unit.civAttackSpeed);
+    }
+
+    let bodyTilt = moving ? 0.25 : 0.05; // Giảm độ hưng phấn, đứng thẳng hơn khi Idle
+    if (attackState) {
+        // Savage lunging
+        if (attackProgress < 0.2) bodyTilt = 0.05; // Windup
+        else if (attackProgress < 0.5) bodyTilt = 0.4; // Strike 1 lunge
+        else if (attackProgress < 0.7) bodyTilt = 0.2; // Recover
+        else bodyTilt = 0.5; // Strike 2 lunge
+    }
+
+    ctx.save();
+    ctx.translate(0, 16 + bob);
+    ctx.rotate(bodyTilt);
+    ctx.translate(0, -(16 + bob));
+
+    // ── ĐÔI CHÂN ──
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(-5.5, 10 + bob, 5, 8 + legOffset);
+    ctx.fillRect(1.5, 10 + bob, 5, 8 - legOffset);
+
+    ctx.fillStyle = shadowSkin;
+    ctx.beginPath(); ctx.ellipse(-3, 13 + bob + legOffset, 1.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(4, 13 + bob - legOffset, 1.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(-5.5, 12 + bob + legOffset, 5.5, 5);
+    ctx.fillRect(1.5, 12 + bob - legOffset, 5.5, 5);
+    ctx.fillStyle = '#661111';
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(-5.5, 12 + bob + legOffset, 5.5, 2);
+    ctx.fillRect(1.5, 12 + bob - legOffset, 5.5, 2);
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = '#221100'; ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+        ctx.beginPath(); ctx.moveTo(-5.5, 12.5 + bob + legOffset + i * 1.5); ctx.lineTo(0, 13.5 + bob + legOffset + i * 1.5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(1.5, 12.5 + bob - legOffset + i * 1.5); ctx.lineTo(7, 13.5 + bob - legOffset + i * 1.5); ctx.stroke();
+    }
+
+    ctx.fillStyle = '#22140a';
+    ctx.beginPath(); ctx.roundRect(-6.5, 18 + bob + legOffset, 7, 3, 2); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(0.5, 18 + bob - legOffset, 7, 3, 2); ctx.fill();
+
+    // ── THÂN HÌNH CỞI TRẦN VẠM VỠ ──
+    ctx.fillStyle = skinColor;
+    ctx.beginPath(); ctx.moveTo(-7.5, -4 + bob - breatheSway); ctx.lineTo(7.5, -4 + bob - breatheSway); ctx.lineTo(6, 4 + bob); ctx.lineTo(7, 10 + bob); ctx.lineTo(-7, 10 + bob); ctx.lineTo(-6, 4 + bob); ctx.fill();
+
+    ctx.fillStyle = shadowSkin;
+    ctx.beginPath(); ctx.ellipse(-3.5, -1 + bob - breatheSway / 2, 3, 4, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(3.5, -1 + bob - breatheSway / 2, 3, 4, -0.2, 0, Math.PI * 2); ctx.fill();
+    for (let r = 0; r < 4; r++) { ctx.fillRect(-4.5, 2 + bob + r * 1.5, 4, 1); ctx.fillRect(0.5, 2 + bob + r * 1.5, 4, 1); }
+    ctx.fillRect(-0.5, -3 + bob, 1, 10);
+    ctx.fillStyle = '#5c3a21'; ctx.beginPath(); ctx.arc(0, 8 + bob, 0.8, 0, Math.PI * 2); ctx.fill();
+
+    ctx.strokeStyle = '#a6594d'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-6, -2 + bob); ctx.lineTo(2, 4 + bob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-5, -1 + bob); ctx.lineTo(1, 5 + bob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(5, 0 + bob); ctx.lineTo(7, 2 + bob); ctx.stroke();
+
+    ctx.strokeStyle = tattooColor;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = rage ? 0.9 + Math.sin(unit.animTimer * 15) * 0.1 : 0.7;
+    ctx.beginPath(); ctx.moveTo(-6.5, -4 + bob); ctx.quadraticCurveTo(-2, 0 + bob, -5, 5 + bob); ctx.stroke();
+    ctx.beginPath(); ctx.arc(-5, 0 + bob, 1.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6.5, -4 + bob); ctx.quadraticCurveTo(2, 0 + bob, 5, 5 + bob); ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // ── THẮT LƯNG VÀ KILT DA THÚ ──
+    ctx.fillStyle = '#2b1c11'; ctx.fillRect(-7.5, 10 + bob, 15, 3.5);
+    ctx.fillStyle = age >= 4 ? '#d4af37' : '#777'; ctx.beginPath(); ctx.arc(0, 11.5 + bob, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0, 11.5 + bob, 1, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath(); ctx.moveTo(-7, 13 + bob); ctx.lineTo(7, 13 + bob); ctx.lineTo(10, 18 + bob); ctx.lineTo(4, 16 + bob); ctx.lineTo(0, 19 + bob); ctx.lineTo(-4, 16 + bob); ctx.lineTo(-10, 18 + bob); ctx.fill();
+
+    const peltGradient = ctx.createLinearGradient(0, 13 + bob, 0, 18 + bob);
+    peltGradient.addColorStop(0, '#665544'); peltGradient.addColorStop(1, '#332a22');
+    ctx.fillStyle = peltGradient;
+    ctx.beginPath(); ctx.moveTo(-5, 13 + bob); ctx.lineTo(5, 13 + bob); ctx.lineTo(6, 17 + bob); ctx.lineTo(1, 15 + bob); ctx.lineTo(-1, 18 + bob); ctx.lineTo(-6, 17 + bob); ctx.fill();
+
+    ctx.fillStyle = '#221a11'; ctx.beginPath(); ctx.moveTo(-9, -4 + bob); ctx.quadraticCurveTo(-12, 5 + bob, -8, 8 + bob); ctx.fill();
+
+    // ── ĐẦU & LỐT SÓI (Wolf Pelt Headdress) ──
+    const peltSway = moving ? Math.cos(unit.animTimer * 12) * 2 : 0;
+
+    ctx.save();
+    ctx.translate(0, -9 + bob - breatheSway * 0.5);
+    ctx.rotate(-0.15 + (moving ? 0.05 : 0));
+
+    ctx.fillStyle = '#4a3d33';
+    ctx.beginPath(); ctx.moveTo(-5, -3); ctx.quadraticCurveTo(-14, 3 - peltSway, -13, 8 + peltSway); ctx.quadraticCurveTo(-8, 3, -4, 4); ctx.fill();
+
+    ctx.fillStyle = '#5c4d40';
+    ctx.beginPath(); ctx.arc(0, -6, 6, Math.PI, Math.PI * 2); ctx.lineTo(6.5, -1); ctx.lineTo(-6.5, -1); ctx.fill();
+
+    ctx.fillStyle = '#3d3329';
+    ctx.beginPath(); ctx.moveTo(-3.5, -10.5); ctx.lineTo(-6.5, -16); ctx.lineTo(-1, -10); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(3.5, -10.5); ctx.lineTo(6.5, -16); ctx.lineTo(1, -10); ctx.fill();
+
+    ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(6, -2, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(2, -2); ctx.lineTo(5, -4); ctx.stroke();
+
+    ctx.fillStyle = rage ? '#ff0000' : '#882222';
+    ctx.beginPath(); ctx.ellipse(-2.5, -7, 1.5, 0.8, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(1.5, -7, 1.5, 0.8, -0.2, 0, Math.PI * 2); ctx.fill();
+    if (rage) {
+        ctx.shadowColor = '#ff0000'; ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(-2.5, -7, 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(1.5, -7, 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    ctx.fillStyle = '#eaddca';
+    ctx.beginPath(); ctx.moveTo(4, -1); ctx.lineTo(4.5, 1.5); ctx.lineTo(3, -1); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-4, -1); ctx.lineTo(-4.5, 1.5); ctx.lineTo(-3, -1); ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = skinColor; ctx.fillRect(-4, -10 + bob, 7, 5.5);
+
+    ctx.fillStyle = rage ? '#ff0000' : '#ffffff';
+    ctx.fillRect(-2.5, -8.5 + bob, 1.5, 1); ctx.fillRect(1.5, -8.5 + bob, 1.5, 1);
+    if (!rage) { ctx.fillStyle = '#000'; ctx.fillRect(-2, -8.5 + bob, 0.5, 0.5); ctx.fillRect(2, -8.5 + bob, 0.5, 0.5); }
+
+    ctx.fillStyle = rage ? bloodHue : '#111';
+    ctx.globalAlpha = 0.8; ctx.fillRect(-4, -8 + bob, 8, 1.5); ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#b84514';
+    ctx.beginPath(); ctx.moveTo(-5, -5 + bob); ctx.lineTo(5, -5 + bob); ctx.lineTo(3.5, 0 + bob); ctx.lineTo(0.5, 3 + bob); ctx.lineTo(-2.5, 0 + bob); ctx.fill();
+    ctx.fillStyle = '#d4af37'; ctx.fillRect(-1.5, 0 + bob, 4, 1);
+
+    // ── CÁNH TAY TRẦN VÀ SONG RÌU LỆT SAO NẶNG TRỊCH ──
+
+    // Animation physics calculations for axes
+    let leftRot = -Math.PI / 10;
+    let rightRot = -Math.PI / 10;
+    let leftTrans = { x: 0, y: 0 };
+    let rightTrans = { x: 0, y: 0 };
+
+    if (attackState) {
+        // Alternating combo: Right axe swings 0.0->0.5, Left axe swings 0.5->1.0
+        // Corrected to downward chops
+        if (attackProgress < 0.2) {
+            // Windup Right (Up/Back)
+            let t = attackProgress / 0.2;
+            rightRot = -Math.PI / 10 * (1 - t) + (-Math.PI / 1.2) * t;
+            leftRot = -Math.PI / 10;
+        } else if (attackProgress < 0.5) {
+            // Strike Right (Downward Chop)
+            let t = (attackProgress - 0.2) / 0.3;
+            t = t * t; // ease in
+            rightRot = (-Math.PI / 1.2) * (1 - t) + (Math.PI / 4) * t;
+            rightTrans = { x: 2, y: 1 };
+            leftRot = -Math.PI / 10;
+        } else if (attackProgress < 0.7) {
+            // Windup Left (Up/Back), Right arm recovers slightly
+            let t = (attackProgress - 0.5) / 0.2;
+            rightRot = (Math.PI / 4) * (1 - t) + (-Math.PI / 8) * t;
+            leftRot = -Math.PI / 10 * (1 - t) + (-Math.PI / 1.2) * t;
+            leftTrans = { x: -2, y: -2 };
+        } else {
+            // Strike Left (Downward Chop)
+            let t = (attackProgress - 0.7) / 0.3;
+            t = t * t; // ease in
+            rightRot = (-Math.PI / 8) * (1 - t) + (-Math.PI / 10) * t; // Resume idle
+            leftRot = (-Math.PI / 1.2) * (1 - t) + (Math.PI / 4) * t;
+            leftTrans = { x: 1, y: 3 };
+        }
+    } else {
+        leftRot = moving ? Math.sin(bob * 0.6) * 0.5 : 0;
+        rightRot = moving ? -Math.sin(bob * 0.6) * 0.5 : 0;
+    }
+
+    // TAY TRÁI (Nằm khuất phía sau)
+    ctx.save();
+    ctx.translate(5.5, -2 + bob - breatheSway);
+    ctx.rotate(leftRot);
+    ctx.translate(leftTrans.x, leftTrans.y);
+
+    ctx.fillStyle = skinColor; ctx.fillRect(0, 0, 4, 8.5);
+    ctx.fillStyle = shadowSkin; ctx.fillRect(1, 0, 1, 8.5);
+
+    ctx.fillStyle = '#6b5c4d'; ctx.fillRect(-1, 4, 5.5, 4.5);
+    ctx.fillStyle = bloodHue; ctx.globalAlpha = 0.85; ctx.fillRect(-1, 5, 5.5, 3); ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#4a2f1d'; ctx.fillRect(0.5, 8.5, 3, 3);
+
+    if (attackState) {
+        ctx.translate(2, 10.5);
+        ctx.rotate(Math.PI / 5);
+        ctx.fillStyle = '#2b1a10'; ctx.fillRect(-1, -5, 2.5, 17);
+        ctx.fillStyle = '#4a2f1d'; for (let i = 0; i < 4; i++) ctx.fillRect(-1.5, -2 + i * 3, 3.5, 1);
+
+        ctx.fillStyle = age >= 4 ? '#ccc' : '#888';
+        ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(8, -6); ctx.lineTo(10, -2); ctx.lineTo(9, 6); ctx.quadraticCurveTo(4, 5, 2, 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.6;
+        ctx.beginPath(); ctx.moveTo(8, -6); ctx.lineTo(10, -2); ctx.lineTo(9, 6); ctx.lineTo(7.5, -2); ctx.fill(); ctx.globalAlpha = 1;
+
+        ctx.fillStyle = bloodHue; ctx.globalAlpha = rage ? 0.9 : 0.6;
+        ctx.beginPath(); ctx.arc(6, -1, 2.5, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(5, -4, 4, 6); ctx.globalAlpha = 1;
+
+        if (attackProgress > 0.7) {
+            ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.5;
+            ctx.beginPath(); ctx.moveTo(10, -2); ctx.lineTo(20, -10); ctx.lineTo(9, 6); ctx.fill(); ctx.globalAlpha = 1;
+        }
+    }
+    ctx.restore();
+
+    // TAY PHẢI (Nằm trước ngực)
+    ctx.save();
+    ctx.translate(-5.5, -2 + bob - breatheSway);
+    ctx.rotate(rightRot);
+    ctx.translate(rightTrans.x, rightTrans.y);
+
+    ctx.fillStyle = skinColor; ctx.fillRect(-4, 0, 4.5, 9);
+    ctx.globalAlpha = rage ? 0.9 + Math.sin(unit.animTimer * 12) * 0.1 : 0.7; ctx.fillStyle = tattooColor; ctx.fillRect(-3.5, 1, 3, 2.5); ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#6b5c4d'; ctx.fillRect(-4.5, 4.5, 5.5, 4.5);
+    ctx.fillStyle = bloodHue; ctx.globalAlpha = 0.9; ctx.fillRect(-4.5, 6, 5.5, 2.5); ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#221100'; ctx.fillRect(-3.5, 9, 3, 3);
+
+    if (attackState) {
+        ctx.translate(-2, 11);
+        ctx.rotate(Math.PI / 6);
+        ctx.fillStyle = '#2b1a10'; ctx.fillRect(-1.5, -5, 3, 19);
+        ctx.fillStyle = '#3a1f0d'; ctx.fillRect(-0.5, -4, 1.5, 16);
+        ctx.fillStyle = age >= 4 ? '#d4af37' : '#555'; ctx.beginPath(); ctx.arc(0, 15, 2, 0, Math.PI * 2); ctx.fill();
+
+        ctx.fillStyle = age >= 4 ? '#e6e6e6' : '#a0a0a0';
+        ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(10, -8); ctx.lineTo(12, -2); ctx.lineTo(10, 8); ctx.quadraticCurveTo(4, 6, 2, 1); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(10, -8); ctx.lineTo(12, -2); ctx.lineTo(10, 8); ctx.lineTo(8.5, -2); ctx.fill();
+
+        ctx.globalAlpha = attackState ? 0.95 : (rage ? 0.8 : 0.4); ctx.fillStyle = bloodHue;
+        ctx.beginPath(); ctx.arc(7, -2, 3, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(8, 4, 2, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(5, -5, 5, 5); ctx.globalAlpha = 1;
+
+        if (rage) {
+            ctx.strokeStyle = '#55ccff'; ctx.lineWidth = 1.5; ctx.shadowColor = '#0088ff'; ctx.shadowBlur = 6;
+            ctx.beginPath(); ctx.moveTo(9, -7); ctx.lineTo(6, -1); ctx.lineTo(8, 4); ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        if (attackProgress > 0.2 && attackProgress < 0.5) {
+            ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.5;
+            ctx.beginPath(); ctx.moveTo(12, -2); ctx.lineTo(24, 6); ctx.lineTo(10, 8); ctx.fill(); ctx.globalAlpha = 1;
+        }
+    }
+    ctx.restore();
+
+    // VẼ 2 RÌU GIẮT SAU LƯNG KHI KHÔNG TẤN CÔNG
+    if (!attackState) {
+        ctx.save();
+        ctx.translate(0, 5 + bob);
+
+        const axeWood = '#2b1a10';
+        const axeSteel = age >= 4 ? '#a0a0a0' : '#888';
+
+        ctx.save();
+        ctx.rotate(-Math.PI / 4);
+        ctx.fillStyle = axeWood; ctx.fillRect(-1, -8, 2, 16);
+        ctx.fillStyle = axeSteel; ctx.beginPath(); ctx.moveTo(1, -6); ctx.lineTo(8, -8); ctx.lineTo(9, -2); ctx.lineTo(8, 4); ctx.quadraticCurveTo(4, 3, 1, 0); ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(0, -2);
+        ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = axeWood; ctx.fillRect(-1.5, -10, 3, 20);
+        ctx.fillStyle = axeSteel; ctx.beginPath(); ctx.moveTo(1.5, -8); ctx.lineTo(10, -10); ctx.lineTo(12, -4); ctx.lineTo(10, 6); ctx.quadraticCurveTo(5, 4, 1.5, -1); ctx.fill();
+        ctx.restore();
+
+        ctx.restore();
+    }
+
+    // ── RAGE EFFECTS ──
+    if (rage || age >= 4) {
+        const pulseSpeed = rage ? 15 : 6;
+        ctx.globalAlpha = rage ? (0.35 + Math.sin(unit.animTimer * pulseSpeed) * 0.2) : (0.15 + Math.sin(unit.animTimer * 5) * 0.08);
+        const auraT = ctx.createRadialGradient(0, bob, 6, 0, bob, 22);
+        auraT.addColorStop(0, rage ? '#ff1100' : '#bb3333');
+        auraT.addColorStop(1, 'transparent');
+        ctx.fillStyle = auraT;
+        ctx.beginPath(); ctx.arc(0, 0 + bob, rage ? 22 : 18, 0, Math.PI * 2); ctx.fill();
+
+        if (rage) {
+            ctx.globalAlpha = 0.8; ctx.fillStyle = '#ff2222';
+            for (let p = 0; p < 4; p++) {
+                const px = Math.sin(unit.animTimer * 12 + p * 2.5) * 18;
+                const py = Math.cos(unit.animTimer * 9 - p * 3) * 16;
+                ctx.beginPath(); ctx.arc(px, bob + py - p * 2, 1.5 + Math.random(), 0, Math.PI * 2); ctx.fill();
+            }
         }
         ctx.globalAlpha = 1;
     }
 
-    // ── UPGRADE MARKS ──
     if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = rage ? '#88ccff' : '#ffd700';
-        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++)
-            ctx.fillRect(-9, 6 + bob - i * 4, 2, 2);
+        ctx.fillStyle = rage ? tattooColor : '#ffd700';
+        for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) {
+            ctx.beginPath(); ctx.arc(12, 4 + bob - i * 4.5, 1.8, 0, Math.PI * 2); ctx.fill();
+        }
     }
+
+    ctx.restore();
+    ctx.restore(); // Restore outer scale wrapper
 }
+

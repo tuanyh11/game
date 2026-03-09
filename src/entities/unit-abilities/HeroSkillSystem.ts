@@ -67,12 +67,22 @@ export function updateHeroSkills(
         // _r1: Ranger skill 2 → cast in combat (mobility/speed)
         // _r2: Ranger skill 3 → cast in combat with target (ultimate)
 
-        const hasTarget = !!unit.attackTarget || !!unit.attackBuildingTarget;
+        // Check distance to target to prevent cross-map sniping
+        const target = unit.attackTarget || unit.attackBuildingTarget;
+        const hasTarget = !!target;
+        let inRange = false;
+
+        if (hasTarget && target) {
+            // Give heroes a bit of extra leeway for skills compared to normal attacks
+            const castRange = Math.max(unit.civRange * 1.5, 120);
+            const dist = Math.hypot(target.x - unit.x, target.y - unit.y);
+            inRange = dist <= castRange;
+        }
 
         if (sid.endsWith('_w0')) {
             shouldCast = inCombat;
         } else if (sid.endsWith('_w1')) {
-            shouldCast = inCombat && hasTarget;
+            shouldCast = inCombat && hasTarget && inRange;
         } else if (sid.endsWith('_w2')) {
             // Survival skill — different thresholds per civ
             if (sid === 'viking_w2') {
@@ -81,7 +91,7 @@ export function updateHeroSkills(
                 shouldCast = unit.hp < unit.maxHp * 0.35; // Heal/Shield
             }
         } else if (sid.endsWith('_m0')) {
-            shouldCast = inCombat && hasTarget;
+            shouldCast = inCombat && hasTarget && inRange;
         } else if (sid.endsWith('_m1')) {
             // Mage skill 2: heal = low HP, CC = in combat
             if (sid === 'daiminh_m1') {
@@ -90,13 +100,13 @@ export function updateHeroSkills(
                 shouldCast = inCombat; // CC/debuff
             }
         } else if (sid.endsWith('_m2')) {
-            shouldCast = inCombat && hasTarget;
+            shouldCast = inCombat && hasTarget && inRange;
         } else if (sid.endsWith('_r0')) {
-            shouldCast = inCombat && hasTarget;
+            shouldCast = inCombat && hasTarget && inRange;
         } else if (sid.endsWith('_r1')) {
             shouldCast = inCombat;
         } else if (sid.endsWith('_r2')) {
-            shouldCast = inCombat && hasTarget;
+            shouldCast = inCombat && hasTarget && inRange;
         }
 
         if (shouldCast) {

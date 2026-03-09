@@ -507,10 +507,16 @@ export class EntityManager {
         const combatSepRadius = 22; // separation between enemies in combat
         const sepRadiusSq = sepRadius * sepRadius;
         const combatSepRadiusSq = combatSepRadius * combatSepRadius;
+        const MAX_SEPARATIONS_PER_UNIT = 4; // FPS FIX: Cap checks to prevent O(N^2) in huge clumps
+
         for (const a of this.units) {
             if (!a.alive) continue;
             const nearby = this.spatialGrid.getNearby(a.x, a.y);
+            let separationsApplied = 0;
+
             for (let j = 0; j < nearby.length; j++) {
+                if (separationsApplied >= MAX_SEPARATIONS_PER_UNIT) break;
+
                 const b = nearby[j];
                 if (b.id <= a.id || !b.alive) continue; // avoid double-processing
                 const dx = b.x - a.x;
@@ -529,15 +535,22 @@ export class EntityManager {
                     const nx = dx / dist;
                     const ny = dy / dist;
 
+                    separationsApplied++;
+
                     // Enemies in combat get full push force (no reduction)
                     // Same-team busy units get reduced push
                     const aBusy = !areEnemies && (a.state === UnitState.Attacking || a.state === UnitState.Gathering || a.state === UnitState.Building);
                     const bBusy = !areEnemies && (b.state === UnitState.Attacking || b.state === UnitState.Gathering || b.state === UnitState.Building);
 
-                    const newAx = a.x - nx * overlap * (aBusy ? 0.1 : 1);
-                    const newAy = a.y - ny * overlap * (aBusy ? 0.1 : 1);
-                    const newBx = b.x + nx * overlap * (bBusy ? 0.1 : 1);
-                    const newBy = b.y + ny * overlap * (bBusy ? 0.1 : 1);
+                    // Further reduce push if both units are completely idle (just standing around)
+                    // This lets large armies "settle" into a clump without constantly jiggling and eating CPU
+                    const bothIdle = !areEnemies && a.state === UnitState.Idle && b.state === UnitState.Idle;
+                    let idleMul = bothIdle ? 0.05 : 1;
+
+                    const newAx = a.x - nx * overlap * (aBusy ? 0.1 : 1) * idleMul;
+                    const newAy = a.y - ny * overlap * (aBusy ? 0.1 : 1) * idleMul;
+                    const newBx = b.x + nx * overlap * (bBusy ? 0.1 : 1) * idleMul;
+                    const newBy = b.y + ny * overlap * (bBusy ? 0.1 : 1) * idleMul;
 
                     const [ac, ar] = this.tileMap.worldToTile(newAx, newAy);
                     const [bc, br] = this.tileMap.worldToTile(newBx, newBy);

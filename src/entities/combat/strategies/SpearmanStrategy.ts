@@ -3,6 +3,7 @@ import { CombatContext } from "../CombatTypes";
 import { Unit } from "../../Unit";
 import { ParticleSystem } from "../../../effects/ParticleSystem";
 import { CivilizationType, UnitState } from "../../../config/GameConfig";
+import { audioSystem } from "../../../systems/AudioSystem";
 
 export class SpearmanStrategy extends BaseCombatStrategy {
 
@@ -50,6 +51,8 @@ export class SpearmanStrategy extends BaseCombatStrategy {
     protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
         const { unit, particles } = context;
         const age = unit.age;
+
+        audioSystem.playSpearStab();
 
         // Spear thrust impact — sparks and blood
         particles.emit({

@@ -16,7 +16,7 @@
 import {
     UnitType, UnitState, CIVILIZATION_DATA,
     CivilizationType, C, TILE_SIZE,
-    ResourceType, ResourceNodeType, isRangedType,
+    ResourceType, ResourceNodeType, isRangedType, isCivElite, isCivCavalry,
 } from "../../config/GameConfig";
 import type { Unit } from "../Unit";
 
@@ -25,11 +25,10 @@ export { CivColors, getCivColors } from "./shared";
 
 // Draw functions — imported from extracted modules
 import { drawVillager } from "./draw-villager";
-import { drawSpearman } from "./draw-spearman";
-import { drawArcher } from "./draw-archer";
 import { drawChuKoNu, drawImmortal, drawNinja, drawCenturion, drawUlfhednar } from "./draw-elites";
-import { drawScout, drawSwordsman } from "./draw-dispatchers";
+import { drawScout, drawSwordsman, drawSpearman, drawArcher } from "./draw-dispatchers";
 import { drawKnight, drawHero, getCivHeroVisuals } from "./draw-knight-hero";
+import { drawWarElephant, drawFireLancer, drawYabusame, drawBearRider, drawEquites } from "./draw-cavalry-unique";
 import { drawTargetDummy } from "./draw-dummy";
 
 // Effects
@@ -52,8 +51,18 @@ export function renderUnit(unit: Unit, ctx: CanvasRenderingContext2D): void {
     ctx.scale(flip, 1);
 
     // Walking bob
-    const isMoving = unit.state === UnitState.Moving || unit.state === UnitState.Returning;
+    // Calculate distance moved since last frame using raw float coordinates to catch micro-movements
+    const prevX = unit.lastX !== undefined ? unit.lastX : unit.x;
+    const prevY = unit.lastY !== undefined ? unit.lastY : unit.y;
+    const distMoved = Math.hypot(unit.x - prevX, unit.y - prevY);
+
+    // Check if unit is actively moving its position OR in a moving state
+    const isMoving = distMoved > 0.1 || unit.state === UnitState.Moving || unit.state === UnitState.Returning;
     const bob = isMoving ? Math.sin(unit.animTimer * 18) * 2 : 0;
+
+    // Store current position for next frame
+    unit.lastX = unit.x;
+    unit.lastY = unit.y;
 
     // Building swing (up-down hammer motion)
     const buildSwing = unit.state === UnitState.Building
@@ -136,6 +145,47 @@ export function renderUnit(unit: Unit, ctx: CanvasRenderingContext2D): void {
         }
     }
     // Ninja stealth visual
+    // ======== GLOBAL MOVEMENT DUST EFFECT ========
+    if (isMoving && !unit.isStealthed && unit.type !== UnitType.TargetDummy) {
+        const civ = unit.civilization;
+        let dustColor: string;
+        let pColor: string;
+        switch (civ) {
+            case CivilizationType.BaTu: dustColor = '#c9a060'; pColor = '#e0c090'; break;
+            case CivilizationType.Viking: dustColor = '#5a5a58'; pColor = '#7a7a78'; break; // slightly darker for viking snow/mud
+            case CivilizationType.DaiMinh: dustColor = '#8a6a50'; pColor = '#a88a70'; break;
+            case CivilizationType.Yamato: dustColor = '#7a7a60'; pColor = '#9a9a80'; break;
+            default: dustColor = '#8a7a60'; pColor = '#a89a80';
+        }
+
+        ctx.save();
+        // Shift dust behind the unit based on likely facing direction (assumed right/left)
+        // Since we don't have perfect velocity vectors in the renderer easily, we just scatter it around the base
+        ctx.translate(0, 16); // Move to unit's feet level
+
+        // Number of dust particles depends on unit size (cavalry kicks up more dust)
+        const isCav = unit.type === UnitType.Knight || unit.type === UnitType.Scout || unit.type === UnitType.Equites || unit.type === UnitType.FireLancer || unit.type === UnitType.BearRider || unit.type === UnitType.WarElephant || unit.type === UnitType.Yabusame;
+        const numParticles = isCav ? 5 : 3;
+        const spreadMultiplier = isCav ? 8 : 5;
+        const liftMultiplier = isCav ? 12 : 8;
+
+        ctx.globalAlpha = isCav ? 0.35 : 0.25;
+
+        for (let i = 0; i < numParticles; i++) {
+            const lift = (unit.animTimer * liftMultiplier + i * 5) % 8;
+            const spreadX = Math.sin(unit.animTimer * 10 + i) * spreadMultiplier;
+            const size = (isCav ? 3 : 2) - (lift / 4);
+
+            if (size > 0.5) {
+                ctx.fillStyle = i % 2 === 0 ? dustColor : pColor;
+                ctx.beginPath();
+                ctx.arc(-8 + spreadX + (i * 2), -lift, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        ctx.restore();
+    }
+
     if (unit.isStealthed && unit.type === UnitType.Ninja) {
         ctx.globalAlpha = 0.15;
         ctx.fillStyle = '#4400aa';
@@ -159,6 +209,12 @@ export function renderUnit(unit: Unit, ctx: CanvasRenderingContext2D): void {
             case UnitType.Ninja: drawNinja(unit, ctx, age, totalBob, isMoving); break;
             case UnitType.Centurion: drawCenturion(unit, ctx, age, totalBob, isMoving); break;
             case UnitType.Ulfhednar: drawUlfhednar(unit, ctx, age, totalBob, isMoving); break;
+            // Unique Cavalry
+            case UnitType.WarElephant: drawWarElephant(unit, ctx, age, totalBob, isMoving); break;
+            case UnitType.FireLancer: drawFireLancer(unit, ctx, age, totalBob, isMoving); break;
+            case UnitType.Yabusame: drawYabusame(unit, ctx, age, totalBob, isMoving); break;
+            case UnitType.Equites: drawEquites(unit, ctx, age, totalBob, isMoving); break;
+            case UnitType.BearRider: drawBearRider(unit, ctx, age, totalBob, isMoving); break;
             case UnitType.TargetDummy: drawTargetDummy(unit, ctx, age, totalBob); break;
             case UnitType.HeroSpartacus:
             case UnitType.HeroZarathustra:
@@ -248,7 +304,9 @@ export function renderUnit(unit: Unit, ctx: CanvasRenderingContext2D): void {
         const swingPhase = (swingT * 10) % (Math.PI * 2);
 
         ctx.save();
-        renderAttackWeapon(unit, ctx, totalBob, swingCycle, swingPhase);
+        if (!isCivElite(unit.type) && !isCivCavalry(unit.type) && unit.type !== UnitType.Archer) {
+            renderAttackWeapon(unit, ctx, totalBob, swingCycle, swingPhase);
+        }
         ctx.restore();
 
         // Visual slash & impact effects

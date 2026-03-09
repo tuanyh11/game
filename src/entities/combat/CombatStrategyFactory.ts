@@ -6,11 +6,16 @@ import { SpearmanStrategy } from "./strategies/SpearmanStrategy";
 import { KnightStrategy } from "./strategies/KnightStrategy";
 import { ScoutStrategy } from "./strategies/ScoutStrategy";
 
-import { ImmortalStrategy } from "./strategies/ImmortalStrategy";
 import { ChuKoNuStrategy } from "./strategies/ChuKoNuStrategy";
 import { NinjaStrategy } from "./strategies/NinjaStrategy";
 import { CenturionStrategy } from "./strategies/CenturionStrategy";
 import { UlfhednarStrategy } from "./strategies/UlfhednarStrategy";
+
+import { WarElephantStrategy } from "./strategies/WarElephantStrategy";
+import { FireLancerStrategy } from "./strategies/FireLancerStrategy";
+import { YabusameStrategy } from "./strategies/YabusameStrategy";
+import { EquitesStrategy } from "./strategies/EquitesStrategy";
+import { BearRiderStrategy } from "./strategies/BearRiderStrategy";
 
 import { SpartacusStrategy } from "./strategies/heroes/SpartacusStrategy";
 import { ZarathustraStrategy } from "./strategies/heroes/ZarathustraStrategy";
@@ -27,11 +32,17 @@ export class CombatStrategyFactory {
     private static scout = new ScoutStrategy();
 
     // Elite
-    private static immortal = new ImmortalStrategy();
     private static chukonu = new ChuKoNuStrategy();
     private static ninja = new NinjaStrategy();
     private static centurion = new CenturionStrategy();
     private static ulfhednar = new UlfhednarStrategy();
+
+    // Unique Cavalry
+    private static warElephant = new WarElephantStrategy();
+    private static fireLancer = new FireLancerStrategy();
+    private static yabusame = new YabusameStrategy();
+    private static equites = new EquitesStrategy();
+    private static bearRider = new BearRiderStrategy();
 
     // Heroes
     private static spartacus = new SpartacusStrategy();
@@ -45,18 +56,26 @@ export class CombatStrategyFactory {
 
     public static getStrategy(unitType: UnitType): ICombatStrategy {
         switch (unitType) {
-            case UnitType.Archer: return this.archer;
             case UnitType.Swordsman: return this.swordsman;
             case UnitType.Spearman: return this.spearman;
             case UnitType.Knight: return this.knight;
             case UnitType.Scout: return this.scout;
 
-            // Elite Units
-            case UnitType.Immortal: return this.immortal;
+            // Archers & Ranged Unique
+            case UnitType.Archer:
+            case UnitType.Immortal: return this.archer;
+
             case UnitType.ChuKoNu: return this.chukonu;
             case UnitType.Ninja: return this.ninja;
             case UnitType.Centurion: return this.centurion;
             case UnitType.Ulfhednar: return this.ulfhednar;
+
+            // Unique Cavalry
+            case UnitType.WarElephant: return this.warElephant;
+            case UnitType.FireLancer: return this.fireLancer;
+            case UnitType.Yabusame: return this.yabusame;
+            case UnitType.Equites: return this.equites;
+            case UnitType.BearRider: return this.bearRider;
 
             // Heroes
             case UnitType.HeroSpartacus: return this.spartacus;

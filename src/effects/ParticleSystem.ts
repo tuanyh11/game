@@ -15,7 +15,7 @@ interface Particle {
     gravity: number;
     rotation: number;
     rotSpeed: number;
-    shape: 'rect' | 'circle' | 'star' | 'spear' | 'sword' | 'arrow';
+    shape: 'rect' | 'circle' | 'star' | 'spear' | 'sword' | 'arrow' | 'trident' | 'flaming_arrow' | 'custom';
 }
 
 export interface EmitConfig {
@@ -28,7 +28,9 @@ export interface EmitConfig {
     size: [number, number];
     colors: string[];
     gravity?: number;
-    shape?: 'rect' | 'circle' | 'star' | 'spear' | 'sword' | 'arrow';
+    shape?: 'rect' | 'circle' | 'star' | 'spear' | 'sword' | 'arrow' | 'trident' | 'flaming_arrow' | 'custom';
+    rotation?: number;
+    rotSpeed?: number;
 }
 
 export class ParticleSystem {
@@ -52,11 +54,24 @@ export class ParticleSystem {
                 life, maxLife: life, size,
                 color: cfg.colors[Math.floor(Math.random() * cfg.colors.length)],
                 gravity: cfg.gravity ?? 0,
-                rotation: Math.random() * Math.PI * 2,
-                rotSpeed: (Math.random() - 0.5) * 8,
+                rotation: cfg.rotation !== undefined ? cfg.rotation : Math.random() * Math.PI * 2,
+                rotSpeed: cfg.rotSpeed !== undefined ? cfg.rotSpeed : (Math.random() - 0.5) * 8,
                 shape: cfg.shape ?? 'rect',
             });
         }
+    }
+
+    // ---- Custom render emit (hack for complex projectiles like Pilum) ----
+    emitCustom(renderFn: (ctx: CanvasRenderingContext2D) => void, life: number): void {
+        if (this.particles.length >= this.maxParticles) return;
+        this.particles.push({
+            x: 0, y: 0, vx: 0, vy: 0,
+            life, maxLife: life, size: 1,
+            color: '#fff', gravity: 0,
+            rotation: 0, rotSpeed: 0,
+            shape: 'custom' as any, // Bypass strict typing for this special case
+            customRender: renderFn // Attach the function
+        } as Particle & { customRender: Function });
     }
 
     // ============================================================
@@ -343,6 +358,39 @@ export class ParticleSystem {
                     ctx.restore();
                     break;
                 }
+                case 'trident': {
+                    // Gladiator Bident (Đinh Hai) Rendering
+                    const tridentAngle = p.vx !== 0 || p.vy !== 0 ? Math.atan2(p.vy, p.vx) : p.rotation;
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(tridentAngle);
+
+                    // Cán gỗ (Wooden shaft - ngắn lại)
+                    ctx.fillStyle = '#5a3020';
+                    ctx.fillRect(-16, -1.5, 24, 3);
+
+                    // Băng vải đỏ (Red grip tape)
+                    ctx.fillStyle = '#aa1111';
+                    ctx.fillRect(-6, -2, 4, 4);
+
+                    // Khối nối bằng sắt (Iron block base)
+                    ctx.fillStyle = '#888';
+                    ctx.fillRect(-16, -2, 2, 4);
+
+                    // Thanh ngang của ngạnh (Crossbar)
+                    ctx.fillStyle = '#aaa';
+                    ctx.fillRect(8, -6, 2, 12);
+
+                    // 1. Mũi trên cong (Top prong)
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath(); ctx.moveTo(10, -6); ctx.quadraticCurveTo(15, -7, 20, -4); ctx.lineTo(10, -4); ctx.fill();
+
+                    // 2. Mũi dưới cong (Bottom prong)
+                    ctx.beginPath(); ctx.moveTo(10, 6); ctx.quadraticCurveTo(15, 7, 20, 4); ctx.lineTo(10, 4); ctx.fill();
+
+                    ctx.restore();
+                    break;
+                }
                 case 'arrow': {
                     // Eastern/Medieval Arrow Rendering
                     const arrowAngle = p.vx !== 0 || p.vy !== 0 ? Math.atan2(p.vy, p.vx) : p.rotation;
@@ -366,6 +414,49 @@ export class ParticleSystem {
                     // Fletching (feathers)
                     ctx.fillStyle = p.color; // Use the particle color for the fletching
                     ctx.fillRect(-7, -1.5, 3, 3);
+
+                    ctx.restore();
+                    break;
+                }
+                case 'flaming_arrow': {
+                    const faAngle = p.vx !== 0 || p.vy !== 0 ? Math.atan2(p.vy, p.vx) : p.rotation;
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(faAngle);
+
+                    const scale = Math.max(0.6, p.size / 10);
+                    ctx.scale(scale, scale);
+
+                    // Thick shaft
+                    ctx.fillStyle = '#6a3600';
+                    ctx.fillRect(-12, -1, 24, 2);
+                    // Golden trim
+                    ctx.fillStyle = '#ffd700';
+                    ctx.fillRect(-8, -1, 16, 1);
+
+                    // Fletching (white feathers, offset slightly)
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(-14, -3, 6, 6);
+                    ctx.fillStyle = '#eee';
+                    ctx.fillRect(-12, -3, 3, 6);
+
+                    // Flaming arrowhead
+                    ctx.fillStyle = '#ff2200';
+                    ctx.beginPath(); ctx.moveTo(12, -4); ctx.lineTo(26, 0); ctx.lineTo(12, 4); ctx.fill();
+                    // Inner flame core
+                    ctx.fillStyle = '#fffc00';
+                    ctx.beginPath(); ctx.moveTo(13, -2); ctx.lineTo(21, 0); ctx.lineTo(13, 2); ctx.fill();
+                    // White hot center
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath(); ctx.moveTo(14, -1); ctx.lineTo(18, 0); ctx.lineTo(14, 1); ctx.fill();
+
+                    // Trailing embers randomly flickering behind
+                    ctx.fillStyle = '#ff6600';
+                    ctx.globalAlpha = (p.life / p.maxLife) * 0.8;
+                    for (let f = 0; f < 3; f++) {
+                        ctx.fillRect(-22 + Math.random() * 12, -3 + Math.random() * 6, 4, 4);
+                    }
+                    ctx.globalAlpha = 1; // restore 
 
                     ctx.restore();
                     break;
@@ -418,6 +509,12 @@ export class ParticleSystem {
 
                 case 'star':
                     this.drawStar(ctx, p.x, p.y, p.size, p.rotation);
+                    break;
+
+                case 'custom':
+                    if ((p as any).customRender) {
+                        (p as any).customRender(ctx);
+                    }
                     break;
             }
         }

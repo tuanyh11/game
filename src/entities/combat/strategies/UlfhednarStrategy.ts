@@ -39,15 +39,52 @@ export class UlfhednarStrategy extends BaseCombatStrategy {
     }
 
     protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
-        const { particles } = context;
+        const { unit, particles } = context;
 
-        // Berserker dual-axe — red flame trails
-        for (let i = 0; i < 8; i++) {
-            const sa = atkAngle - 1.5 + i * 0.4;
-            particles.emit({ x: target.x, y: target.y - 3, count: 1, spread: 2, speed: [70, 150], angle: [sa - 0.08, sa + 0.08], life: [0.12, 0.3], size: [2, 4], colors: ['#ff2200', '#ff6600', '#ffaa00'], gravity: 15, shape: 'rect' });
+        // Berserker Dual-Axe furious slashes
+        // Chém hai lưỡi Rìu chéo nhau (Criss-cross axe swings)
+        const isRaging = unit.ulfhednarRageActive;
+        const slashColors = isRaging ? ['#ff2200', '#ff6600', '#ffaa00'] : ['#cccccc', '#ffffff', '#aaaaaa'];
+        const axSpread = isRaging ? 0.3 : 0.15; // Wider more savage swings when raging
+
+        // Axe slash 1 (Left to right)
+        for (let i = 0; i < 4; i++) {
+            const sa1 = atkAngle - 0.5 + i * axSpread;
+            particles.emit({
+                x: target.x, y: target.y - 4, count: 1, spread: 2,
+                speed: [100 + i * 15, 200], angle: [sa1 - 0.05, sa1 + 0.05],
+                life: [0.1, 0.25], size: [2, 5], colors: slashColors, gravity: 5, shape: 'rect'
+            });
+        }
+        // Axe slash 2 (Right to left)
+        for (let i = 0; i < 4; i++) {
+            const sa2 = atkAngle + 0.5 - i * axSpread;
+            particles.emit({
+                x: target.x, y: target.y - 2, count: 1, spread: 2,
+                speed: [100 + i * 15, 200], angle: [sa2 - 0.05, sa2 + 0.05],
+                life: [0.1, 0.25], size: [2, 5], colors: slashColors, gravity: 5, shape: 'rect'
+            });
         }
 
-        // Blood splash
-        particles.emit({ x: target.x, y: target.y - 5, count: 5, spread: 5, speed: [40, 90], angle: [0, Math.PI * 2], life: [0.15, 0.4], size: [1.5, 3], colors: ['#cc0000', '#880000', '#ff4444'], gravity: 60, shape: 'circle' });
+        // Visceral blood splash
+        const bloodColors = isRaging ? ['#880000', '#ee0000', '#ff4444'] : ['#990000', '#cc0000'];
+        particles.emit({
+            x: target.x, y: target.y - 4,
+            count: isRaging ? 12 : 6, spread: 8,
+            speed: [50, 140], angle: [0, Math.PI * 2],
+            life: [0.2, 0.5], size: [1.5, 4],
+            colors: bloodColors, gravity: 80, shape: 'circle'
+        });
+
+        // Bone crushing sparks if raging
+        if (isRaging) {
+            particles.emit({
+                x: target.x, y: target.y - 6,
+                count: 4, spread: 4,
+                speed: [80, 160], angle: [-Math.PI * 0.8, -Math.PI * 0.2],
+                life: [0.1, 0.3], size: [2, 4],
+                colors: ['#fff', '#ffccaa'], gravity: 20, shape: 'star'
+            });
+        }
     }
 }

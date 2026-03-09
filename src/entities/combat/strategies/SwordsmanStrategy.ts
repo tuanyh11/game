@@ -3,6 +3,7 @@ import { CombatContext } from "../CombatTypes";
 import { Unit } from "../../Unit";
 import { ParticleSystem } from "../../../effects/ParticleSystem";
 import { CivilizationType } from "../../../config/GameConfig";
+import { audioSystem } from "../../../systems/AudioSystem";
 
 export class SwordsmanStrategy extends BaseCombatStrategy {
 
@@ -58,6 +59,9 @@ export class SwordsmanStrategy extends BaseCombatStrategy {
     protected executeUnitAttackFx(context: CombatContext, target: Unit, atkAngle: number, damageDealt: number): void {
         const { unit, particles } = context;
         const age = unit.age;
+
+        // Play synthetic slash sound
+        audioSystem.playSlashSound();
 
         // Heavy sword slash — wide arc sparks
         for (let i = 0; i < (age >= 3 ? 6 : 4); i++) {
