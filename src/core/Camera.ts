@@ -44,12 +44,22 @@ export class Camera {
     private mouseY = 0;
     private mouseInWindow = false;
 
+    // Touch panning state
+    private isPanningTouch = false;
+    private touchStartX = 0;
+    private touchStartY = 0;
+
     // Bound listeners (để có thể removeEventListener)
     private boundKeyDown: (e: KeyboardEvent) => void;
     private boundKeyUp: (e: KeyboardEvent) => void;
     private boundMouseMove: (e: MouseEvent) => void;
     private boundMouseEnter: () => void;
     private boundMouseLeave: () => void;
+
+    // Touch listeners
+    private boundTouchStart: (e: TouchEvent) => void;
+    private boundTouchMove: (e: TouchEvent) => void;
+    private boundTouchEnd: (e: TouchEvent) => void;
 
     constructor(config?: Partial<CameraConfig>) {
         this.config = { ...DEFAULT_CONFIG, ...config };
@@ -65,11 +75,21 @@ export class Camera {
             this.mouseInWindow = false;
         };
 
+        this.boundTouchStart = (e) => this.onTouchStart(e);
+        this.boundTouchMove = (e) => this.onTouchMove(e);
+        this.boundTouchEnd = (e) => this.onTouchEnd(e);
+
         window.addEventListener("keydown", this.boundKeyDown);
         window.addEventListener("keyup", this.boundKeyUp);
         window.addEventListener("mousemove", this.boundMouseMove);
         window.addEventListener("mouseenter", this.boundMouseEnter);
         window.addEventListener("mouseleave", this.boundMouseLeave);
+
+        // Touch events (passive: false to allow preventDefault if needed, though we only preventDefault on specific UI elements)
+        window.addEventListener("touchstart", this.boundTouchStart, { passive: false });
+        window.addEventListener("touchmove", this.boundTouchMove, { passive: false });
+        window.addEventListener("touchend", this.boundTouchEnd);
+        window.addEventListener("touchcancel", this.boundTouchEnd);
     }
 
     /** Gọi mỗi khi canvas resize để cập nhật viewport */
@@ -168,6 +188,11 @@ export class Camera {
         window.removeEventListener("mousemove", this.boundMouseMove);
         window.removeEventListener("mouseenter", this.boundMouseEnter);
         window.removeEventListener("mouseleave", this.boundMouseLeave);
+
+        window.removeEventListener("touchstart", this.boundTouchStart);
+        window.removeEventListener("touchmove", this.boundTouchMove);
+        window.removeEventListener("touchend", this.boundTouchEnd);
+        window.removeEventListener("touchcancel", this.boundTouchEnd);
     }
 
     // ---------- Event handlers ----------
@@ -183,5 +208,38 @@ export class Camera {
         this.mouseX = e.clientX;
         this.mouseY = e.clientY;
         this.mouseInWindow = true;
+    }
+
+    // ---------- Touch Handlers ----------
+    private onTouchStart(e: TouchEvent): void {
+        // Use 2 fingers to pan the camera
+        if (e.touches.length >= 2) {
+            this.isPanningTouch = true;
+            this.touchStartX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            this.touchStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        }
+    }
+
+    private onTouchMove(e: TouchEvent): void {
+        if (this.isPanningTouch && e.touches.length >= 2) {
+            const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            const dx = mx - this.touchStartX;
+            const dy = my - this.touchStartY;
+
+            // Invert dx/dy so map follows finger
+            this.x -= dx;
+            this.y -= dy;
+
+            this.touchStartX = mx;
+            this.touchStartY = my;
+            this.clamp();
+        }
+    }
+
+    private onTouchEnd(e: TouchEvent): void {
+        if (e.touches.length < 2) {
+            this.isPanningTouch = false;
+        }
     }
 }

@@ -169,6 +169,32 @@ export class GameUI {
             this.freeDragging = false;
         });
 
+        // --- Touch Events Support ---
+        canvas.addEventListener('touchstart', (e) => {
+            // Check if touch is in UI area to prevent default (like scrolling)
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                // For minimap click
+                const mockE = { clientX: touch.clientX, clientY: touch.clientY, button: 0, stopPropagation: () => { } } as unknown as MouseEvent;
+                this.handleMinimapClick(mockE);
+
+                // For UI clicks
+                this.mouseX = touch.clientX;
+                this.mouseY = touch.clientY;
+                this.handleClick(mockE);
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                this.mouseX = e.touches[0].clientX;
+                this.mouseY = e.touches[0].clientY;
+            }
+        }, { passive: false });
+
+        // Add CSS to prevent touch actions
+        canvas.style.touchAction = 'none';
+
         // Prevent context menu to allow clean right-clicks
         canvas.addEventListener('contextmenu', (e) => {
             if (this.freeMode && this.freePlacementPhase && this.freeSpawnUnit) {

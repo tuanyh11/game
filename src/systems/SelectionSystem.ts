@@ -46,6 +46,12 @@ export class SelectionSystem {
     /** When true, block interactions because a menu is open */
     isPaused = false;
 
+    private isTouchDevice = false;
+    private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    private touchStartX = 0;
+    private touchStartY = 0;
+    private isLongPressTriggered = false;
+
     constructor(
         private canvas: HTMLCanvasElement,
         private camera: Camera,
@@ -59,6 +65,12 @@ export class SelectionSystem {
         canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
         window.addEventListener('keydown', (e) => this.onKeyDown(e));
+
+        // Touch support
+        canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+        canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+        canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+        canvas.addEventListener('touchcancel', (e) => this.onTouchEnd(e));
     }
 
     private get hasSelection(): boolean {
@@ -90,6 +102,7 @@ export class SelectionSystem {
 
     // ---- Mouse Down ----
     private onMouseDown(e: MouseEvent): void {
+        if (this.isTouchDevice && e.type.startsWith('mouse')) return; // Ignore synthetic mouse events
         if (this.freePlacementActive || this.isPaused) return;
         if (e.button === 0) { // Left click
             if (this.buildMode) {
@@ -157,6 +170,7 @@ export class SelectionSystem {
 
     // ---- Mouse Up ----
     private onMouseUp(e: MouseEvent): void {
+        if (this.isTouchDevice && e.type.startsWith('mouse')) return;
         if (this.freePlacementActive || this.isPaused) return;
         if (e.button === 0 && this.isBoxSelecting) {
             const world = this.camera.screenToWorld(e.clientX, e.clientY);
@@ -168,6 +182,7 @@ export class SelectionSystem {
 
     // ---- Mouse Move ----
     private onMouseMove(e: MouseEvent): void {
+        if (this.isTouchDevice && e.type.startsWith('mouse')) return;
         this.mouseScreenX = e.clientX;
         this.mouseScreenY = e.clientY;
 
@@ -283,6 +298,83 @@ export class SelectionSystem {
                 default: this.canvas.style.cursor = newCursor; break;
             }
         }
+    }
+
+    // ==========================================================
+    //  TOUCH EVENT MAPPING
+    // ==========================================================
+    private onTouchStart(e: TouchEvent): void {
+        this.isTouchDevice = true;
+        if (this.freePlacementActive || this.isPaused) return;
+
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            this.touchStartX = touch.clientX;
+            this.touchStartY = touch.clientY;
+            this.isLongPressTriggered = false;
+
+            this.clearLongPress();
+            this.longPressTimer = setTimeout(() => {
+                this.isLongPressTriggered = true;
+                this.isBoxSelecting = false; // Cancel drag box drawing
+                this.simulateMouseEvent(e, 'mousedown', 2, this.touchStartX, this.touchStartY);
+            }, 350); // 350ms for right click hold
+
+            this.simulateMouseEvent(e, 'mousedown', 0, touch.clientX, touch.clientY);
+        } else {
+            // Cancel operations if multi-touch happens
+            this.clearLongPress();
+            if (this.isBoxSelecting) {
+                this.isBoxSelecting = false;
+            }
+        }
+    }
+
+    private onTouchMove(e: TouchEvent): void {
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            const dx = touch.clientX - this.touchStartX;
+            const dy = touch.clientY - this.touchStartY;
+
+            // If finger moves more than 15 pixels, cancel the long press (user is dragging)
+            if (Math.hypot(dx, dy) > 15) {
+                this.clearLongPress();
+            }
+
+            if (!this.isLongPressTriggered) {
+                this.simulateMouseEvent(e, 'mousemove', 0, touch.clientX, touch.clientY);
+            }
+        }
+    }
+
+    private onTouchEnd(e: TouchEvent): void {
+        this.clearLongPress();
+        if (!this.isLongPressTriggered && e.changedTouches.length === 1) {
+            const touch = e.changedTouches[0];
+            this.simulateMouseEvent(e, 'mouseup', 0, touch.clientX, touch.clientY);
+        }
+    }
+
+    private clearLongPress() {
+        if (this.longPressTimer) {
+            clearTimeout(this.longPressTimer);
+            this.longPressTimer = null;
+        }
+    }
+
+    private simulateMouseEvent(originalEvent: TouchEvent, type: string, button: number, clientX: number, clientY: number) {
+        // Create a mock MouseEvent to reuse the mouse handler code
+        const mockE = {
+            type: 'touch', // avoid the "isTouchDevice && e.type.startsWith('mouse') -> return"
+            clientX, clientY, button,
+            ctrlKey: originalEvent.ctrlKey, metaKey: originalEvent.metaKey,
+            preventDefault: () => originalEvent.preventDefault(),
+            stopPropagation: () => originalEvent.stopPropagation()
+        } as unknown as MouseEvent;
+
+        if (type === 'mousedown') this.onMouseDown(mockE);
+        else if (type === 'mousemove') this.onMouseMove(mockE);
+        else if (type === 'mouseup') this.onMouseUp(mockE);
     }
 
     // ---- Key Down ----
