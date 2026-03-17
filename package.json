@@ -1,0 +1,17 @@
+{
+  "scripts": {
+    "build": "bunx vite build --outDir server/dist --emptyOutDir",
+    "start": "cd server && bun run server.ts",
+    "server": "cd server && bun run server.ts",
+    "server:dev": "cd server && bun run --watch server.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/ios": "^8.2.0"
+  }
+}

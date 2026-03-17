@@ -1,0 +1,161 @@
+/* ============================================================
+ *  TradeUI — Trade panel styles
+ *  Extracted from inline CSS in TradeUI.ts
+ * ============================================================ */
+
+#trade-ui-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 480px;
+    background-color: #0d0b08;
+    border: 2px solid #8a6f3e;
+    border-radius: 4px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(0, 0, 0, 0.5);
+    font-family: 'Inter', sans-serif;
+    color: #e8d4a0;
+    z-index: 1000;
+    padding: 16px;
+    outline: 4px solid #050403;
+}
+
+.trade-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #3a2a10;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+}
+
+.trade-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #dfb238;
+    text-shadow: 1px 1px 2px #000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.trade-close-btn {
+    background-color: #aa3333;
+    color: white;
+    border: 1px solid #ff5555;
+    border-radius: 3px;
+    width: 24px;
+    height: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.1s;
+}
+
+.trade-close-btn:hover {
+    background-color: #ff5555;
+}
+
+.trade-inventory {
+    font-size: 13px;
+    color: #ddd;
+    background-color: #1a1510;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #3a2a10;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.trade-ally-row {
+    background-color: #141110;
+    border: 1px solid #3a2a10;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.trade-ally-name {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 12px;
+    display: block;
+}
+
+.trade-resources-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.trade-resource-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.trade-resource-label {
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #aaa;
+}
+
+.trade-input {
+    width: 100%;
+    background-color: #0a0908;
+    border: 1px solid #3a2a10;
+    color: #fff;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    outline: none;
+}
+
+.trade-input:focus {
+    border-color: #c9a84c;
+}
+
+/* Remove arrows from number input */
+.trade-input::-webkit-outer-spin-button,
+.trade-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.trade-input[type=number] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.trade-send-btn {
+    background-color: #111;
+    color: #555;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: bold;
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 6px 0;
+    cursor: not-allowed;
+    margin-top: 4px;
+    transition: all 0.1s;
+}
+
+.trade-send-btn.can-afford {
+    background-color: #2a2a2a;
+    color: inherit;
+    cursor: pointer;
+}
+
+.trade-send-btn.can-afford:hover {
+    background-color: #444;
+}
+
+.trade-send-btn:active {
+    transform: translateY(1px);
+}

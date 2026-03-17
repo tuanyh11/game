@@ -1,0 +1,16 @@
+--- src/entities/building-rendering/DrawStable.ts
++++ src/entities/building-rendering/DrawStable.ts
+@@ -328,6 +328,11 @@
+ // -------------------------------------------------------------------------------------------
+ function drawVikingStable(b: Building, ctx: CanvasRenderingContext2D, nx: number, ny: number, nw: number, nh: number, fullW: number): void {
++    try {
+     const age = b.age;
+     const mx = nx + nw / 2;
+     const teamColor = b.slotColor || (b.team === 0 ? C.player : C.enemy);
+@@ -387,4 +392,7 @@
+     ctx.beginPath(); ctx.moveTo(nx - 2, ny - 5); ctx.quadraticCurveTo(nx - 10, ny - 12, nx - 6, ny - 18); ctx.stroke();
+     ctx.beginPath(); ctx.moveTo(nx + nw + 2, ny - 5); ctx.quadraticCurveTo(nx + nw + 10, ny - 12, nx + nw + 6, ny - 18); ctx.stroke();
++    } catch(e) {
++        console.error("Viking Stable Error:", e);
++    }
+ }
