@@ -1,0 +1,11 @@
+node_modules
+server/node_modules
+server/nohup.out
+dist
+server/dist
+.git
+.vite
+*.log
+.DS_Store
+android
+ios
