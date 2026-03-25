@@ -150,7 +150,7 @@ export function drawScout_Viking(unit: Unit, ctx: CanvasRenderingContext2D, age:
     }
     ctx.restore();
 
-    if (lvl > 0) { ctx.fillStyle = '#ffd700'; ctx.font = '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -22 + bob); }
+    if (lvl > 0) { ctx.fillStyle = lvl >= 3 ? '#ff2222' : '#ffd700'; ctx.font = lvl >= 3 ? 'bold 8px sans-serif' : '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -22 + bob); }
     if (moving && age >= 2) { ctx.globalAlpha = 0.15; ctx.fillStyle = '#8a7a60'; for (let i = 0; i < 3; i++) { ctx.fillRect(-12 - i * 3, 10 + bob + i * 3, 3, 2); } ctx.globalAlpha = 1; }
     if (age >= 4) { ctx.globalAlpha = 0.06; ctx.fillStyle = cv.accent; ctx.beginPath(); ctx.arc(0, 0 + bob, 14, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
 }
@@ -295,7 +295,7 @@ export function drawSwords_Viking(unit: Unit, ctx: CanvasRenderingContext2D, age
     ctx.fillRect(-3, -1.5, 6, 1.5);
 
     // Blade (Wide, straight, tapering tip)
-    ctx.fillStyle = age >= 4 ? '#ebebeb' : '#cccccc';
+    ctx.fillStyle = lvl >= 3 ? cv.bladeColor : (age >= 4 ? '#ebebeb' : '#cccccc');
     ctx.beginPath();
     ctx.moveTo(-2, 0);
     ctx.lineTo(-1.5, 20);
@@ -552,8 +552,10 @@ export function drawSpears_Viking(unit: Unit, ctx: CanvasRenderingContext2D, age
         // Spectacle guard
         ctx.fillRect(-4.5, -9.5 + bob, 2.5, 4);
         ctx.fillRect(2, -9.5 + bob, 2.5, 4);
+
+        // Skin peeking between cheek guards (both sides symmetric)
         ctx.fillStyle = skinColor;
-        ctx.fillRect(-3.5, -9 + bob, 1.5, 2);
+        ctx.fillRect(-2, -9.5 + bob, 4, 3);
 
     } else if (age >= 2) {
         // Spangenhelm
@@ -565,6 +567,14 @@ export function drawSpears_Viking(unit: Unit, ctx: CanvasRenderingContext2D, age
         ctx.fillStyle = '#222';
         ctx.fillRect(-4, -14 + bob, 8, 3);
     }
+
+    // Eyes (drawn AFTER helmet so they stay visible)
+    ctx.fillStyle = '#88aacc';
+    ctx.fillRect(-1.5, -9.5 + bob, 1.2, 1.2);
+    ctx.fillRect(0.5, -9.5 + bob, 1.2, 1.2);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(-1, -9.5 + bob, 0.6, 0.6);
+    ctx.fillRect(1, -9.5 + bob, 0.6, 0.6);
 
     // ── LEFT ARM (L-shape) — drawn on top of body ──
     ctx.save();
@@ -603,7 +613,7 @@ export function drawSpears_Viking(unit: Unit, ctx: CanvasRenderingContext2D, age
     ctx.fillRect(-poleLength * 0.4, -1, poleLength, 2);
     ctx.fillStyle = '#444'; ctx.fillRect(-poleLength * 0.4 - 2, -0.5, 2, 1);
     const shaftEnd = poleLength * 0.6;
-    ctx.fillStyle = age >= 4 ? '#eeeeee' : '#cccccc';
+    ctx.fillStyle = lvl >= 3 ? cv.bladeColor : (age >= 4 ? '#eeeeee' : '#cccccc');
     const bladeLen = age >= 3 ? 8 : 6;
     ctx.fillRect(shaftEnd, -1.5, 3, 3);
     if (age >= 3) { ctx.beginPath(); ctx.moveTo(shaftEnd + 1, -1.5); ctx.lineTo(shaftEnd + 2, -4); ctx.lineTo(shaftEnd + 3, -1.5); ctx.fill(); ctx.beginPath(); ctx.moveTo(shaftEnd + 1, 1.5); ctx.lineTo(shaftEnd + 2, 4); ctx.lineTo(shaftEnd + 3, 1.5); ctx.fill(); }

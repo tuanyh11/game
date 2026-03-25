@@ -12,6 +12,8 @@ import { AIDifficulty } from "./src/systems/AIController";
 import type { NetworkLobby } from "./src/network/NetworkLobby";
 import type { RoomState, RoomPlayer } from './server/types';
 import { audioSystem } from './src/systems/AudioSystem';
+import { t } from './src/i18n/i18n';
+import { initCrazySDK, loadingStart, loadingStop, gameplayStart, gameplayStop, showMidgameAd, happytime } from './src/sdk/CrazyGamesSDK';
 
 const originalArc = CanvasRenderingContext2D.prototype.arc;
 CanvasRenderingContext2D.prototype.arc = function (x, y, r, sa, ea, counterclockwise) {
@@ -66,8 +68,6 @@ function startMenu(): void {
     });
 
     menu.start();
-    // Play menu background music
-    audioSystem.playBGM('/musics/Rites.mp3', 0.3);
     console.log("🎮 Pixel Empires — Main Menu loaded!");
 }
 
@@ -77,13 +77,30 @@ function startGame(preset: MapPreset, playerCiv: CivilizationType, aiSlots: AISl
     const loadingText = document.getElementById("loading-text");
     const loadingPercent = document.getElementById("loading-percentage");
     const loadingBarFill = document.getElementById("loading-bar-fill");
+    const loadingTip = document.getElementById("loading-tip");
+    const loadingSubtitle = document.getElementById("loading-subtitle");
+
+    // Set translated subtitle
+    if (loadingSubtitle) loadingSubtitle.textContent = t('loading.subtitle');
+
+    // Show a random tip and rotate every 4s
+    const TIP_COUNT = 12;
+    let tipInterval: number | null = null;
+    const showRandomTip = () => {
+        if (loadingTip) loadingTip.textContent = t(`tip.${Math.floor(Math.random() * TIP_COUNT)}`);
+    };
+    showRandomTip();
+    tipInterval = window.setInterval(showRandomTip, 4000);
 
     if (loadingScreen) {
         loadingScreen.classList.add("visible");
-        if (loadingText) loadingText.textContent = "Đang chuẩn bị dữ liệu...";
+        if (loadingText) loadingText.textContent = t('loading.preparing');
         if (loadingPercent) loadingPercent.textContent = "0%";
         if (loadingBarFill) loadingBarFill.style.width = "0%";
     }
+
+    // CrazyGames: notify loading started
+    loadingStart();
 
     // Give the browser time to render the loading UI before blocking the main thread
     requestAnimationFrame(() => {
@@ -101,9 +118,13 @@ function startGame(preset: MapPreset, playerCiv: CivilizationType, aiSlots: AISl
                 audioSystem.stopBGM();
 
                 // Wire exit-to-menu callback
-                game.setOnExitToMenu(() => {
+                game.setOnExitToMenu(async () => {
                     currentGame = null;
+                    // CrazyGames: gameplay stopped
+                    gameplayStop();
                     console.log("🏠 Returning to Main Menu...");
+                    // CrazyGames: show midgame ad between matches
+                    await showMidgameAd();
                     startMenu();
                 });
 
@@ -127,9 +148,13 @@ function startGame(preset: MapPreset, playerCiv: CivilizationType, aiSlots: AISl
                 // The caller will do that after ALL_LOADED
                 if (!skipAutoStart) {
                     game.start();
+                    // CrazyGames: notify loading finished & gameplay started
+                    loadingStop();
+                    gameplayStart();
 
                     // Hide loading screen after map is built and game is running
                     if (loadingScreen) {
+                        if (tipInterval) clearInterval(tipInterval);
                         loadingScreen.classList.add("fade-out");
                         loadingScreen.classList.remove("visible");
                         setTimeout(() => {
@@ -182,9 +207,9 @@ function startMultiplayerGame(room: RoomState, players: RoomPlayer[], seed: numb
             console.log(`🌐 Multiplayer game loaded! Room: ${room.roomId}, Slot: ${myTeam}, Host: ${isHost}`);
 
             // Show "waiting for other players" on the loading screen
-            const loadingText = document.querySelector('.loading-text');
-            const loadingPercent = document.querySelector('.loading-percent');
-            if (loadingText) loadingText.textContent = 'Đang chờ người chơi khác...';
+            const loadingText = document.querySelector('#loading-text');
+            const loadingPercent = document.querySelector('#loading-percentage');
+            if (loadingText) loadingText.textContent = t('loading.waitPlayers');
             if (loadingPercent) loadingPercent.textContent = '✓';
 
             // Tell server we're done loading
@@ -218,5 +243,8 @@ function startMultiplayerGame(room: RoomState, players: RoomPlayer[], seed: numb
     }, seed, true); // <-- pass the seed + skipAutoStart for multiplayer
 }
 
-// Boot up the main menu
-startMenu();
+// Boot: init CrazyGames SDK first, then show menu
+(async () => {
+    await initCrazySDK();
+    startMenu();
+})();

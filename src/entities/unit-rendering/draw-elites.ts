@@ -250,7 +250,7 @@ export function drawChuKoNu(unit: Unit, ctx: CanvasRenderingContext2D, age: numb
     }
 
     if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = goldAccent;
+        ctx.fillStyle = unit.upgradeLevel >= 3 ? '#ff2222' : goldAccent;
         for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) {
             ctx.beginPath(); ctx.arc(-11, 6 + walkBob - i * 4, 1.2, 0, Math.PI * 2); ctx.fill();
         }
@@ -635,7 +635,7 @@ export function drawImmortal(unit: Unit, ctx: CanvasRenderingContext2D, age: num
     }
 
     if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = goldArmorColor;
+        ctx.fillStyle = unit.upgradeLevel >= 3 ? '#ff2222' : goldArmorColor;
         for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) {
             ctx.beginPath(); ctx.arc(12, 4 + walkBob - i * 4, 1.5, 0, Math.PI * 2); ctx.fill();
         }
@@ -846,10 +846,10 @@ export function drawNinja(unit: Unit, ctx: CanvasRenderingContext2D, age: number
         ctx.stroke();
 
         if (age >= 4) {
-            ctx.shadowColor = '#8a2be2'; ctx.shadowBlur = 5 + Math.sin(unit.animTimer * 10) * 3;
+             
             ctx.strokeStyle = '#d8b2ff'; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(1, 4); ctx.lineTo(1, 14); ctx.stroke();
-            ctx.shadowBlur = 0;
+            
         }
 
         ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-1.5, 4); ctx.lineTo(-1.5, 16); ctx.lineTo(0.5, 16); ctx.fill();
@@ -910,7 +910,7 @@ export function drawNinja(unit: Unit, ctx: CanvasRenderingContext2D, age: number
     }
 
     if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = '#6600cc';
+        ctx.fillStyle = unit.upgradeLevel >= 3 ? '#ff2222' : '#6600cc';
         for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) ctx.fillRect(-9, 4 + walkBob - i * 3, 2, 2);
     }
     ctx.restore();
@@ -1303,9 +1303,9 @@ export function drawCenturion(unit: Unit, ctx: CanvasRenderingContext2D, age: nu
 
     if (typeof unit.centurionMeleeHits === 'number' && unit.centurionMeleeHits > 0) {
         ctx.fillStyle = unit.centurionMeleeHits >= 3 ? '#ff2222' : '#ffaa00';
-        ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 4;
+         
         ctx.beginPath(); ctx.arc(-14, -20 + bob, 3 + unit.centurionMeleeHits, 0, Math.PI * 2); ctx.fill();
-        ctx.shadowBlur = 0;
+        
     }
 
     if (age >= 4) {
@@ -1316,7 +1316,7 @@ export function drawCenturion(unit: Unit, ctx: CanvasRenderingContext2D, age: nu
     }
 
     if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = brassColor;
+        ctx.fillStyle = unit.upgradeLevel >= 3 ? '#ff2222' : brassColor;
         for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) {
             ctx.beginPath(); ctx.arc(12, 6 + bob - i * 4, 1.5, 0, Math.PI * 2); ctx.fill();
         }
@@ -1467,10 +1467,10 @@ export function drawUlfhednar(unit: Unit, ctx: CanvasRenderingContext2D, age: nu
     ctx.beginPath(); ctx.ellipse(-2.5, -7, 1.5, 0.8, 0.2, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(1.5, -7, 1.5, 0.8, -0.2, 0, Math.PI * 2); ctx.fill();
     if (rage) {
-        ctx.shadowColor = '#ff0000'; ctx.shadowBlur = 8;
+         
         ctx.beginPath(); ctx.arc(-2.5, -7, 0.5, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(1.5, -7, 0.5, 0, Math.PI * 2); ctx.fill();
-        ctx.shadowBlur = 0;
+        
     }
 
     ctx.fillStyle = '#eaddca';
@@ -1597,9 +1597,9 @@ export function drawUlfhednar(unit: Unit, ctx: CanvasRenderingContext2D, age: nu
         ctx.beginPath(); ctx.arc(7, -2, 3, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(8, 4, 2, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(5, -5, 5, 5); ctx.globalAlpha = 1;
 
         if (rage) {
-            ctx.strokeStyle = '#55ccff'; ctx.lineWidth = 1.5; ctx.shadowColor = '#0088ff'; ctx.shadowBlur = 6;
+            ctx.strokeStyle = '#55ccff'; ctx.lineWidth = 1.5;  
             ctx.beginPath(); ctx.moveTo(9, -7); ctx.lineTo(6, -1); ctx.lineTo(8, 4); ctx.stroke();
-            ctx.shadowBlur = 0;
+            
         }
 
         if (attackProgress > 0.2 && attackProgress < 0.5) {
@@ -1655,7 +1655,7 @@ export function drawUlfhednar(unit: Unit, ctx: CanvasRenderingContext2D, age: nu
     }
 
     if (unit.upgradeLevel > 0) {
-        ctx.fillStyle = rage ? tattooColor : '#ffd700';
+        ctx.fillStyle = unit.upgradeLevel >= 3 ? '#ff2222' : (rage ? tattooColor : '#ffd700');
         for (let i = 0; i < Math.min(unit.upgradeLevel, 3); i++) {
             ctx.beginPath(); ctx.arc(12, 4 + bob - i * 4.5, 1.8, 0, Math.PI * 2); ctx.fill();
         }

@@ -3,8 +3,14 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <!-- iOS: Force landscape orientation -->
+    <meta name="screen-orientation" content="landscape">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Pixel Empires — RTS</title>
+    <!-- CrazyGames SDK v3 -->
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Inter:wght@400;500;600&display=swap"
@@ -115,6 +121,17 @@
             background: #c2185b;
             transition: width 0.1s linear;
         }
+
+        #loading-tip {
+            margin-top: 2rem;
+            font-size: 0.75rem;
+            color: #52525b;
+            letter-spacing: 0.5px;
+            max-width: 400px;
+            line-height: 1.6;
+            text-align: center;
+            min-height: 2em;
+        }
     </style>
 </head>
 
@@ -124,7 +141,7 @@
     <div id="loading-screen">
         <div class="loading-content">
             <h1 class="loading-title">Pixel Empires</h1>
-            <div class="loading-subtitle">戦国 — CHIẾN QUỐC</div>
+            <div class="loading-subtitle" id="loading-subtitle">戦国 — CHIẾN QUỐC</div>
             <div class="loading-info">
                 <span id="loading-text">Preparing Battle...</span>
                 <span id="loading-percentage">0%</span>
@@ -132,10 +149,19 @@
             <div class="loading-bar-wrapper">
                 <div id="loading-bar-fill"></div>
             </div>
+            <div id="loading-tip"></div>
         </div>
     </div>
 
     <script type="module" src="./index.ts"></script>
+    <script>
+        // Force landscape on mobile devices
+        if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(function() {});
+            }
+        }
+    </script>
 </body>
 
 </html>

@@ -75,10 +75,10 @@ export const CamYVeAbility: EliteAbility = {
                 unit.facingRight = unit.x < unit.camYVeComboTargetX;
 
                 // Sword slash sound on each combo strike
-                audioSystem.playSFXWithPitch('/musics/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.5 + Math.random() * 0.2, 0.9 + currentPhase * 0.1 + Math.random() * 0.1, unit.x, unit.y);
+                audioSystem.playSFXWithPitch('./sounds/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.5 + Math.random() * 0.2, 0.9 + currentPhase * 0.1 + Math.random() * 0.1, unit.x, unit.y);
 
                 // Deal damage
-                const slashDmg = Math.floor(unit.attack * 1.5);
+                const slashDmg = Math.floor(unit.attack * 1.0);
                 if (unit.attackTarget && unit.attackTarget.alive) {
                     unit.attackTarget.hp -= slashDmg;
                 }
@@ -123,7 +123,7 @@ export const CamYVeAbility: EliteAbility = {
             if (unit.camYVeComboTimer >= phaseTime * 3 + 0.05) {
                 unit.camYVeComboActive = false;
                 unit.camYVeVisible = true;
-                unit.camYVeCooldown = 4; // 4s cooldown
+                unit.camYVeCooldown = 6; // 6s cooldown
                 unit.x = unit.camYVeOrigX;
                 unit.y = unit.camYVeOrigY;
                 // Final burst (Ming Gold/Crimson)

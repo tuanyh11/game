@@ -21,7 +21,7 @@ export class QiJiguangStrategy extends MeleeHeroStrategy {
         const { unit, particles } = context;
 
         // Sword slash sound
-        audioSystem.playSFXWithPitch('/musics/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.6 + Math.random() * 0.2, 0.85 + Math.random() * 0.2, unit.x, unit.y);
+        audioSystem.playSFXWithPitch('./sounds/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.6 + Math.random() * 0.2, 0.85 + Math.random() * 0.2, unit.x, unit.y);
         // Overhead chop — particles fly downward
         const downAngle = Math.PI * 0.5;
         for (let i = 0; i < 8; i++) {

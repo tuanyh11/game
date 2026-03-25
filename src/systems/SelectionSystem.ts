@@ -3,6 +3,7 @@
 // ============================================================
 
 import { Camera } from "../core/Camera";
+import { IS_IOS, UI_LAYOUT } from "../config/PlatformConfig";
 import { EntityManager } from "./EntityManager";
 import { PlayerState } from "./PlayerState";
 import { TileMap } from "../map/TileMap";
@@ -31,6 +32,8 @@ export class SelectionSystem {
     private buildGhostCol = 0;
     buildGhostRow = 0;
     buildValid = false;
+    /** iOS: whether the ghost has been positioned and is ready to place */
+    private buildGhostReady = false;
 
     // Mouse state
     private mouseScreenX = 0;
@@ -92,7 +95,13 @@ export class SelectionSystem {
     private isInGameArea(e: MouseEvent): boolean {
         if (e.clientY <= this.uiTopHeight) return false;
 
-        // When something is selected, the bottom panel is visible → exclude it (up to width 650)
+        if (IS_IOS) {
+            // iOS: no bottom panel, only exclude minimap overlay
+            if (this.isInMinimapArea(e.clientX, e.clientY)) return false;
+            return true;
+        }
+
+        // Desktop: when something is selected, the bottom panel is visible → exclude it
         if (this.hasSelection) {
             if (e.clientX <= 650 && e.clientY >= this.camera.viewportHeight - this.uiBottomHeight) {
                 return false;
@@ -101,11 +110,7 @@ export class SelectionSystem {
         }
 
         // When nothing is selected, bottom panel is hidden → only exclude minimap area
-        const minimapX = 12;
-        const minimapY = this.camera.viewportHeight - this.uiBottomHeight + 10 - 11; // match minimap panel position
-        const minimapSize = 180;
-        if (e.clientX >= minimapX && e.clientX <= minimapX + minimapSize &&
-            e.clientY >= minimapY && e.clientY <= minimapY + minimapSize + 12) {
+        if (this.isInMinimapArea(e.clientX, e.clientY)) {
             return false;
         }
 
@@ -117,10 +122,19 @@ export class SelectionSystem {
         if (this.isTouchDevice && e.type.startsWith('mouse')) return; // Ignore synthetic mouse events
         if (this.freePlacementActive || this.isPaused) return;
         if (e.button === 0) { // Left click
+            // Build placement MUST be checked before suppressNextClick,
+            // because entering build mode via UI button sets suppressNextClick
+            // and the very next click is the placement click.
             if (this.buildMode) {
                 // Don't place building if clicking on UI panels
                 if (!this.isInGameArea(e)) return;
                 this.handleBuildPlace(e.ctrlKey || e.metaKey);
+                this.suppressNextClick = false; // consume the flag
+                return;
+            }
+            // Skip if UI button was just pressed (prevents deselection on same tap)
+            if (this.suppressNextClick) {
+                this.suppressNextClick = false;
                 return;
             }
             if (!this.isInGameArea(e)) return;
@@ -146,11 +160,31 @@ export class SelectionSystem {
         }
     }
 
+    /** Offset X for centered panel (iOS) */
+    public uiPanelX = 0;
+
+    /** Set by GameUI when a UI button click is handled — suppresses next mouse event */
+    public suppressNextClick = false;
+
+    /** Reference to GameUI for checking click areas during touch events */
+    public _gameUI: { isInClickArea(x: number, y: number): boolean } | null = null;
+
+    /** Whether a touch drag (camera pan) occurred during the current touch */
+    private touchDragged = false;
+
     /** Check if screen coordinates are inside the minimap */
     private isInMinimapArea(sx: number, sy: number): boolean {
-        const mmX = 12;  // borderWidth + 8
+        if (IS_IOS) {
+            // iOS: floating minimap at bottom-left
+            const ms = UI_LAYOUT.minimapSize - 4;
+            const mmX = 6;
+            const mmY = this.camera.viewportHeight - ms - 30;
+            return sx >= mmX - 2 && sx <= mmX + ms + 2 && sy >= mmY - 2 && sy <= mmY + ms + 2;
+        }
+        // Desktop: inside bottom panel
+        const mmX = 12;
         const mmY = this.camera.viewportHeight - this.uiBottomHeight + 10;
-        const mmS = 164; // minimapSize(180) - 16
+        const mmS = 164;
         return sx >= mmX && sx <= mmX + mmS && sy >= mmY && sy <= mmY + mmS;
     }
 
@@ -159,9 +193,16 @@ export class SelectionSystem {
         const myUnits = this.selectedUnits.filter(u => u.team === this.playerTeam);
         if (myUnits.length === 0) return;
 
-        const mmX = 12;
-        const mmY = this.camera.viewportHeight - this.uiBottomHeight + 10;
-        const mmS = 164;
+        let mmX: number, mmY: number, mmS: number;
+        if (IS_IOS) {
+            mmS = UI_LAYOUT.minimapSize - 4;
+            mmX = 6;
+            mmY = this.camera.viewportHeight - mmS - 30;
+        } else {
+            mmX = 12;
+            mmY = this.camera.viewportHeight - this.uiBottomHeight + 10;
+            mmS = 164;
+        }
 
         // Convert minimap coords to world coords
         const worldX = ((sx - mmX) / mmS) * MAP_COLS * TILE_SIZE;
@@ -217,6 +258,8 @@ export class SelectionSystem {
             const data = BUILDING_DATA[this.buildMode];
             this.buildValid = this.tileMap.canPlace(
                 this.buildGhostCol, this.buildGhostRow, data.size[0], data.size[1]
+            ) && !this.entityManager.hasUnitsOnTiles(
+                this.buildGhostCol, this.buildGhostRow, data.size[0], data.size[1]
             );
         }
 
@@ -271,12 +314,7 @@ export class SelectionSystem {
                                 newCursor = 'axe';
                                 break;
                             case ResourceNodeType.GoldMine:
-                            case ResourceNodeType.StoneMine:
                                 newCursor = 'pickaxe';
-                                break;
-                            case ResourceNodeType.BerryBush:
-                            case ResourceNodeType.Farm:
-                                newCursor = 'basket';
                                 break;
                         }
                     }
@@ -294,12 +332,7 @@ export class SelectionSystem {
                             newCursor = 'axe';
                             break;
                         case ResourceNodeType.GoldMine:
-                        case ResourceNodeType.StoneMine:
                             newCursor = 'pickaxe';
-                            break;
-                        case ResourceNodeType.BerryBush:
-                        case ResourceNodeType.Farm:
-                            newCursor = 'basket';
                             break;
                     }
                 }
@@ -330,15 +363,37 @@ export class SelectionSystem {
             this.touchStartX = touch.clientX;
             this.touchStartY = touch.clientY;
             this.isLongPressTriggered = false;
+            this.touchDragged = false;
+
+            // Check if touching a UI button area — skip simulated mousedown
+            // to prevent box selection from canceling the UI action
+            if (this._gameUI && this._gameUI.isInClickArea(touch.clientX, touch.clientY)) {
+                return;
+            }
 
             this.clearLongPress();
-            this.longPressTimer = setTimeout(() => {
-                this.isLongPressTriggered = true;
-                this.isBoxSelecting = false; // Cancel drag box drawing
-                this.simulateMouseEvent(e, 'mousedown', 2, this.touchStartX, this.touchStartY);
-            }, 350); // 350ms for right click hold
+            if (IS_IOS && !this.buildMode) {
+                // iOS: long press (200ms) → start box selection mode (not in build mode)
+                this.longPressTimer = setTimeout(() => {
+                    this.isLongPressTriggered = true;
+                    // Start box selection from the initial touch point
+                    const world = this.camera.screenToWorld(this.touchStartX, this.touchStartY);
+                    this.isBoxSelecting = true;
+                    this.boxStartX = world.x; this.boxStartY = world.y;
+                    this.boxEndX = world.x; this.boxEndY = world.y;
+                }, 200);
+            } else {
+                this.longPressTimer = setTimeout(() => {
+                    this.isLongPressTriggered = true;
+                    this.isBoxSelecting = false;
+                    this.simulateMouseEvent(e, 'mousedown', 2, this.touchStartX, this.touchStartY);
+                }, 200);
+            }
 
-            this.simulateMouseEvent(e, 'mousedown', 0, touch.clientX, touch.clientY);
+            // Don't simulate mousedown on iOS (we handle tap separately in touchEnd)
+            if (!IS_IOS) {
+                this.simulateMouseEvent(e, 'mousedown', 0, touch.clientX, touch.clientY);
+            }
         } else {
             // Cancel operations if multi-touch happens
             this.clearLongPress();
@@ -354,7 +409,42 @@ export class SelectionSystem {
             const dx = touch.clientX - this.touchStartX;
             const dy = touch.clientY - this.touchStartY;
 
-            // If finger moves more than 15 pixels, cancel the long press (user is dragging)
+            if (IS_IOS) {
+                if (this.buildMode) {
+                    // Build mode: drag updates ghost position, NOT camera
+                    this.mouseScreenX = touch.clientX;
+                    this.mouseScreenY = touch.clientY;
+                    const world = this.camera.screenToWorld(touch.clientX, touch.clientY);
+                    this.buildGhostCol = Math.floor(world.x / TILE_SIZE);
+                    this.buildGhostRow = Math.floor(world.y / TILE_SIZE);
+                    const data = BUILDING_DATA[this.buildMode];
+                    this.buildValid = this.tileMap.canPlace(
+                        this.buildGhostCol, this.buildGhostRow, data.size[0], data.size[1]
+                    ) && !this.entityManager.hasUnitsOnTiles(
+                        this.buildGhostCol, this.buildGhostRow, data.size[0], data.size[1]
+                    );
+                    this.touchDragged = true;
+                    e.preventDefault();
+                } else if (this.isLongPressTriggered) {
+                    // Long-press active → update box selection
+                    const world = this.camera.screenToWorld(touch.clientX, touch.clientY);
+                    this.boxEndX = world.x;
+                    this.boxEndY = world.y;
+                    e.preventDefault();
+                } else if (Math.hypot(dx, dy) > 10) {
+                    // Quick drag → camera pan
+                    this.clearLongPress();
+                    this.touchDragged = true;
+                    this.camera.x -= dx / this.camera.zoom;
+                    this.camera.y -= dy / this.camera.zoom;
+                    this.touchStartX = touch.clientX;
+                    this.touchStartY = touch.clientY;
+                    e.preventDefault();
+                }
+                return;
+            }
+
+            // Desktop: original logic
             if (Math.hypot(dx, dy) > 15) {
                 this.clearLongPress();
             }
@@ -367,8 +457,85 @@ export class SelectionSystem {
 
     private onTouchEnd(e: TouchEvent): void {
         this.clearLongPress();
+
+        if (e.changedTouches.length === 1) {
+            const touch = e.changedTouches[0];
+
+            // iOS: finish box selection if long-press drag was active
+            if (IS_IOS && this.isLongPressTriggered && this.isBoxSelecting) {
+                const world = this.camera.screenToWorld(touch.clientX, touch.clientY);
+                this.boxEndX = world.x;
+                this.boxEndY = world.y;
+                this.finishSelection();
+                this.isBoxSelecting = false;
+                this.isLongPressTriggered = false;
+                return;
+            }
+
+            // iOS: long press but no drag = select single unit under finger
+            if (IS_IOS && this.isLongPressTriggered && !this.isBoxSelecting) {
+                this.simulateMouseEvent(e, 'mousedown', 0, touch.clientX, touch.clientY);
+                this.simulateMouseEvent(e, 'mouseup', 0, touch.clientX, touch.clientY);
+                this.isLongPressTriggered = false;
+                return;
+            }
+        }
+
         if (!this.isLongPressTriggered && e.changedTouches.length === 1) {
             const touch = e.changedTouches[0];
+
+            // iOS: in build mode — two-step: first tap positions, second tap places
+            if (this.buildMode) {
+                // If finger is over a UI button (e.g. cancel X), cancel build mode
+                if (this._gameUI && this._gameUI.isInClickArea(touch.clientX, touch.clientY)) {
+                    this.buildMode = null;
+                    this.buildGhostReady = false;
+                    return;
+                }
+                if (!this.touchDragged) {
+                    if (this.buildGhostReady) {
+                        // Second tap: place the building
+                        this.handleBuildPlace(false);
+                        this.buildGhostReady = false;
+                    } else {
+                        // First tap: position ghost at tap location, mark ready
+                        const world = this.camera.screenToWorld(touch.clientX, touch.clientY);
+                        this.buildGhostCol = Math.floor(world.x / TILE_SIZE);
+                        this.buildGhostRow = Math.floor(world.y / TILE_SIZE);
+                        if (this.buildMode) {
+                            const data = BUILDING_DATA[this.buildMode];
+                            this.buildValid = this.tileMap.canPlace(
+                                this.buildGhostCol, this.buildGhostRow, data.size[0], data.size[1]
+                            ) && !this.entityManager.hasUnitsOnTiles(
+                                this.buildGhostCol, this.buildGhostRow, data.size[0], data.size[1]
+                            );
+                        }
+                        this.buildGhostReady = true;
+                    }
+                } else {
+                    // After drag: ghost was moved, mark as ready for next tap to place
+                    this.buildGhostReady = true;
+                }
+                return;
+            }
+
+            // iOS: tap-to-move — if units are selected and quick tap on game area,
+            // treat as right-click (move command) instead of re-selection
+            const dx = touch.clientX - this.touchStartX;
+            const dy = touch.clientY - this.touchStartY;
+            const wasTap = Math.hypot(dx, dy) < 15;
+            if (wasTap && !this.touchDragged && this.selectedUnits.length > 0) {
+                const mockE = { clientX: touch.clientX, clientY: touch.clientY } as unknown as MouseEvent;
+                if (this.isInGameArea(mockE) && !this.isInMinimapArea(touch.clientX, touch.clientY)) {
+                    // Cancel any box selection that started
+                    this.isBoxSelecting = false;
+                    // Simulate right-click to move/attack
+                    this.simulateMouseEvent(e, 'mousedown', 2, touch.clientX, touch.clientY);
+                    this.simulateMouseEvent(e, 'mouseup', 2, touch.clientX, touch.clientY);
+                    return;
+                }
+            }
+
             this.simulateMouseEvent(e, 'mouseup', 0, touch.clientX, touch.clientY);
         }
     }
@@ -532,6 +699,60 @@ export class SelectionSystem {
             if (cycleBuilding(BuildingType.Stable)) return;
         }
 
+        // Select and Focus Market (Ctrl + M)
+        if (key === 'm' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            if (cycleBuilding(BuildingType.Market)) return;
+        }
+
+        // Select and Focus Hero Altar (Ctrl + H)
+        if (key === 'h' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            if (cycleBuilding(BuildingType.HeroAltar)) return;
+        }
+
+        // Select and Focus Blacksmith (Ctrl + K)
+        if (key === 'k' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            if (cycleBuilding(BuildingType.Blacksmith)) return;
+        }
+
+        // Select and Focus Government Center (Ctrl + G)
+        if (key === 'g' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            if (cycleBuilding(BuildingType.GovernmentCenter)) return;
+        }
+
+        // Select and Focus Storage Pit (Ctrl + P)
+        if (key === 'p' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            if (cycleBuilding(BuildingType.StoragePit)) return;
+        }
+
+        // Select and Focus Granary (Ctrl + Y)
+        if (key === 'y' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            if (cycleBuilding(BuildingType.Granary)) return;
+        }
+
+        // Select and Focus Armory (Ctrl + A)
+        if (key === 'a' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            if (cycleBuilding(BuildingType.Armory)) return;
+        }
+
+        // Select and Focus Tower (Ctrl + T)
+        if (key === 't' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            if (cycleBuilding(BuildingType.Tower)) return;
+        }
+
+        // Select and Focus House (Ctrl + U)
+        if (key === 'u' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            if (cycleBuilding(BuildingType.House)) return;
+        }
+
         // Valid command keys
         const validKeys = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'z', 'x', 'c', 'v', 'u', 'b', 't', 'n', 'l', 'm', 'i', 'h'];
 
@@ -632,7 +853,7 @@ export class SelectionSystem {
                 this.selectedUnits = [unit];
                 // Play villager voice when selecting own villager
                 if (unit.team === this.playerTeam && unit.isVillager) {
-                    audioSystem.playSFXWithPitch('/musics/ElevenLabs_say_yes.mp3', 0.5, 0.95 + Math.random() * 0.1);
+                    audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_yes.mp3', 0.5, 0.95 + Math.random() * 0.1);
                 }
                 return;
             }
@@ -674,7 +895,7 @@ export class SelectionSystem {
             this.selectedUnits = units;
             // Play villager voice if own villagers in box selection
             if (units.some(u => u.team === this.playerTeam && u.isVillager)) {
-                audioSystem.playSFXWithPitch('/musics/ElevenLabs_say_yes.mp3', 0.5, 0.95 + Math.random() * 0.1);
+                audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_yes.mp3', 0.5, 0.95 + Math.random() * 0.1);
             }
         }
     }
@@ -793,9 +1014,6 @@ export class SelectionSystem {
                 switch (resource.nodeType) {
                     case ResourceNodeType.Tree: gatherColor = '#44dd88'; break;
                     case ResourceNodeType.GoldMine: gatherColor = '#ffd700'; break;
-                    case ResourceNodeType.StoneMine: gatherColor = '#99aacc'; break;
-                    case ResourceNodeType.BerryBush: gatherColor = '#ee5577'; break;
-                    case ResourceNodeType.Farm: gatherColor = '#aacc44'; break;
                 }
                 this.commandIndicators.push({
                     x: resource.x, y: resource.y,
@@ -806,7 +1024,7 @@ export class SelectionSystem {
             }
             // Villager voice on gather command
             if (villagers.length > 0) {
-                audioSystem.playSFXWithPitch('/musics/ElevenLabs_say_ill_get_to_work.mp3', 0.5, 0.95 + Math.random() * 0.1);
+                audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_ill_get_to_work.mp3', 0.5, 0.95 + Math.random() * 0.1);
             }
             return;
         }
@@ -846,7 +1064,7 @@ export class SelectionSystem {
                 }
                 // Villager voice on build command
                 if (villagers.length > 0) {
-                    audioSystem.playSFXWithPitch('/musics/ElevenLabs_say_ill_build_it.mp3', 0.5, 0.95 + Math.random() * 0.1);
+                    audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_ill_build_it.mp3', 0.5, 0.95 + Math.random() * 0.1);
                 }
                 return;
             } else {
@@ -886,8 +1104,41 @@ export class SelectionSystem {
                     this.commandIndicators.push({ x: building.x, y: building.y, timer: 0.3, type: 'move' });
                     return;
                 }
-                
-                // If it's a built building but not a drop-off scenario, just fall through to move
+
+                // --- REPAIR: Right-click on OWN damaged building → Villagers repair it ---
+                if (building.hp < building.maxHp && villagers.length > 0) {
+                    if (this.isMultiplayer && this.sendCommand) {
+                        this.sendCommand(cmdBuildAt(this.playerTeam, villagers.map(u => u.id), building.id));
+                        if (others.length > 0) {
+                            this.sendCommand(cmdMove(this.playerTeam, others.map(u => u.id), world.x, world.y));
+                        }
+                    } else {
+                        for (const u of villagers) {
+                            u.buildAt(building);
+                            u.manualCommand = true;
+                        }
+                        if (others.length > 0) {
+                            const spacing = 20;
+                            const cols = Math.ceil(Math.sqrt(others.length));
+                            for (let i = 0; i < others.length; i++) {
+                                const row = Math.floor(i / cols);
+                                const col = i % cols;
+                                const tx = world.x + (col - cols / 2) * spacing;
+                                const ty = world.y + (row - cols / 2) * spacing;
+                                others[i].moveTo(tx, ty, undefined, this.tileMap);
+                                others[i].manualCommand = true;
+                            }
+                        }
+                    }
+                    this.commandIndicators.push({ x: building.x, y: building.y, timer: 0.4, type: 'gather', color: '#44aaff' });
+                    // Villager voice for repair
+                    if (villagers.length > 0) {
+                        audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_ill_build_it.mp3', 0.5, 0.95 + Math.random() * 0.1);
+                    }
+                    return;
+                }
+
+                // If it's a built building but not a drop-off or repair scenario, just fall through to move
             }
         }
 
@@ -909,7 +1160,7 @@ export class SelectionSystem {
         this.commandIndicators.push({ x: world.x, y: world.y, timer: 0.3, type: 'move' });
         // Villager voice on move command
         if (myUnits.some(u => u.isVillager)) {
-            audioSystem.playSFXWithPitch('/musics/ElevenLabs_say_right_away.mp3', 0.5, 0.95 + Math.random() * 0.1);
+            audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_right_away.mp3', 0.5, 0.95 + Math.random() * 0.1);
         }
     }
 
@@ -942,11 +1193,7 @@ export class SelectionSystem {
             this.playerState.spend(data.cost);
             const b = this.entityManager.spawnBuilding(this.buildMode, this.buildGhostCol, this.buildGhostRow, this.playerTeam, false);
             if (b) {
-                if (this.buildMode === BuildingType.Farm) {
-                    const fx = (this.buildGhostCol + 1) * TILE_SIZE;
-                    const fy = (this.buildGhostRow + 1) * TILE_SIZE;
-                    this.entityManager.spawnResource(ResourceNodeType.Farm, fx, fy, 300);
-                }
+
                 const villagers = this.selectedUnits.filter(u => u.isVillager && u.team === this.playerTeam);
                 for (const villager of villagers) {
                     villager.buildAt(b);
@@ -956,7 +1203,7 @@ export class SelectionSystem {
         }
         // Villager voice on build placement (works in both SP and MP)
         if (this.selectedUnits.some(u => u.isVillager && u.team === this.playerTeam)) {
-            audioSystem.playSFXWithPitch('/musics/ElevenLabs_say_ill_build_it.mp3', 0.5, 0.95 + Math.random() * 0.1);
+            audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_ill_build_it.mp3', 0.5, 0.95 + Math.random() * 0.1);
         }
         // If Ctrl/Cmd held, stay in build mode for rapid placement
         if (!keepBuildMode) {
@@ -968,8 +1215,8 @@ export class SelectionSystem {
     renderOverlays(ctx: CanvasRenderingContext2D): void {
         // Command indicators (attack = red ring, move = green ring, gather = resource ring)
         for (const ind of this.commandIndicators) {
-            const sx = ind.x - this.camera.x;
-            const sy = ind.y - this.camera.y;
+            const sx = (ind.x - this.camera.x) * this.camera.zoom;
+            const sy = (ind.y - this.camera.y) * this.camera.zoom;
 
             ctx.save();
             if (ind.type === 'gather') {
@@ -1062,8 +1309,9 @@ export class SelectionSystem {
         // Box selection rectangle
         if (this.isBoxSelecting) {
             const cam = this.camera;
-            const x1 = this.boxStartX - cam.x, y1 = this.boxStartY - cam.y;
-            const x2 = this.boxEndX - cam.x, y2 = this.boxEndY - cam.y;
+            const z = cam.zoom;
+            const x1 = (this.boxStartX - cam.x) * z, y1 = (this.boxStartY - cam.y) * z;
+            const x2 = (this.boxEndX - cam.x) * z, y2 = (this.boxEndY - cam.y) * z;
             ctx.fillStyle = C.selectionBox;
             ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
             ctx.strokeStyle = C.selectionBoxBorder;
@@ -1074,10 +1322,11 @@ export class SelectionSystem {
         // Build mode ghost
         if (this.buildMode) {
             const data = BUILDING_DATA[this.buildMode];
-            const gx = this.buildGhostCol * TILE_SIZE - this.camera.x;
-            const gy = this.buildGhostRow * TILE_SIZE - this.camera.y;
-            const gw = data.size[0] * TILE_SIZE;
-            const gh = data.size[1] * TILE_SIZE;
+            const z = this.camera.zoom;
+            const gx = (this.buildGhostCol * TILE_SIZE - this.camera.x) * z;
+            const gy = (this.buildGhostRow * TILE_SIZE - this.camera.y) * z;
+            const gw = data.size[0] * TILE_SIZE * z;
+            const gh = data.size[1] * TILE_SIZE * z;
             ctx.fillStyle = this.buildValid
                 ? 'rgba(0, 255, 100, 0.25)'
                 : 'rgba(255, 50, 50, 0.25)';
@@ -1097,31 +1346,21 @@ export class SelectionSystem {
         // Selected resource highlight
         if (this.selectedResource && this.selectedResource.alive) {
             const res = this.selectedResource;
-            const rx = res.x - this.camera.x;
-            const ry = res.y - this.camera.y;
-            if (res.nodeType === ResourceNodeType.Farm) {
-                // Farm selection: rectangular
-                const halfW = 26, halfH = 26;
-                ctx.strokeStyle = C.selection;
-                ctx.lineWidth = 1.5;
-                ctx.strokeRect(rx - halfW, ry - halfH, halfW * 2, halfH * 2);
-                ctx.strokeStyle = 'rgba(0,255,100,0.3)';
-                ctx.lineWidth = 3;
-                ctx.strokeRect(rx - halfW - 2, ry - halfH - 2, halfW * 2 + 4, halfH * 2 + 4);
-            } else {
-                const rad = res.radius + 2;
-                ctx.strokeStyle = C.selection;
-                ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                ctx.arc(rx, ry, rad, 0, Math.PI * 2);
-                ctx.stroke();
-                // Outer glow
-                ctx.strokeStyle = 'rgba(0,255,100,0.3)';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.arc(rx, ry, rad + 2, 0, Math.PI * 2);
-                ctx.stroke();
-            }
+            const z = this.camera.zoom;
+            const rx = (res.x - this.camera.x) * z;
+            const ry = (res.y - this.camera.y) * z;
+            const rad = (res.radius + 2) * z;
+            ctx.strokeStyle = C.selection;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(rx, ry, rad, 0, Math.PI * 2);
+            ctx.stroke();
+            // Outer glow
+            ctx.strokeStyle = 'rgba(0,255,100,0.3)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(rx, ry, rad + 2, 0, Math.PI * 2);
+            ctx.stroke();
         }
     }
 }

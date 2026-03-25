@@ -19,9 +19,12 @@ export function unitChaseMove(
     unit: Unit,
     dx: number, dy: number, dist: number, dt: number,
     tileMap?: TileMapRef,
+    getNearbyUnits?: (x: number, y: number, r: number) => Unit[],
 ): void {
-    const slowMult = unit.slowTimer > 0 ? 0.5 : 1;
-    const step = unit.speed * (1 + unit.speedBonus) * slowMult * dt;
+    const slowMult = unit.slowTimer > 0 ? (1 - (unit.slowAmount || 0.5)) : 1;
+    const auraMult = unit.auraBuffType === 'speed' ? (1 + unit.auraBuffValue) : 1;
+    const equipSpd = unit._equipBonuses?.speedBonus ?? 0;
+    const step = unit.speed * (1 + unit.speedBonus + equipSpd) * slowMult * auraMult * dt;
 
     // ---- STUCK DETECTION for chase ----
     const movedDist = Math.hypot(unit.x - unit.lastX, unit.y - unit.lastY);
@@ -29,13 +32,19 @@ export function unitChaseMove(
         unit.stuckTimer += dt;
     } else {
         unit.stuckTimer = 0;
-        unit.stuckCount = 0;
+        // Only reset stuckCount if unit is making significant progress TOWARD target
+        // (not just jiggling from separation push or walking a long detour)
+        const distToTarget = Math.hypot(dx, dy);
+        const prevDistToTarget = Math.hypot((unit.x + dx) - unit.lastX, (unit.y + dy) - unit.lastY);
+        if (prevDistToTarget > distToTarget + 2) {
+            // Actually getting closer to target — real progress
+            unit.stuckCount = 0;
+        }
     }
     unit.lastX = unit.x;
     unit.lastY = unit.y;
 
     // Stagger stuck threshold to prevent multiple clumped units from running A* on the same frame
-    // Base threshold 0.6s + deterministic jitter based on unit ID
     const stuckThreshold = 0.6 + ((unit.id % 10) * 0.05);
 
     if (unit.stuckTimer > stuckThreshold) {
@@ -44,37 +53,87 @@ export function unitChaseMove(
         unit.stuckTimer = 0;
         unit.stuckCount++;
 
+        // FPS FIX: When stuck chasing for too long, try to attack blocking wall
+        if (unit.stuckCount > 2 && unit._findBlockingWall) {
+            const targetPosX = unit.x + dx;
+            const targetPosY = unit.y + dy;
+            const blockingWall = unit._findBlockingWall(unit.x, unit.y, targetPosX, targetPosY, unit.team);
+            if (blockingWall) {
+                unit.attackBuildingTarget = blockingWall;
+                unit.attackTarget = null;
+                unit.state = UnitState.Attacking;
+                unit.pathWaypoints = [];
+                unit.pathIndex = 0;
+                unit.stuckCount = 0;
+                unit.pathfindCooldown = 0;
+                return;
+            }
+        }
+
         // Only escape-teleport if actually standing on an unwalkable tile (water/building)
-        // Otherwise just reset stuck count and let A* retry next frame
-        // (the leash/range logic in combat strategy handles when to stop chasing)
         if (unit.stuckCount > 6 && tileMap) {
             const [curC, curR] = tileMap.worldToTile(unit.x, unit.y);
             if (!tileMap.isWalkable(curC, curR)) {
-                // Genuinely stuck on unwalkable terrain — escape to nearest walkable tile
                 unit.escapeToWalkableTile(tileMap, unit.x + dx, unit.y + dy);
             }
-            // Reset stuck count — keep chasing, never go idle from here
             unit.stuckCount = 0;
         }
     }
 
     // ---- A* PATHFINDING for chase ----
-    if (tileMap && unit.pathWaypoints.length === 0) {
-        // Determine actual target position (enemy unit or building)
+    // FPS FIX: Use chase-optimized pathfinding (lower maxIter, returns null on failure)
+    if (tileMap && unit.pathWaypoints.length === 0 && unit.pathfindCooldown <= 0) {
         let targetPosX = unit.x + dx;
         let targetPosY = unit.y + dy;
 
         const [sc, sr] = tileMap.worldToTile(unit.x, unit.y);
         const [ec, er] = tileMap.worldToTile(targetPosX, targetPosY);
         if (sc !== ec || sr !== er) {
-            const tilePath = tileMap.findPath(sc, sr, ec, er);
+            const tilePath = tileMap.findPathForChase(sc, sr, ec, er);
             if (tilePath && tilePath.length > 0) {
+                // Check if path is excessively long compared to direct distance
+                // If path is >4x the direct tile distance, there's probably a wall — attack it
+                const directTileDist = Math.abs(ec - sc) + Math.abs(er - sr);
+                if (tilePath.length > directTileDist * 4 && unit._findBlockingWall) {
+                    const blockingWall = unit._findBlockingWall(unit.x, unit.y, targetPosX, targetPosY, unit.team);
+                    if (blockingWall) {
+                        unit.attackBuildingTarget = blockingWall;
+                        unit.attackTarget = null;
+                        unit.state = UnitState.Attacking;
+                        unit.pathWaypoints = [];
+                        unit.pathIndex = 0;
+                        unit.stuckCount = 0;
+                        unit.pathfindCooldown = 0;
+                        return;
+                    }
+                }
+
                 unit.pathWaypoints = tilePath.map(([c, r]) => {
                     const [wx, wy] = tileMap.tileToWorld(c, r);
                     return { x: wx, y: wy };
                 });
                 unit.pathWaypoints.push({ x: targetPosX, y: targetPosY });
                 unit.pathIndex = 0;
+                unit.pathfindCooldown = 0.3 + (unit.id % 10) * 0.03;
+            } else {
+                // A* failed (no path to target) — try to attack blocking wall immediately
+                if (unit._findBlockingWall) {
+                    const blockingWall = unit._findBlockingWall(unit.x, unit.y, targetPosX, targetPosY, unit.team);
+                    if (blockingWall) {
+                        unit.attackBuildingTarget = blockingWall;
+                        unit.attackTarget = null;
+                        unit.state = UnitState.Attacking;
+                        unit.pathWaypoints = [];
+                        unit.pathIndex = 0;
+                        unit.stuckCount = 0;
+                        unit.pathfindCooldown = 0;
+                        return;
+                    }
+                }
+                // FPS FIX: Do NOT fall back to full A* (15000 iter) on the same frame.
+                // Instead set a longer cooldown and move directly toward target.
+                // The next chase attempt will retry pathfinding after the cooldown.
+                unit.pathfindCooldown = 0.8 + (unit.id % 10) * 0.05;
             }
         }
     }
@@ -112,6 +171,28 @@ export function unitChaseMove(
 
     let newX = unit.x + (mdx / mDist) * step;
     let newY = unit.y + (mdy / mDist) * step;
+
+    // ===== BOIDS SEPARATION =====
+    if (getNearbyUnits) {
+        const neighbors = getNearbyUnits(unit.x, unit.y, 16);
+        let pushX = 0, pushY = 0;
+        for (const n of neighbors) {
+            if (n === unit || !n.alive || n.team !== unit.team) continue;
+            const ndx = unit.x - n.x;
+            const ndy = unit.y - n.y;
+            const dSq = ndx * ndx + ndy * ndy;
+            if (dSq > 0.01 && dSq < 256) {
+                const d = Math.sqrt(dSq);
+                const force = (16 - d) / 16;
+                pushX += (ndx / d) * force;
+                pushY += (ndy / d) * force;
+            }
+        }
+        if (pushX !== 0 || pushY !== 0) {
+            newX += pushX * step * 0.45;
+            newY += pushY * step * 0.45;
+        }
+    }
 
     if (tileMap) {
         const [curCol, curRow] = tileMap.worldToTile(unit.x, unit.y);
@@ -212,6 +293,7 @@ export function unitDoMove(
     dt: number,
     particles: ParticleSystem,
     tileMap?: TileMapRef,
+    getNearbyUnits?: (x: number, y: number, r: number) => Unit[],
 ): void {
     const dx = unit.targetX - unit.x;
     const dy = unit.targetY - unit.y;
@@ -302,7 +384,8 @@ export function unitDoMove(
 
     // ---- A* PATHFINDING ----
     // Calculate path on first frame of movement
-    if (tileMap && unit.pathWaypoints.length === 0) {
+    // FPS FIX: Rate-limit A* recalculations using pathfindCooldown
+    if (tileMap && unit.pathWaypoints.length === 0 && unit.pathfindCooldown <= 0) {
         const [sc, sr] = tileMap.worldToTile(unit.x, unit.y);
         const [ec, er] = tileMap.worldToTile(unit.targetX, unit.targetY);
         if (sc !== ec || sr !== er) {
@@ -315,6 +398,8 @@ export function unitDoMove(
                 // Add final target as last waypoint
                 unit.pathWaypoints.push({ x: unit.targetX, y: unit.targetY });
                 unit.pathIndex = 0;
+                // Normal cooldown after successful pathfinding
+                unit.pathfindCooldown = 0.3 + (unit.id % 10) * 0.03;
             } else {
                 // A* failed — fallback to direct movement (steering will handle obstacles)
                 unit.pathWaypoints = [{ x: unit.targetX, y: unit.targetY }];
@@ -352,10 +437,34 @@ export function unitDoMove(
     const mDist = Math.hypot(mdx, mdy);
     if (mDist < 1) return;
 
-    const slowMult = unit.slowTimer > 0 ? 0.5 : 1;
-    const step = unit.speed * (1 + unit.speedBonus) * slowMult * dt;
+    const slowMult = unit.slowTimer > 0 ? (1 - (unit.slowAmount || 0.5)) : 1;
+    const auraMult = unit.auraBuffType === 'speed' ? (1 + unit.auraBuffValue) : 1;
+    const equipSpd = unit._equipBonuses?.speedBonus ?? 0;
+    const step = unit.speed * (1 + unit.speedBonus + equipSpd) * slowMult * auraMult * dt;
     let newX = unit.x + (mdx / mDist) * step;
     let newY = unit.y + (mdy / mDist) * step;
+
+    // ===== BOIDS SEPARATION =====
+    if (getNearbyUnits) {
+        const neighbors = getNearbyUnits(unit.x, unit.y, 16);
+        let pushX = 0, pushY = 0;
+        for (const n of neighbors) {
+            if (n === unit || !n.alive || n.team !== unit.team) continue;
+            const ndx = unit.x - n.x;
+            const ndy = unit.y - n.y;
+            const dSq = ndx * ndx + ndy * ndy;
+            if (dSq > 0.01 && dSq < 256) {
+                const d = Math.sqrt(dSq);
+                const force = (16 - d) / 16;
+                pushX += (ndx / d) * force;
+                pushY += (ndy / d) * force;
+            }
+        }
+        if (pushX !== 0 || pushY !== 0) {
+            newX += pushX * step * 0.45;
+            newY += pushY * step * 0.45;
+        }
+    }
 
     // ---- COLLISION CHECK ----
     if (tileMap) {

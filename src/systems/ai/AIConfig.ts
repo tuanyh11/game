@@ -13,16 +13,16 @@ export enum AIDifficulty {
 }
 
 export const AI_DIFFICULTY_NAMES: Record<AIDifficulty, string> = {
-    [AIDifficulty.Easy]: 'Dễ',
-    [AIDifficulty.Normal]: 'Thường',
-    [AIDifficulty.Hard]: 'Khó',
-};
+    get [AIDifficulty.Easy]() { return t('diff.easy'); },
+    get [AIDifficulty.Normal]() { return t('diff.normal'); },
+    get [AIDifficulty.Hard]() { return t('diff.hard'); },
+} as any;
 
 export const AI_DIFFICULTY_DESC: Record<AIDifficulty, string> = {
-    [AIDifficulty.Easy]: 'AI chậm, ít tấn công, thu nhập thấp',
-    [AIDifficulty.Normal]: 'AI cân bằng, tấn công vừa phải',
-    [AIDifficulty.Hard]: 'AI mạnh, tấn công nhanh, thu nhập cao',
-};
+    get [AIDifficulty.Easy]() { return t('diff.easy.desc'); },
+    get [AIDifficulty.Normal]() { return t('diff.normal.desc'); },
+    get [AIDifficulty.Hard]() { return t('diff.hard.desc'); },
+} as any;
 
 export function getAIDifficultyNames(): Record<AIDifficulty, string> {
     return {
@@ -99,4 +99,65 @@ export const sharedIntel = {
     threats: [] as ThreatReport[],
     coordinatedAttacks: [] as AttackCoordination[],
     gameTime: 0,
+};
+
+// ============================================================
+//  AI Strategy — Rush / Balanced / Boom
+// ============================================================
+export enum AIStrategy {
+    Rush = 'rush',
+    Balanced = 'balanced',
+    Boom = 'boom',
+}
+
+export interface StrategyParams {
+    maxVillagers: number;            // cap on villager training
+    ageUpVillagerThreshold: number[];// [age1→2, age2→3, age3→4] villager count triggers
+    attackDelayMult: number;         // multiplier on attackInterval (lower = attack sooner)
+    trainMilitaryFirst: boolean;     // if true, prioritize military over villagers
+    garrisonRatio: number;           // fraction of army kept at base
+    raidAggressiveness: number;      // 0-1, chance to raid each cycle
+    tcExpansion: boolean;            // whether to build extra TCs
+    minWaveSizeOverride: number;     // override minimum wave size to attack (0 = use default)
+    boomMilitaryAge: number;         // Boom: only train military starting from this age
+    eliteTrainChance: number;        // chance to train elite units at age 3+
+}
+
+export const STRATEGY_PARAMS: Record<AIStrategy, StrategyParams> = {
+    [AIStrategy.Rush]: {
+        maxVillagers: 8,
+        ageUpVillagerThreshold: [99, 99, 99], // Rush: delay age-up, focus on army
+        attackDelayMult: 0.4,
+        trainMilitaryFirst: true,
+        garrisonRatio: 0.1,
+        raidAggressiveness: 0.8,
+        tcExpansion: false,
+        minWaveSizeOverride: 3,     // attack with as few as 3 units
+        boomMilitaryAge: 1,
+        eliteTrainChance: 0.1,
+    },
+    [AIStrategy.Balanced]: {
+        maxVillagers: 18,
+        ageUpVillagerThreshold: [12, 18, 24],
+        attackDelayMult: 1.0,
+        trainMilitaryFirst: false,
+        garrisonRatio: 0.25,
+        raidAggressiveness: 0.4,
+        tcExpansion: true,
+        minWaveSizeOverride: 0,
+        boomMilitaryAge: 1,
+        eliteTrainChance: 0.25,
+    },
+    [AIStrategy.Boom]: {
+        maxVillagers: 30,
+        ageUpVillagerThreshold: [8, 14, 20], // Boom: age up early
+        attackDelayMult: 2.0,
+        trainMilitaryFirst: false,
+        garrisonRatio: 0.4,
+        raidAggressiveness: 0.1,
+        tcExpansion: true,
+        minWaveSizeOverride: 0,
+        boomMilitaryAge: 3,         // Boom: only train military from age 3
+        eliteTrainChance: 0.4,      // heavy elite training in late game
+    },
 };

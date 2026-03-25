@@ -36,7 +36,7 @@ export class CenturionStrategy extends BaseCombatStrategy {
                 particles.emit({ x: expX, y: expY - 4, count: 8, spread: 10, speed: [8, 30], angle: [0, Math.PI * 2], life: [0.4, 0.9], size: [4, 7], colors: ['#333', '#555', '#777'], gravity: -8, shape: 'circle' });
 
                 // AOE damage
-                const explDmg = 20, explRange = 50;
+                const explDmg = 15, explRange = 50;
                 for (const enemy of unit._allUnits) {
                     if (!enemy.alive || enemy.team === unit.team) continue;
                     const edx = enemy.x - expX, edy = enemy.y - expY;
@@ -88,7 +88,7 @@ export class CenturionStrategy extends BaseCombatStrategy {
         const { unit, particles } = context;
 
         // Centurion-specific spear sound — independent cooldown from other units
-        audioSystem.playSFXWithPitch('/musics/yodguard-spear-thrust.mp3', 0.5 + Math.random() * 0.2, 0.8 + Math.random() * 0.15, unit.x, unit.y);
+        audioSystem.playSFXWithPitch('./sounds/yodguard-spear-thrust.mp3', 0.5 + Math.random() * 0.2, 0.8 + Math.random() * 0.15, unit.x, unit.y);
         // Bách Phu đâm ngọn giáo cực nặng
         // Tia chớp xé gió của ngọn giáo (Lúc này là cây Đinh Ba)
         particles.emit({

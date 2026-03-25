@@ -111,7 +111,7 @@ export function drawScout_LaMa(unit: Unit, ctx: CanvasRenderingContext2D, age: n
     }
     ctx.restore(); ctx.restore();
 
-    if (lvl > 0) { ctx.fillStyle = '#ffd700'; ctx.font = '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -22 + bob); }
+    if (lvl > 0) { ctx.fillStyle = lvl >= 3 ? '#ff2222' : '#ffd700'; ctx.font = lvl >= 3 ? 'bold 8px sans-serif' : '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -22 + bob); }
     if (moving && age >= 3) { ctx.globalAlpha = 0.15; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(-10 - i * 4, -4 + bob + i * 5); ctx.lineTo(-14 - i * 4, -4 + bob + i * 5); ctx.stroke(); } ctx.globalAlpha = 1; }
     if (age >= 4) { ctx.globalAlpha = 0.06; ctx.fillStyle = cv.accent; ctx.beginPath(); ctx.arc(0, 0 + bob, 14, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
 }
@@ -302,7 +302,7 @@ export function drawSwords_LaMa(unit: Unit, ctx: CanvasRenderingContext2D, age: 
     ctx.fill();
 
     // Center ridge
-    ctx.fillStyle = age >= 4 ? '#ddd' : '#aaa';
+    ctx.fillStyle = lvl >= 3 ? cv.bladeColor : (age >= 4 ? '#ddd' : '#aaa');
     ctx.fillRect(-0.5, 4, 1, 15);
 
     // Edge highlights
@@ -570,8 +570,10 @@ export function drawSpears_LaMa(unit: Unit, ctx: CanvasRenderingContext2D, age: 
         // Cheek guards
         ctx.fillRect(-4.5, -9.5 + bob, 2.5, 4);
         ctx.fillRect(2, -9.5 + bob, 2.5, 4);
-        ctx.fillStyle = skin; // Skin peeking
-        ctx.fillRect(-3.5, -9 + bob, 1.5, 2);
+
+        // Skin peeking between cheek guards (both sides symmetric)
+        ctx.fillStyle = skin;
+        ctx.fillRect(-2, -9.5 + bob, 4, 3);
 
         if (age >= 3) {
             // Longitudinal Crest (Front-to-back, less prominent than centurion/swordsman)
@@ -592,6 +594,14 @@ export function drawSpears_LaMa(unit: Unit, ctx: CanvasRenderingContext2D, age: 
         ctx.fillStyle = '#222';
         ctx.fillRect(-4, -14 + bob, 8, 3);
     }
+
+    // Eyes (drawn AFTER helmet so they stay visible)
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-1.5, -9.5 + bob, 1.2, 1.2);
+    ctx.fillRect(0.5, -9.5 + bob, 1.2, 1.2);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(-1, -9.5 + bob, 0.6, 0.6);
+    ctx.fillRect(1, -9.5 + bob, 0.6, 0.6);
 
     // ── LEFT ARM (L-shape) — drawn on top of body ──
     ctx.save();
@@ -631,7 +641,7 @@ export function drawSpears_LaMa(unit: Unit, ctx: CanvasRenderingContext2D, age: 
     ctx.fillStyle = '#555555';
     ctx.beginPath(); ctx.moveTo(-poleLength * 0.4, -1); ctx.lineTo(-poleLength * 0.4 - 3, 0); ctx.lineTo(-poleLength * 0.4, 1); ctx.fill();
     const tipBase = poleLength * 0.6;
-    ctx.fillStyle = age >= 4 ? '#eeeeee' : '#bbbbbb';
+    ctx.fillStyle = lvl >= 3 ? cv.bladeColor : (age >= 4 ? '#eeeeee' : '#bbbbbb');
     ctx.fillRect(tipBase, -1.5, 3, 3);
     ctx.beginPath(); ctx.moveTo(tipBase + 3, 0); ctx.quadraticCurveTo(tipBase + 6, -3, tipBase + 12, 0); ctx.quadraticCurveTo(tipBase + 6, 3, tipBase + 3, 0); ctx.fill();
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(tipBase + 4, -0.5, 6, 1);

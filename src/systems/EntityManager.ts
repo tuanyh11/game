@@ -6,7 +6,8 @@
 import {
     C, TILE_SIZE, MAP_COLS, MAP_ROWS, ResourceNodeType, UnitType, UnitState,
     BuildingType, BUILDING_DATA, UNIT_DATA, ResourceType, TerrainType,
-    CivilizationType, CIVILIZATION_DATA
+    CivilizationType, CIVILIZATION_DATA,
+    TowerUpgradeType, TOWER_UPGRADE_DATA,
 } from "../config/GameConfig";
 import { TileMap } from "../map/TileMap";
 import { ResourceNode } from "../entities/ResourceNode";
@@ -60,6 +61,8 @@ class SpatialGrid {
 
     /** Get units within range, using grid cells to limit search */
     getInRange(x: number, y: number, range: number): Unit[] {
+        // Safety: prevent crash if coordinates are NaN/Infinity (from invalid AI state)
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(range)) return [];
         const cellRange = Math.ceil(range / GRID_CELL_SIZE) + 1;
         const cx = Math.floor(x / GRID_CELL_SIZE);
         const cy = Math.floor(y / GRID_CELL_SIZE);
@@ -88,6 +91,7 @@ export class EntityManager {
     private spatialGrid = new SpatialGrid();
     freeMode = false;
     fog: FogOfWar | null = null;
+    droppedItems: { itemId: string; x: number; y: number; team: number; timer: number }[] = [];
 
     /** Which team is the local player (defaults to 0, set differently in multiplayer) */
     localPlayerTeam = 0;
@@ -178,8 +182,9 @@ export class EntityManager {
         return this.getAlliance(teamA) !== this.getAlliance(teamB);
     }
 
-    /** Check if two teams are allies (same alliance) */
+    /** Check if two teams are allies (same alliance, but NOT self) */
     isAlly(teamA: number, teamB: number): boolean {
+        if (teamA === teamB) return false;
         return this.getAlliance(teamA) === this.getAlliance(teamB);
     }
 
@@ -259,9 +264,23 @@ export class EntityManager {
         return u;
     }
 
+    /** Check if any alive units occupy the specified tile area */
+    hasUnitsOnTiles(tileX: number, tileY: number, w: number, h: number): boolean {
+        const left = tileX * TILE_SIZE;
+        const top = tileY * TILE_SIZE;
+        const right = (tileX + w) * TILE_SIZE;
+        const bottom = (tileY + h) * TILE_SIZE;
+        for (const u of this.units) {
+            if (!u.alive) continue;
+            if (u.x >= left && u.x < right && u.y >= top && u.y < bottom) return true;
+        }
+        return false;
+    }
+
     spawnBuilding(type: BuildingType, tileX: number, tileY: number, team: number, startBuilt = true, forceCiv?: CivilizationType, forceAge?: number): Building | null {
         const data = BUILDING_DATA[type];
         if (!this.tileMap.canPlace(tileX, tileY, data.size[0], data.size[1])) return null;
+        if (this.hasUnitsOnTiles(tileX, tileY, data.size[0], data.size[1])) return null;
 
         // Clear any resources in the building area (trees, mines, berries)
         const bLeft = tileX * TILE_SIZE;
@@ -271,8 +290,8 @@ export class EntityManager {
         // Clear trees and berries in the building area (gold/stone mines are protected)
         for (const res of this.resources) {
             if (!res.alive) continue;
-            // Only destroy trees and berry bushes — mines and farms are protected
-            if (res.nodeType !== ResourceNodeType.Tree && res.nodeType !== ResourceNodeType.BerryBush) continue;
+            // Only destroy trees — mines are protected
+            if (res.nodeType !== ResourceNodeType.Tree) continue;
             if (res.x >= bLeft - 8 && res.x <= bRight + 8 && res.y >= bTop - 8 && res.y <= bBottom + 8) {
                 res.alive = false;
                 res.amount = 0;
@@ -322,23 +341,19 @@ export class EntityManager {
 
     spawnResource(type: ResourceNodeType, x: number, y: number, amount: number): ResourceNode {
         const r = new ResourceNode(x, y, type, amount);
-        if (type === ResourceNodeType.Farm) r.age = this.playerState.age;
         this.resources.push(r);
 
         // Mark tiles as occupied (units can't walk through trees/mines/etc)
-        // Farms are excluded — villagers need to walk onto them
-        if (type !== ResourceNodeType.Farm) {
-            const [col, row] = this.tileMap.worldToTile(x, y);
-            // Trees are visually large: occupy 2x2 tiles for proper collision
-            if (type === ResourceNodeType.Tree) {
-                this.tileMap.setOccupied(col, row, 2, 2, true);
-            } else if (type === ResourceNodeType.GoldMine || type === ResourceNodeType.StoneMine) {
-                // Mines are visually ~42px diameter (radius 21) → occupy 3x3 tiles (48px)
-                this.tileMap.setOccupied(col - 1, row - 1, 3, 3, true);
-                this.tileMap.setMineOccupied(col - 1, row - 1, 3, 3, true);
-            } else {
-                this.tileMap.setOccupied(col, row, 1, 1, true);
-            }
+        const [col, row] = this.tileMap.worldToTile(x, y);
+        // Trees are visually large: occupy 2x2 tiles for proper collision
+        if (type === ResourceNodeType.Tree) {
+            this.tileMap.setOccupied(col, row, 2, 2, true);
+        } else if (type === ResourceNodeType.GoldMine) {
+            // Mines are visually ~42px diameter (radius 21) → occupy 3x3 tiles (48px)
+            this.tileMap.setOccupied(col - 1, row - 1, 3, 3, true);
+            this.tileMap.setMineOccupied(col - 1, row - 1, 3, 3, true);
+        } else {
+            this.tileMap.setOccupied(col, row, 1, 1, true);
         }
 
         return r;
@@ -409,6 +424,21 @@ export class EntityManager {
             if (dSq < minDistSq) { minDistSq = dSq; closest = u; }
         }
         return closest;
+    }
+
+    /** Find ALL enemy units within range of a point (for splash/AoE damage) */
+    findEnemiesInRange(x: number, y: number, myTeam: number, range: number): Unit[] {
+        const result: Unit[] = [];
+        const rangeSq = range * range;
+        const nearby = this.spatialGrid.getInRange(x, y, range);
+        for (let i = 0; i < nearby.length; i++) {
+            const u = nearby[i];
+            if (!u.alive || !this.isEnemy(myTeam, u.team)) continue;
+            if (u.isStealthed) continue;
+            const dx = u.x - x, dy = u.y - y;
+            if (dx * dx + dy * dy <= rangeSq) result.push(u);
+        }
+        return result;
     }
 
     /** Find an enemy unit at a world position (for right-click attack).
@@ -509,6 +539,54 @@ export class EntityManager {
         return this.findNearestEnemyBuildingInRange(x, y, team, range);
     };
 
+    /** Find enemy building (wall/any) blocking the path between unit and target.
+     *  Searches along the line from (x,y) to (targetX,targetY) for enemy buildings on occupied tiles. */
+    findBlockingWall(x: number, y: number, targetX: number, targetY: number, myTeam: number): Building | null {
+        const dx = targetX - x;
+        const dy = targetY - y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < TILE_SIZE) return null;
+
+        // Sample tiles along the line from unit to target (max 12 tiles)
+        const steps = Math.min(12, Math.ceil(dist / TILE_SIZE));
+        const stepX = dx / steps;
+        const stepY = dy / steps;
+
+        let bestWall: Building | null = null;
+        let bestDist = Infinity;
+
+        for (let i = 1; i <= steps; i++) {
+            const sx = x + stepX * i;
+            const sy = y + stepY * i;
+            const [col, row] = this.tileMap.worldToTile(sx, sy);
+
+            // Check if this tile is occupied by a building
+            if (col >= 0 && col < this.tileMap.cols && row >= 0 && row < this.tileMap.rows
+                && this.tileMap.buildingOcc[row]?.[col]) {
+                // Find which enemy building occupies this tile
+                for (const b of this.buildings) {
+                    if (!b.alive || !this.isEnemy(myTeam, b.team)) continue;
+                    if (col >= b.tileX && col < b.tileX + b.tileW &&
+                        row >= b.tileY && row < b.tileY + b.tileH) {
+                        const d = Math.hypot(b.x - x, b.y - y);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            bestWall = b;
+                        }
+                        break; // Found building for this tile, no need to check more
+                    }
+                }
+                // If we found a wall, return immediately (first blocking building)
+                if (bestWall) return bestWall;
+            }
+        }
+        return bestWall;
+    }
+
+    private _boundFindBlockingWall = (x: number, y: number, targetX: number, targetY: number, myTeam: number) => {
+        return this.findBlockingWall(x, y, targetX, targetY, myTeam);
+    };
+
     // ---- Update all ----
     update(dt: number, particles: ParticleSystem): void {
         // Rebuild spatial grid for this frame
@@ -517,6 +595,9 @@ export class EntityManager {
             if (u.alive) this.spatialGrid.insert(u);
         }
 
+        // FPS FIX: Reset per-frame A* pathfinding budget
+        this.tileMap.resetPathBudget();
+
         // Update units
         for (const u of this.units) {
             // Tick death timer for dead units so they get cleaned up
@@ -524,9 +605,14 @@ export class EntityManager {
                 u.deathTimer -= dt;
                 continue;
             }
+            // Tick invulnerability timer (second chance shield)
+            if (u.invulnerableTimer > 0) u.invulnerableTimer -= dt;
+
             u._allUnits = this.units; // for Magi heal
             u._findNearbyResource = this._boundFindNearbyResource;
+            u._getNearbyUnits = (cx: number, cy: number, range: number) => this.spatialGrid.getInRange(cx, cy, range);
             u._findNearbyUnbuiltBuilding = this._boundFindNearbyUnbuiltBuilding;
+            u._findBlockingWall = this._boundFindBlockingWall;
             u._spawnClone = (sourceUnit: Unit, cx: number, cy: number, duration: number) => {
                 const clone = new Unit(sourceUnit.type, cx, cy, sourceUnit.team, sourceUnit.civilization);
                 clone.age = sourceUnit.age;
@@ -560,7 +646,7 @@ export class EntityManager {
         const combatSepRadius = 22; // separation between enemies in combat
         const sepRadiusSq = sepRadius * sepRadius;
         const combatSepRadiusSq = combatSepRadius * combatSepRadius;
-        const MAX_SEPARATIONS_PER_UNIT = 4; // FPS FIX: Cap checks to prevent O(N^2) in huge clumps
+        const MAX_SEPARATIONS_PER_UNIT = 8; // FPS FIX: Cap checks to prevent O(N^2) in huge clumps
 
         for (const a of this.units) {
             if (!a.alive) continue;
@@ -600,10 +686,17 @@ export class EntityManager {
                     const bothIdle = !areEnemies && a.state === UnitState.Idle && b.state === UnitState.Idle;
                     let idleMul = bothIdle ? 0.05 : 1;
 
-                    const newAx = a.x - nx * overlap * (aBusy ? 0.1 : 1) * idleMul;
-                    const newAy = a.y - ny * overlap * (aBusy ? 0.1 : 1) * idleMul;
-                    const newBx = b.x + nx * overlap * (bBusy ? 0.1 : 1) * idleMul;
-                    const newBy = b.y + ny * overlap * (bBusy ? 0.1 : 1) * idleMul;
+                    // Reduce hard position snapping for moving units, let Boids steering handle separation gracefully
+                    const aMoving = a.state === UnitState.Moving || a.state === UnitState.Returning;
+                    const bMoving = b.state === UnitState.Moving || b.state === UnitState.Returning;
+                    
+                    const aForce = (aBusy ? 0.1 : 1) * idleMul * (aMoving ? 0.1 : 1);
+                    const bForce = (bBusy ? 0.1 : 1) * idleMul * (bMoving ? 0.1 : 1);
+
+                    const newAx = a.x - nx * overlap * aForce;
+                    const newAy = a.y - ny * overlap * aForce;
+                    const newBx = b.x + nx * overlap * bForce;
+                    const newBy = b.y + ny * overlap * bForce;
 
                     const [ac, ar] = this.tileMap.worldToTile(newAx, newAy);
                     const [bc, br] = this.tileMap.worldToTile(newBx, newBy);
@@ -617,10 +710,16 @@ export class EntityManager {
         // Update buildings (training + fire effects + tower attack)
         for (const b of this.buildings) {
             if (!b.alive) continue;
+            // Tick invulnerability timer (second chance shield)
+            if (b.invulnerableTimer > 0) b.invulnerableTimer -= dt;
+            const bts = this.getTeamState(b.team);
+            const hasPopSpace = bts ? bts.hasPopSpace(0) : true;
             const finished = b.update(
                 dt,
                 particles,
                 (x, y, team, range) => this.findNearestEnemy(x, y, team, range),
+                hasPopSpace,
+                (x, y, team, range) => this.findEnemiesInRange(x, y, team, range),
             );
             if (finished) {
                 // Deterministic spawn jitter based on building ID (same on all clients)
@@ -662,32 +761,32 @@ export class EntityManager {
                     if (b.team === 0) {
                         if (spawnedUnit.isVillager) {
                             // Villager voice
-                            audioSystem.playSFXWithPitch('/musics/ElevenLabs_ready_to_work.mp3', 0.5, 0.95 + Math.random() * 0.1);
+                            audioSystem.playSFXWithPitch('./sounds/ElevenLabs_ready_to_work.mp3', 0.5, 0.95 + Math.random() * 0.1);
                         } else if (spawnedUnit.isHero) {
                             // Hero-specific voice lines
                             switch (spawnedUnit.type) {
                                 case UnitType.HeroRagnar:
-                                    audioSystem.playSFXWithPitch('/musics/ElevenLabs_say_valhalla.mp3', 0.6, 0.9 + Math.random() * 0.1);
+                                    audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_valhalla.mp3', 0.6, 0.9 + Math.random() * 0.1);
                                     break;
                                 case UnitType.HeroMusashi:
-                                    audioSystem.playSFXWithPitch('/musics/ElevenLabs_one_strike_one_kill.mp3', 0.6, 0.95 + Math.random() * 0.1);
+                                    audioSystem.playSFXWithPitch('./sounds/ElevenLabs_one_strike_one_kill.mp3', 0.6, 0.95 + Math.random() * 0.1);
                                     break;
                                 case UnitType.HeroQiJiguang:
-                                    audioSystem.playSFXWithPitch('/musics/ElevenLabs_for_the_homeland.mp3', 0.6, 0.95 + Math.random() * 0.1);
+                                    audioSystem.playSFXWithPitch('./sounds/ElevenLabs_for_the_homeland.mp3', 0.6, 0.95 + Math.random() * 0.1);
                                     break;
                                 case UnitType.HeroZarathustra:
-                                    audioSystem.playSFXWithPitch('/musics/ElevenLabs_by_sacred_fire.mp3', 0.6, 0.95 + Math.random() * 0.1);
+                                    audioSystem.playSFXWithPitch('./sounds/ElevenLabs_by_sacred_fire.mp3', 0.6, 0.95 + Math.random() * 0.1);
                                     break;
                                 case UnitType.HeroSpartacus:
-                                    audioSystem.playSFXWithPitch('/musics/ElevenLabs_freedom.mp3', 0.6, 0.9 + Math.random() * 0.1);
+                                    audioSystem.playSFXWithPitch('./sounds/ElevenLabs_freedom.mp3', 0.6, 0.9 + Math.random() * 0.1);
                                     break;
                                 default:
-                                    audioSystem.playSFXWithPitch('/musics/ElevenLabs_say_ready_for_battle.mp3', 0.5, 0.85 + Math.random() * 0.1);
+                                    audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_ready_for_battle.mp3', 0.5, 0.85 + Math.random() * 0.1);
                                     break;
                             }
                         } else {
                             // Regular military voice
-                            audioSystem.playSFXWithPitch('/musics/ElevenLabs_say_ready_for_battle.mp3', 0.5, 0.9 + Math.random() * 0.1);
+                            audioSystem.playSFXWithPitch('./sounds/ElevenLabs_say_ready_for_battle.mp3', 0.5, 0.9 + Math.random() * 0.1);
                         }
                     }
                 }
@@ -748,7 +847,7 @@ export class EntityManager {
                     this.minimapAlerts.push({ x: b.x, y: b.y, timer: 4.0 });
                     this.alertCooldowns.set(b.id + 100000, 3.0);
                     if (b.team === localTeam) {
-                        audioSystem.playSFXWithPitch('/musics/freesound-community-knife-throw-2-88028_ojoqm7vv.mp3', 0.3, 0.5, b.x, b.y);
+                        audioSystem.playSFXWithPitch('./sounds/freesound-community-knife-throw-2-88028_ojoqm7vv.mp3', 0.3, 0.5, b.x, b.y);
                     }
                 }
             }
@@ -812,10 +911,10 @@ export class EntityManager {
             if (!ts) continue;
             if (u.isVillager) {
                 // Apply economy upgrades to villagers (per-resource)
-                u.gatherFoodBonus = ts.getGatherBonus(ResourceType.Food);
-                u.gatherWoodBonus = ts.getGatherBonus(ResourceType.Wood);
+                u.gatherFoodBonus = ts.getGatherBonus(ResourceType.Supplies);
+                u.gatherWoodBonus = ts.getGatherBonus(ResourceType.Supplies);
                 u.gatherGoldBonus = ts.getGatherBonus(ResourceType.Gold);
-                u.gatherStoneBonus = ts.getGatherBonus(ResourceType.Stone);
+                u.gatherStoneBonus = ts.getGatherBonus(ResourceType.Supplies);
                 u.gatherSpeedBonus = ts.gatherSpeedBonus; // fallback
                 u.carryCapacityBonus = ts.carryCapacityBonus;
                 u.speedBonus = ts.villagerSpeedBonus;
@@ -854,16 +953,14 @@ export class EntityManager {
                 if (r.alive) {
                     this.resources[w++] = r;
                 } else {
-                    if (r.nodeType !== ResourceNodeType.Farm) {
-                        const [col, row] = this.tileMap.worldToTile(r.x, r.y);
-                        if (r.nodeType === ResourceNodeType.Tree) {
-                            this.tileMap.setOccupied(col, row, 2, 2, false);
-                        } else if (r.nodeType === ResourceNodeType.GoldMine || r.nodeType === ResourceNodeType.StoneMine) {
-                            this.tileMap.setOccupied(col - 1, row - 1, 3, 3, false);
-                            this.tileMap.setMineOccupied(col - 1, row - 1, 3, 3, false);
-                        } else {
-                            this.tileMap.setOccupied(col, row, 1, 1, false);
-                        }
+                    const [col, row] = this.tileMap.worldToTile(r.x, r.y);
+                    if (r.nodeType === ResourceNodeType.Tree) {
+                        this.tileMap.setOccupied(col, row, 2, 2, false);
+                    } else if (r.nodeType === ResourceNodeType.GoldMine) {
+                        this.tileMap.setOccupied(col - 1, row - 1, 3, 3, false);
+                        this.tileMap.setMineOccupied(col - 1, row - 1, 3, 3, false);
+                    } else {
+                        this.tileMap.setOccupied(col, row, 1, 1, false);
                     }
                 }
             }
@@ -880,12 +977,6 @@ export class EntityManager {
                 } else {
                     this.tileMap.setBuildingOccupied(b.tileX, b.tileY, b.tileW, b.tileH, false);
                     if (b.selected) b.selected = false;
-                    if (b.type === BuildingType.Farm) {
-                        const rx = (b.tileX + 1) * TILE_SIZE;
-                        const ry = (b.tileY + 1) * TILE_SIZE;
-                        const farmRes = this.resources.find(r => r.nodeType === ResourceNodeType.Farm && Math.abs(r.x - rx) < 5 && Math.abs(r.y - ry) < 5);
-                        if (farmRes) farmRes.alive = false;
-                    }
                 }
             }
             this.buildings.length = w;
@@ -929,7 +1020,7 @@ export class EntityManager {
     }
 
     /** Find valid tile that is also away from water (used for Town Centers) */
-    private findValidTileAwayFromWater(col: number, row: number, w: number, h: number, waterMargin = 4): [number, number] | null {
+    findValidTileAwayFromWater(col: number, row: number, w: number, h: number, waterMargin = 4): [number, number] | null {
         for (let radius = 0; radius < 30; radius++) {
             for (let dr = -radius; dr <= radius; dr++) {
                 for (let dc = -radius; dc <= radius; dc++) {
@@ -945,7 +1036,7 @@ export class EntityManager {
         return null;
     }
 
-    private findValidWorldPos(wx: number, wy: number): [number, number] | null {
+    findValidWorldPos(wx: number, wy: number): [number, number] | null {
         const [c, r] = this.tileMap.worldToTile(wx, wy);
         const found = this.findValidTile(c, r);
         if (!found) return null;
@@ -1077,33 +1168,7 @@ export class EntityManager {
             }
         }
 
-        // === Procedural Wild Berry Bushes ===
-        const numBerries = Math.floor((MAP_COLS * MAP_ROWS) / 10000);
-        for (let c = 0; c < numBerries; c++) {
-            const cx = 20 + Math.random() * (MAP_COLS - 40);
-            const cy = 20 + Math.random() * (MAP_ROWS - 40);
-            const count = 8 + Math.floor(Math.random() * 8);
-            for (let i = 0; i < count; i++) {
-                const angle = Math.random() * Math.PI * 2;
-                const dist = Math.random() * 5 * TILE_SIZE;
-                const tx = cx * TILE_SIZE + Math.cos(angle) * dist;
-                const ty = cy * TILE_SIZE + Math.sin(angle) * dist;
-                if (tx < 0 || tx >= MAP_COLS * TILE_SIZE || ty < 0 || ty >= MAP_ROWS * TILE_SIZE) continue;
-                const [tc, tr] = this.tileMap.worldToTile(tx, ty);
-                if (!this.tileMap.isPassable(tc, tr)) continue;
 
-                let tooClose = false;
-                for (const r of this.resources) {
-                    if (r.nodeType === ResourceNodeType.BerryBush) {
-                        const d = Math.hypot(r.x - tx, r.y - ty);
-                        if (d < TILE_SIZE * 1.5) { tooClose = true; break; }
-                    }
-                }
-                if (tooClose) continue;
-
-                this.spawnResource(ResourceNodeType.BerryBush, tx, ty, 100);
-            }
-        }
 
         // === Procedural Gold Mines ===
         const tcPositions: [number, number][] = [];
@@ -1134,33 +1199,14 @@ export class EntityManager {
             }
         }
 
-        // === Procedural Stone Mines ===
-        const numStoneMines = Math.floor((MAP_COLS * MAP_ROWS) / 12000); // 1 per 12k tiles
-        for (let c = 0; c < numStoneMines; c++) {
-            const sx = 20 + Math.random() * (MAP_COLS - 40);
-            const sy = 20 + Math.random() * (MAP_ROWS - 40);
 
-            let tooCloseToTC = false;
-            for (const [tcx, tcy] of tcPositions) {
-                if (Math.hypot(sx - tcx, sy - tcy) < 30) { tooCloseToTC = true; break; }
-            }
-            if (tooCloseToTC) continue;
-
-            const mineCount = 3 + Math.floor(Math.random() * 2); // 3-4 tiles of stone
-            for (let i = 0; i < mineCount; i++) {
-                const ox = (i % 2) * TILE_SIZE * 0.9;
-                const oy = Math.floor(i / 2) * TILE_SIZE * 0.9;
-                const sp = this.findValidWorldPos(sx * TILE_SIZE + ox, sy * TILE_SIZE + oy);
-                if (sp) this.spawnResource(ResourceNodeType.StoneMine, sp[0], sp[1], 600);
-            }
-        }
     }
 
     /**
      * Spawn berry bushes, gold mines, and stone mines around a Town Center
      * in a circular pattern at radius ~6-7 tiles.
      */
-    private spawnResourcesAroundTC(tcCol: number, tcRow: number, tcW: number, tcH: number): void {
+    spawnResourcesAroundTC(tcCol: number, tcRow: number, tcW: number, tcH: number): void {
         // Center of the TC in tile coords
         const centerCol = tcCol + tcW / 2;
         const centerRow = tcRow + tcH / 2;
@@ -1171,16 +1217,7 @@ export class EntityManager {
         // so they don't overlap. Each sector is ~120 degrees apart.
         const baseAngle = Math.random() * Math.PI * 2; // random starting rotation
 
-        // === Berry Bushes — sector 1 (spread in ~120° arc) — CLOSE to TC for early food ===
-        const berryAngleStart = baseAngle;
-        for (let i = 0; i < 8; i++) {
-            const angle = berryAngleStart + (i / 8) * (Math.PI * 0.7) + (Math.random() - 0.5) * 0.4;
-            const dist = (6 + Math.random() * 3) * TILE_SIZE; // 6-9 tiles radius (abundant food)
-            const bx = centerX + Math.cos(angle) * dist;
-            const by = centerY + Math.sin(angle) * dist;
-            const bp = this.findValidWorldPos(bx, by);
-            if (bp) this.spawnResource(ResourceNodeType.BerryBush, bp[0], bp[1], 100);
-        }
+
 
         // === Gold Mines — sector 2 (~120° offset from berries) — FAR from TC ===
         const goldAngle = baseAngle + Math.PI * 2 / 3;
@@ -1200,23 +1237,7 @@ export class EntityManager {
             }
         }
 
-        // === Stone Mines — sector 3 (~240° offset from berries) — FAR from TC ===
-        const stoneAngle = baseAngle + Math.PI * 4 / 3;
-        const stoneDist = (11 + Math.random() * 2) * TILE_SIZE; // 11-13 tiles radius (far from TC)
-        const stoneCenterX = centerX + Math.cos(stoneAngle) * stoneDist;
-        const stoneCenterY = centerY + Math.sin(stoneAngle) * stoneDist;
-        for (let i = 0; i < 3; i++) {
-            const ox = (i % 2) * TILE_SIZE * 0.9;
-            const oy = Math.floor(i / 2) * TILE_SIZE * 0.9;
-            const sp = this.findValidWorldPos(stoneCenterX + ox, stoneCenterY + oy);
-            if (sp) {
-                // Safety check: don't spawn within 8 tiles of TC center
-                const distToTC = Math.hypot(sp[0] - centerX, sp[1] - centerY);
-                if (distToTC > 8 * TILE_SIZE) {
-                    this.spawnResource(ResourceNodeType.StoneMine, sp[0], sp[1], 600);
-                }
-            }
-        }
+
     }
 
     // ---- Render ----
@@ -1274,8 +1295,7 @@ export class EntityManager {
         for (const r of this.resources) {
             if (r.x < camX - 40 || r.x > camX + vpW + 40) continue;
             if (r.y < camY - 40 || r.y > camY + vpH + 40) continue;
-            // Hide enemy farms that spawn as ResourceNodes
-            if (r.nodeType === ResourceNodeType.Farm && this.fog && !this.fog.isVisible(r.x, r.y)) continue;
+
             pushItem(r.y + r.radius, r);
         }
 
@@ -1323,7 +1343,7 @@ export class EntityManager {
         const sy = mh / (MAP_ROWS * TILE_SIZE);
         // Resources
         for (const r of this.resources) {
-            if (r.nodeType === ResourceNodeType.Farm && this.fog && !this.fog.isVisible(r.x, r.y)) continue;
+
             ctx.fillStyle = r.minimapColor;
             ctx.fillRect(mx + r.x * sx - 1, my + r.y * sy - 1, 2, 2);
         }
@@ -1476,12 +1496,7 @@ export class EntityManager {
 
                 const b = this.spawnBuilding(buildingType as BuildingType, tileX, tileY, team, false);
                 if (b) {
-                    // If it's a farm, also spawn a farm resource node
-                    if (buildingType === BuildingType.Farm) {
-                        const fx = (tileX + 1) * TILE_SIZE;
-                        const fy = (tileY + 1) * TILE_SIZE;
-                        this.spawnResource(ResourceNodeType.Farm, fx, fy, 300);
-                    }
+
 
                     // Assign builders: use explicit builderIds if provided, else find nearby idle villagers
                     let builders: any[] = [];
@@ -1615,6 +1630,23 @@ export class EntityManager {
                     u.buildTarget = null;
                     u.pathWaypoints = [];
                     u.manualCommand = true;
+                }
+                break;
+            }
+
+            case 'TOWER_UPGRADE': {
+                const { buildingId, upgradeType } = cmd.data;
+                const building = this.buildings.find(b => b.alive && b.id === buildingId && b.team === team);
+                if (building && building.type === BuildingType.Tower) {
+                    const upgType = upgradeType as TowerUpgradeType;
+                    const upgData = TOWER_UPGRADE_DATA[upgType];
+                    if (upgData) {
+                        const towerTS = this.getTeamState(team);
+                        if (towerTS && towerTS.canAfford(upgData.cost)) {
+                            towerTS.spend(upgData.cost);
+                            building.startTowerUpgrade(upgType);
+                        }
+                    }
                 }
                 break;
             }

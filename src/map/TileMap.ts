@@ -4,9 +4,12 @@
 // ============================================================
 
 import { TILE_SIZE, MAP_COLS, MAP_ROWS, TerrainType, C } from "../config/GameConfig";
+import { IS_IOS, PLATFORM } from "../config/PlatformConfig";
+import { t } from "../i18n/i18n";
 
 import { generateTerrain } from "./MapGenerator";
 import { findPath as findPathA } from "./Pathfinder";
+import { fbm2, lerpColor } from "./NoiseUtil";
 
 export enum MapPreset {
     Grasslands = 'grasslands',
@@ -25,13 +28,13 @@ export interface MapInfo {
 }
 
 export const MAP_LIST: MapInfo[] = [
-    { preset: MapPreset.Grasslands, name: 'Đồng Cỏ', description: 'Địa hình đồng bằng rộng lớn với ao nước nhỏ. Tài nguyên phong phú.' },
-    { preset: MapPreset.Islands, name: 'Quần Đảo', description: 'Nhiều hồ nước lớn chia cắt bản đồ. Di chuyển hạn chế, chiến lược phòng thủ.' },
-    { preset: MapPreset.Desert, name: 'Sa Mạc', description: 'Địa hình cát nóng bỏng với ốc đảo hiếm. Tài nguyên khan hiếm.' },
-    { preset: MapPreset.Highland, name: 'Cao Nguyên', description: 'Núi đá và khe nước xen kẽ. Vị trí phòng thủ tốt nhưng khó mở rộng.' },
-    { preset: MapPreset.Tundra, name: 'Đồng Băng', description: 'Vùng đất đóng băng với hồ nước lạnh. Tài nguyên tập trung thành cụm.' },
-    { preset: MapPreset.Swamp, name: 'Đầm Lầy', description: 'Đất ẩm ướt với nhiều ao nước nhỏ rải rác. Di chuyển chậm, khó xây dựng.' },
-    { preset: MapPreset.Volcanic, name: 'Núi Lửa', description: 'Vùng đất nóng với đá núi lửa. Tài nguyên khoáng sản dồi dào.' },
+    { preset: MapPreset.Grasslands, get name() { return t('map.grasslands'); }, get description() { return t('map.grasslands.desc'); } },
+    { preset: MapPreset.Islands, get name() { return t('map.islands'); }, get description() { return t('map.islands.desc'); } },
+    { preset: MapPreset.Desert, get name() { return t('map.desert'); }, get description() { return t('map.desert.desc'); } },
+    { preset: MapPreset.Highland, get name() { return t('map.highland'); }, get description() { return t('map.highland.desc'); } },
+    { preset: MapPreset.Tundra, get name() { return t('map.tundra'); }, get description() { return t('map.tundra.desc'); } },
+    { preset: MapPreset.Swamp, get name() { return t('map.swamp'); }, get description() { return t('map.swamp.desc'); } },
+    { preset: MapPreset.Volcanic, get name() { return t('map.volcanic'); }, get description() { return t('map.volcanic.desc'); } },
 ];
 
 export class TileMap {
@@ -50,6 +53,8 @@ export class TileMap {
     private terrainCanvas: OffscreenCanvas | HTMLCanvasElement | null = null;
     private terrainCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
     private terrainDirty = true;
+    /** Scale factor for terrain cache (0.5 on iOS to fit canvas limits) */
+    private terrainScale = IS_IOS ? 0.5 : 1;
 
     // ---- Minimap cache ----
     private minimapCanvas: OffscreenCanvas | HTMLCanvasElement | null = null;
@@ -75,29 +80,38 @@ export class TileMap {
     /** Performs heavy setup asynchronously, yielding to the browser to report progress. */
     async asyncInit(onProgress: (percent: number, stepName: string) => void): Promise<void> {
         // Step 1: Procedural Map Generation (Sync for now, but wrapped to let UI breathe before)
-        onProgress(5, "Đang định hình địa hình...");
+        onProgress(5, t('loading.terrain'));
         await new Promise(r => setTimeout(r, 10)); // Yield
         this.generate(this.mapPreset);
 
         // Step 2: Build Terrain Cache (Heavy Canvas operations - done in chunks)
-        onProgress(15, "Đang sơn màu bề mặt...");
+        onProgress(15, t('loading.painting'));
         await this.buildTerrainCacheAsync((p) => {
             // Map 15% to 65% for terrain rendering
-            onProgress(15 + p * 0.5, "Đang vẽ vùng đất...");
+            onProgress(15 + p * 0.5, t('loading.drawing'));
         });
     }
 
     /** Public: build terrain cache only (call after generate) */
     async buildTerrainCache(onProgress: (percent: number, stepName: string) => void): Promise<void> {
-        onProgress(15, "Đang sơn màu bề mặt...");
+        onProgress(15, t('loading.painting'));
         await this.buildTerrainCacheAsync((p) => {
-            onProgress(15 + p * 0.5, "Đang vẽ vùng đất...");
+            onProgress(15 + p * 0.5, t('loading.drawing'));
         });
     }
 
     private async buildTerrainCacheAsync(onProgress: (percent: number) => void): Promise<void> {
-        const w = this.cols * TILE_SIZE;
-        const h = this.rows * TILE_SIZE;
+        // On iOS, check if full-res canvas would exceed pixel limit
+        const fullW = this.cols * TILE_SIZE;
+        const fullH = this.rows * TILE_SIZE;
+        if (fullW * fullH > PLATFORM.maxCanvasPixels) {
+            // Scale down to fit within canvas limits
+            this.terrainScale = Math.sqrt(PLATFORM.maxCanvasPixels / (fullW * fullH)) * 0.9; // 10% safety margin
+            this.terrainScale = Math.max(0.25, Math.min(1, this.terrainScale));
+            console.log(`[TileMap] Terrain cache scaled to ${(this.terrainScale * 100).toFixed(0)}% for iOS (${fullW}×${fullH} → ${Math.round(fullW * this.terrainScale)}×${Math.round(fullH * this.terrainScale)})`);
+        }
+        const w = Math.round(fullW * this.terrainScale);
+        const h = Math.round(fullH * this.terrainScale);
         try {
             this.terrainCanvas = new OffscreenCanvas(w, h);
         } catch {
@@ -107,6 +121,11 @@ export class TileMap {
         }
         this.terrainCtx = this.terrainCanvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
+        // Apply scale transform so tile drawing code works unchanged
+        if (this.terrainScale !== 1 && this.terrainCtx) {
+            this.terrainCtx.scale(this.terrainScale, this.terrainScale);
+        }
+
         await this.redrawTerrainCacheChunked(onProgress);
     }
 
@@ -115,231 +134,271 @@ export class TileMap {
         const ctx = this.terrainCtx;
         const TS = TILE_SIZE;
 
+        // ===== PIXEL ART PALETTE — Fixed colors, no continuous RGB =====
+        const PAL = {
+            grass1: '#2d6b1a', grass2: '#337a1e', grass3: '#256012',
+            grassDk1: '#1a4a0e', grassDk2: '#1e5612', grassDk3: '#153e0a',
+            grassLt1: '#3d8a28', grassLt2: '#48982e', grassLt3: '#358022',
+            grassFlower: '#2f7a1c',
+            grassBlade1: '#1a4a0e', grassBlade2: '#2a6a1a', grassBladeTip: '#4a8a38',
+            mushCap: '#cc5544', mushStem: '#c8a070',
+            stone1: '#8a8a78', stone2: '#9a9a88', stone3: '#7a7a6a',
+            leaf1: '#aa7730', leaf2: '#cc9940',
+            rock1: '#585858', rock2: '#666662', rock3: '#4e4e4a',
+            rockHi: '#7a7a76', rockCrack: '#444440', rockMoss: '#4a6a30',
+            dirt1: '#5c4c30', dirt2: '#6a5838', dirt3: '#4e3e24',
+            dirtDk1: '#3a2a18', dirtDk2: '#453520', dirtWet: '#2e2010',
+            twig: '#7a5a30',
+            sand1: '#b0a068', sand2: '#c0b078', sand3: '#9a8a58',
+            sandHi: '#d0c088', sandSh: '#887848',
+            water1: '#1a4a70', water2: '#245880', water3: '#164068',
+            waterShallow: '#2a6090', waterFoam: '#8ab8d8', waterCaustic: '#4a90c0',
+            lilyPad: '#2a7a28', lilyFlower: '#ff88aa',
+            bridge1: '#6a4a22', bridge2: '#8a6a38', bridgePlank: '#7a5a30',
+            bridgeHi: '#a08050', bridgeNail: '#3a3030',
+            flowerRed: '#ee4466', flowerYel: '#eedd44', flowerWht: '#ffffff',
+            flowerPnk: '#ff88cc', flowerOrg: '#ffaa22', flowerPrp: '#aa66ff',
+            flowerCenter: '#ffee00', stem: '#1a5a14',
+        };
+
         const tileHash = (c: number, r: number): number => {
             let h = (c * 2654435761 + r * 2246822519) & 0x7fffffff;
             h = ((h >> 16) ^ h) * 0x45d9f3b;
             return (h & 0x7fffffff) / 0x7fffffff;
         };
-        const blendHash = (c: number, r: number): number => {
-            return (tileHash(c, r) * 0.45 + tileHash(c + 1, r) * 0.14 +
-                tileHash(c - 1, r) * 0.14 + tileHash(c, r + 1) * 0.09 +
-                tileHash(c, r - 1) * 0.09 + tileHash(c + 1, r + 1) * 0.045 +
-                tileHash(c - 1, r - 1) * 0.045);
-        };
-        const varyColor = (baseR: number, baseG: number, baseB: number, noise: number, range: number): string => {
-            const shift = (noise - 0.5) * range;
-            const cr = Math.max(0, Math.min(255, baseR + shift * 0.7));
-            const cg = Math.max(0, Math.min(255, baseG + shift));
-            const cb = Math.max(0, Math.min(255, baseB + shift * 0.5));
-            return `rgb(${cr | 0},${cg | 0},${cb | 0})`;
-        };
 
-        const chunkSize = 40; // Render 40 rows at a time
+        const pickPal = (arr: string[], h: number): string => arr[Math.floor(h * arr.length) % arr.length];
 
-        for (let chunkStart = 0; chunkStart < this.rows; chunkStart += chunkSize) {
-            const chunkEnd = Math.min(this.rows, chunkStart + chunkSize);
+        const terrainLayers = [
+            [TerrainType.Water],
+            [TerrainType.Sand],
+            [TerrainType.Dirt, TerrainType.DirtDark],
+            [TerrainType.Grass, TerrainType.GrassLight, TerrainType.GrassDark, TerrainType.GrassFlower],
+            [TerrainType.Rock],
+            [TerrainType.Bridge]
+        ];
 
-            for (let r = chunkStart; r < chunkEnd; r++) {
-                for (let c = 0; c < this.cols; c++) {
-                    const t = this.terrain[r][c];
-                    const x = c * TS, y = r * TS;
-                    const h = tileHash(c, r);
-                    const bh = blendHash(c, r);
-                    const h2 = tileHash(c * 7 + 3, r * 13 + 5);
-                    const h3 = tileHash(c * 11 + 7, r * 3 + 11);
+        const chunkSize = 40;
 
-                    // ===== BASE FILL — gloomy, moody palette =====
+        for (const layerTypes of terrainLayers) {
+            for (let chunkStart = 0; chunkStart < this.rows; chunkStart += chunkSize) {
+                const chunkEnd = Math.min(this.rows, chunkStart + chunkSize);
+
+                for (let r = chunkStart; r < chunkEnd; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        const t = this.terrain[r][c];
+                        if (!layerTypes.includes(t)) continue;
+
+                        const x = c * TS, y = r * TS;
+                        const h = tileHash(c, r);
+                        const h2 = tileHash(c * 7 + 3, r * 13 + 5);
+                        const h3 = tileHash(c * 11 + 7, r * 3 + 11);
+
+                    // ===== NOISE-BASED BASE FILL (breaks grid pattern) =====
+                    // Use continuous noise at world coords to smoothly vary the base color.
+                    // This makes adjacent tiles flow into each other instead of showing sharp edges.
+                    const worldCX = x + TS * 0.5; // center of tile in world coords
+                    const worldCY = y + TS * 0.5;
+                    const n1 = fbm2(worldCX, worldCY, 40); // large-scale variation
+                    const n2 = fbm2(worldCX + 500, worldCY + 300, 18); // finer variation
+
                     switch (t) {
-                        case TerrainType.Grass:
-                            ctx.fillStyle = varyColor(38, 92, 28, bh, 18); break;
-                        case TerrainType.GrassDark:
-                            ctx.fillStyle = varyColor(22, 58, 14, bh, 14); break;
-                        case TerrainType.GrassLight:
-                            ctx.fillStyle = varyColor(48, 110, 35, bh, 20); break;
+                        case TerrainType.Grass: {
+                            const colors = [PAL.grass1, PAL.grass2, PAL.grass3];
+                            const dark = [PAL.grassDk1, PAL.grassDk2];
+                            const base = lerpColor(colors[0], colors[2], n1);
+                            ctx.fillStyle = n2 < 0.3 ? lerpColor(base, dark[0], n2 * 1.5) : base;
+                            break;
+                        }
+                        case TerrainType.GrassDark: {
+                            ctx.fillStyle = lerpColor(PAL.grassDk1, PAL.grassDk3, n1);
+                            break;
+                        }
+                        case TerrainType.GrassLight: {
+                            ctx.fillStyle = lerpColor(PAL.grassLt1, PAL.grassLt3, n1);
+                            break;
+                        }
                         case TerrainType.GrassFlower:
-                            ctx.fillStyle = varyColor(40, 96, 30, bh, 16); break;
+                            ctx.fillStyle = lerpColor(PAL.grassFlower, PAL.grass2, n2 * 0.3);
+                            break;
                         case TerrainType.Sand:
-                            ctx.fillStyle = varyColor(142, 128, 88, bh, 18); break;
+                            ctx.fillStyle = lerpColor(PAL.sand1, PAL.sand3, n1);
+                            break;
                         case TerrainType.Dirt:
-                            ctx.fillStyle = varyColor(72, 60, 38, bh, 14); break;
+                            ctx.fillStyle = lerpColor(PAL.dirt1, PAL.dirt3, n1);
+                            break;
                         case TerrainType.DirtDark:
-                            ctx.fillStyle = varyColor(45, 36, 22, bh, 12); break;
+                            ctx.fillStyle = lerpColor(PAL.dirtDk1, PAL.dirtDk2, n1);
+                            break;
                         case TerrainType.Rock:
-                            ctx.fillStyle = varyColor(68, 68, 64, bh, 16); break;
+                            ctx.fillStyle = lerpColor(PAL.rock1, PAL.rock3, n1);
+                            break;
                         case TerrainType.Water: {
-                            // Depth gradient: deeper towards center of water bodies
-                            let waterNeighborCount = 0;
-                            if (r > 0 && this.terrain[r - 1][c] === TerrainType.Water) waterNeighborCount++;
-                            if (r < this.rows - 1 && this.terrain[r + 1][c] === TerrainType.Water) waterNeighborCount++;
-                            if (c > 0 && this.terrain[r][c - 1] === TerrainType.Water) waterNeighborCount++;
-                            if (c < this.cols - 1 && this.terrain[r][c + 1] === TerrainType.Water) waterNeighborCount++;
-                            const depthFactor = waterNeighborCount / 4;
-                            const wR = 12 + (1 - depthFactor) * 14;
-                            const wG = 55 + (1 - depthFactor) * 25;
-                            const wB = 95 + (1 - depthFactor) * 20;
-                            ctx.fillStyle = varyColor(wR, wG, wB, bh, 14);
+                            let wn = 0;
+                            if (r > 0 && this.terrain[r - 1][c] === TerrainType.Water) wn++;
+                            if (r < this.rows - 1 && this.terrain[r + 1][c] === TerrainType.Water) wn++;
+                            if (c > 0 && this.terrain[r][c - 1] === TerrainType.Water) wn++;
+                            if (c < this.cols - 1 && this.terrain[r][c + 1] === TerrainType.Water) wn++;
+                            ctx.fillStyle = wn >= 3 ? PAL.water1 : (wn >= 2 ? PAL.water2 : PAL.waterShallow);
                             break;
                         }
                         case TerrainType.Bridge:
-                            ctx.fillStyle = varyColor(72, 54, 30, bh, 12); break;
+                            ctx.fillStyle = PAL.bridgePlank; break;
                     }
-                    ctx.fillRect(x, y, TS, TS);
-
-                    // ===== ORGANIC DITHERED TRANSITIONS =====
-                    // Blend edges between different terrain types for organic look
-                    if (t !== TerrainType.Water && t !== TerrainType.Bridge) {
-                        const neighbors = [
-                            r > 0 ? this.terrain[r - 1][c] : t,
-                            r < this.rows - 1 ? this.terrain[r + 1][c] : t,
-                            c > 0 ? this.terrain[r][c - 1] : t,
-                            c < this.cols - 1 ? this.terrain[r][c + 1] : t
-                        ];
-                        for (let ni = 0; ni < 4; ni++) {
-                            if (neighbors[ni] !== t && neighbors[ni] !== TerrainType.Water && neighbors[ni] !== TerrainType.Bridge) {
-                                // Scatter a few pixels of neighbor color along the edge
-                                const edgeHash = tileHash(c * 19 + ni, r * 23 + ni);
-                                const dotCount = 2 + Math.floor(edgeHash * 3);
-                                for (let d = 0; d < dotCount; d++) {
-                                    const dh = tileHash(c * 7 + d + ni * 31, r * 11 + d + ni * 17);
-                                    let dx: number, dy: number;
-                                    if (ni === 0) { dx = x + dh * TS; dy = y + dh * 3; }
-                                    else if (ni === 1) { dx = x + dh * TS; dy = y + TS - 1 - dh * 3; }
-                                    else if (ni === 2) { dx = x + dh * 3; dy = y + dh * TS; }
-                                    else { dx = x + TS - 1 - dh * 3; dy = y + dh * TS; }
-                                    ctx.fillStyle = `rgba(0,0,0,${0.04 + dh * 0.06})`;
-                                    ctx.fillRect(dx, dy, 1, 1);
+                    // ===== ORGANIC LAYERED FILL =====
+                    if (t === TerrainType.Water || t === TerrainType.Bridge) {
+                        ctx.fillRect(x, y, TS, TS);
+                    } else {
+                        // Organic overlapping shape based on noise to completely break the 16x16 grid
+                        const jitterX = Math.round((fbm2(worldCX, worldCY, 22) - 0.5) * 10);
+                        const jitterY = Math.round((fbm2(worldCY, worldCX, 22) - 0.5) * 10);
+                        
+                        // TỐI ƯU HOÁ: Thay vì gọi hàm vẽ Path (roundRect) cực kỳ chậm,
+                        // Vẽ 2 hình chữ nhật hình chữ thập mập (cross) để giả lập hình tròn/blob.
+                        // Hàm fillRect() được tăng tốc bằng GPU, nhanh hơn tạo Path ~50 lần.
+                        const drawX = x - 3 + jitterX;
+                        const drawY = y - 3 + jitterY;
+                        const drawS = TS + 6;
+                        
+                        // Vertical block
+                        ctx.fillRect(drawX + 2, drawY, drawS - 4, drawS);
+                        // Horizontal block
+                        ctx.fillRect(drawX, drawY + 2, drawS, drawS - 4);
+                        
+                        // Scatter pixels around edge to blend organically
+                        if (h < 0.5) {
+                            ctx.fillStyle = ctx.fillStyle; // Keep base color
+                            for (let p = 0; p < 5; p++) {
+                                const px = x - 6 + Math.floor(tileHash(c * p + 1, r * 3) * (TS + 12));
+                                const py = y - 6 + Math.floor(tileHash(c * 5, r * p + 2) * (TS + 12));
+                                if (Math.hypot(px - worldCX, py - worldCY) > TS / 2) {
+                                    ctx.fillRect(px, py, 1, 1);
                                 }
                             }
                         }
                     }
 
-                    // ===== DIRECTIONAL LIGHTING: dim moonlight from top-left =====
-                    if (t !== TerrainType.Water) {
-                        // Faint top-left highlight (muted moonlight)
-                        ctx.fillStyle = 'rgba(180,200,220,0.03)';
-                        ctx.fillRect(x, y, TS / 2, TS / 2);
-                        // Stronger bottom-right shadow for depth
-                        ctx.fillStyle = 'rgba(0,0,0,0.06)';
-                        ctx.fillRect(x + TS / 2, y + TS / 2, TS / 2, TS / 2);
-                    }
 
-                    // ===== DETAILED DECORATIONS PER TERRAIN TYPE =====
+                    // ===== PIXEL ART DECORATIONS =====
                     if (t === TerrainType.Grass) {
                         if (h < 0.45) {
-                            // Grass blade tufts — multiple varieties
                             const variety = Math.floor(h * 10) % 4;
-                            const gx = x + 2 + h * (TS - 5);
+                            const gx = x + 2 + Math.floor(h * (TS - 5));
                             const gy = y + TS - 3;
-
                             if (variety === 0) {
-                                // Tall grass cluster
-                                ctx.fillStyle = '#1a4a0e';
+                                ctx.fillStyle = PAL.grassBlade1;
                                 ctx.fillRect(gx, gy - 6, 1, 6);
                                 ctx.fillRect(gx + 2, gy - 5, 1, 5);
                                 ctx.fillRect(gx + 4, gy - 4, 1, 4);
-                                // Blade tips (lighter)
-                                ctx.fillStyle = '#2a6a1a';
+                                ctx.fillStyle = PAL.grassBladeTip;
                                 ctx.fillRect(gx, gy - 6, 1, 1);
                                 ctx.fillRect(gx + 2, gy - 5, 1, 1);
                             } else if (variety === 1) {
-                                // Short stubby grass
-                                ctx.fillStyle = '#1e5010';
+                                ctx.fillStyle = PAL.grassBlade1;
                                 ctx.fillRect(gx, gy - 3, 1, 3);
                                 ctx.fillRect(gx + 2, gy - 2, 1, 2);
                                 ctx.fillRect(gx - 1, gy - 4, 1, 4);
                             } else if (variety === 2) {
-                                // Clover-like patch
-                                ctx.fillStyle = '#14400a';
+                                ctx.fillStyle = PAL.grassDk1;
                                 ctx.fillRect(gx, gy - 3, 3, 3);
-                                ctx.fillStyle = '#2a7020';
+                                ctx.fillStyle = PAL.grassBladeTip;
                                 ctx.fillRect(gx, gy - 3, 2, 2);
                             } else {
-                                // Single blade with seed head
-                                ctx.fillStyle = '#184810';
+                                ctx.fillStyle = PAL.grassBlade1;
                                 ctx.fillRect(gx + 1, gy - 5, 1, 5);
                                 ctx.fillStyle = '#7a6a38';
                                 ctx.fillRect(gx, gy - 6, 3, 2);
                             }
-
-                            // Rare mushroom
                             if (h < 0.06) {
-                                ctx.fillStyle = '#c8a070';
+                                ctx.fillStyle = PAL.mushStem;
                                 ctx.fillRect(gx + 7, gy - 1, 1, 2);
-                                ctx.fillStyle = '#dd6644';
+                                ctx.fillStyle = PAL.mushCap;
                                 ctx.fillRect(gx + 6, gy - 2, 3, 1);
-                                // Mushroom highlight
                                 ctx.fillStyle = '#ee8866';
                                 ctx.fillRect(gx + 6, gy - 2, 1, 1);
                             }
-
-                            // Rare tiny stone
                             if (h > 0.38 && h < 0.42) {
-                                ctx.fillStyle = '#8a8a78';
-                                ctx.fillRect(x + h2 * 10, y + h3 * 10 + 3, 2, 2);
-                                ctx.fillStyle = '#9a9a88';
-                                ctx.fillRect(x + h2 * 10, y + h3 * 10 + 3, 1, 1);
+                                ctx.fillStyle = PAL.stone1;
+                                ctx.fillRect(x + Math.floor(h2 * 10), y + Math.floor(h3 * 10) + 3, 2, 2);
+                                ctx.fillStyle = PAL.stone2;
+                                ctx.fillRect(x + Math.floor(h2 * 10), y + Math.floor(h3 * 10) + 3, 1, 1);
                             }
                         }
-                        // Extra: dandelion puff (very rare)
                         if (h > 0.93 && h < 0.96) {
-                            const dx = x + h2 * (TS - 4) + 2;
-                            const dy = y + h3 * (TS - 6) + 2;
-                            ctx.fillStyle = '#286818';
-                            ctx.fillRect(dx, dy + 3, 1, 3); // stem
-                            ctx.fillStyle = 'rgba(255,255,250,0.7)';
-                            ctx.fillRect(dx - 1, dy, 3, 3); // puff
-                            ctx.fillRect(dx, dy - 1, 1, 1); // top wisp
+                            const dx = x + Math.floor(h2 * (TS - 4)) + 2;
+                            const dy = y + Math.floor(h3 * (TS - 6)) + 2;
+                            ctx.fillStyle = PAL.grassBlade1;
+                            ctx.fillRect(dx, dy + 3, 1, 3);
+                            ctx.fillStyle = '#ffffee';
+                            ctx.fillRect(dx - 1, dy, 3, 3);
+                            ctx.fillRect(dx, dy - 1, 1, 1);
                         }
-                        // Extra: fallen leaf (rare)
                         if (h > 0.82 && h < 0.86) {
-                            const lx = x + h2 * 10 + 2;
-                            const ly = y + h3 * 8 + 4;
-                            ctx.fillStyle = '#aa7730';
+                            const lx = x + Math.floor(h2 * 10) + 2;
+                            const ly = y + Math.floor(h3 * 8) + 4;
+                            ctx.fillStyle = PAL.leaf1;
                             ctx.fillRect(lx, ly, 3, 2);
-                            ctx.fillStyle = '#cc9940';
+                            ctx.fillStyle = PAL.leaf2;
                             ctx.fillRect(lx + 1, ly, 1, 1);
                         }
-                        // Extra: tiny ant trail (very rare)
                         if (h > 0.03 && h < 0.05) {
                             ctx.fillStyle = '#2a2218';
                             for (let ai = 0; ai < 4; ai++) {
                                 ctx.fillRect(x + 3 + ai * 3, y + 10 + (ai % 2), 1, 1);
                             }
                         }
+
+                        // ===== CROSS-TILE GRASS TUFTS (overlap tile boundaries) =====
+                        // These decorations are placed near tile edges and may extend
+                        // 1-2px beyond the tile boundary, breaking the visual grid.
+                        const edgeN = fbm2(worldCX, worldCY, 28);
+                        if (edgeN > 0.6) {
+                            ctx.fillStyle = PAL.grassBlade2;
+                            // Bottom-edge tuft (extends into tile below)
+                            ctx.fillRect(x + Math.floor(h2 * 12) + 2, y + TS - 1, 1, 3);
+                            ctx.fillRect(x + Math.floor(h2 * 12) + 4, y + TS - 1, 1, 2);
+                        }
+                        if (edgeN < 0.35) {
+                            ctx.fillStyle = PAL.grassBlade1;
+                            // Right-edge tuft (extends into tile right)
+                            ctx.fillRect(x + TS - 1, y + Math.floor(h3 * 10) + 3, 2, 1);
+                            ctx.fillRect(x + TS - 1, y + Math.floor(h3 * 10) + 5, 3, 1);
+                        }
+                        // Scattered noise-based micro-dots to break up flat areas
+                        if (n2 > 0.55 && n2 < 0.70) {
+                            ctx.fillStyle = PAL.grassDk1;
+                            const dotX = x + Math.floor(n1 * 12) + 2;
+                            const dotY = y + Math.floor(n2 * 10) + 3;
+                            ctx.fillRect(dotX, dotY, 1, 1);
+                            ctx.fillRect(dotX + 3, dotY + 2, 1, 1);
+                        }
                     } else if (t === TerrainType.GrassFlower) {
                         if (h < 0.75) {
-                            // Rich diverse flower garden
-                            const colors = ['#ee4466', '#eedd44', '#ffffff', '#ff88cc', '#ffaa22', '#aa66ff', '#66ccff', '#ff6688', '#88ddff'];
+                            const colors = [PAL.flowerRed, PAL.flowerYel, PAL.flowerWht, PAL.flowerPnk, PAL.flowerOrg, PAL.flowerPrp];
                             const flowerCount = 2 + Math.floor(h * 5);
                             for (let i = 0; i < flowerCount; i++) {
                                 const fh = tileHash(c * 31 + i, r * 17 + i);
                                 const fh2 = tileHash(c + i * 7, r + i * 13);
-                                ctx.fillStyle = colors[Math.floor(fh * colors.length)];
-                                const fx = x + 2 + fh * (TS - 5);
-                                const fy = y + 2 + fh2 * (TS - 5);
-
+                                ctx.fillStyle = pickPal(colors, fh);
+                                const fx = x + 2 + Math.floor(fh * (TS - 5));
+                                const fy = y + 2 + Math.floor(fh2 * (TS - 5));
                                 if (fh < 0.5) {
-                                    // 4-petal flower
                                     ctx.fillRect(fx, fy, 2, 2);
                                     ctx.fillRect(fx - 1, fy + 1, 1, 1);
                                     ctx.fillRect(fx + 2, fy, 1, 1);
                                     ctx.fillRect(fx + 1, fy - 1, 1, 1);
                                     ctx.fillRect(fx, fy + 2, 1, 1);
-                                    // Center dot
-                                    ctx.fillStyle = '#ffee00';
+                                    ctx.fillStyle = PAL.flowerCenter;
                                     ctx.fillRect(fx, fy, 1, 1);
                                 } else {
-                                    // Small daisy
                                     ctx.fillRect(fx, fy, 3, 1);
                                     ctx.fillRect(fx + 1, fy - 1, 1, 3);
-                                    ctx.fillStyle = '#ffdd00';
+                                    ctx.fillStyle = PAL.flowerCenter;
                                     ctx.fillRect(fx + 1, fy, 1, 1);
                                 }
-                                // Stem
-                                ctx.fillStyle = '#1a5a14';
+                                ctx.fillStyle = PAL.stem;
                                 ctx.fillRect(fx + 1, fy + 2, 1, 2);
                             }
-                            // Small butterfly on very rare tiles
                             if (h < 0.04) {
                                 ctx.fillStyle = '#ff88dd';
                                 ctx.fillRect(x + 8, y + 3, 2, 1);
@@ -349,325 +408,245 @@ export class TileMap {
                         }
                     } else if (t === TerrainType.GrassLight) {
                         if (h < 0.5) {
-                            // Lush meadow grass variety
-                            const fx = x + h * (TS - 5);
-                            const fy = y + h2 * (TS - 5);
-                            // Tall blades with sway
-                            ctx.fillStyle = '#358028';
+                            const fx = x + Math.floor(h * (TS - 5));
+                            const fy = y + Math.floor(h2 * (TS - 5));
+                            ctx.fillStyle = PAL.grassLt1;
                             ctx.fillRect(fx, fy, 1, 5);
                             ctx.fillRect(fx + 3, fy + 1, 1, 4);
-                            // Light tips catching dim light
-                            ctx.fillStyle = '#5aa840';
+                            ctx.fillStyle = PAL.grassBladeTip;
                             ctx.fillRect(fx, fy, 1, 1);
                             ctx.fillRect(fx + 3, fy + 1, 1, 1);
-                            // Dew drops (very rare)
                             if (h < 0.08) {
-                                ctx.fillStyle = 'rgba(180,220,255,0.5)';
+                                ctx.fillStyle = '#b0dcff';
                                 ctx.fillRect(fx + 1, fy + 2, 1, 1);
                             }
                         }
-                        // Subtle dim patches
-                        if (h2 > 0.85) {
-                            ctx.fillStyle = 'rgba(180,200,160,0.03)';
-                            ctx.fillRect(x + 2, y + 2, TS - 4, TS - 4);
-                        }
                     } else if (t === TerrainType.GrassDark) {
                         if (h < 0.4) {
-                            // Small pebbles/stones + moss in dark grass
-                            const px = x + 3 + h * (TS - 7);
-                            const py = y + 3 + h2 * (TS - 7);
-                            ctx.fillStyle = '#4a5a48';
+                            const px = x + 3 + Math.floor(h * (TS - 7));
+                            const py = y + 3 + Math.floor(h2 * (TS - 7));
+                            ctx.fillStyle = PAL.stone3;
                             ctx.fillRect(px, py, 3, 2);
-                            // Highlight on top edge of stone
-                            ctx.fillStyle = '#6a7a68';
+                            ctx.fillStyle = PAL.stone1;
                             ctx.fillRect(px, py, 3, 1);
                             if (h < 0.2) {
-                                // Moss patch
-                                ctx.fillStyle = '#1a4a18';
+                                ctx.fillStyle = PAL.grassDk1;
                                 ctx.fillRect(px + 4, py + 1, 2, 2);
                                 ctx.fillRect(px - 1, py + 2, 2, 1);
                             }
-                            // Tiny root lines
                             if (h < 0.12) {
                                 ctx.fillStyle = '#3a4a28';
                                 ctx.fillRect(px - 2, py + 3, 5, 1);
                             }
                         }
                     } else if (t === TerrainType.Rock) {
-                        // ===== 3D FACETED ROCK =====
-                        // Top highlight (light from top-left)
-                        ctx.fillStyle = 'rgba(255,255,255,0.10)';
-                        ctx.fillRect(x, y, TS, 3);
-                        ctx.fillRect(x, y, 3, TS);
-                        // Bottom-right shadow for 3D depth
-                        ctx.fillStyle = 'rgba(0,0,0,0.12)';
-                        ctx.fillRect(x, y + TS - 3, TS, 3);
-                        ctx.fillRect(x + TS - 3, y, 3, TS);
-
-                        if (h < 0.5) {
-                            // Crack lines
-                            ctx.fillStyle = '#5a5a52';
-                            if (h < 0.25) {
-                                ctx.fillRect(x + 3 + h * 6, y + 2, 1, TS - 4);
+                        // Scattered rock cracks and highlights (avoiding borders)
+                        if (h < 0.6) {
+                            ctx.fillStyle = PAL.rockCrack;
+                            if (h < 0.3) {
+                                ctx.fillRect(x + 2 + Math.floor(h * 8), y + 2, 1, Math.floor(h2 * 8) + 4);
                             } else {
-                                ctx.fillRect(x + 2, y + 3 + h * 6, TS - 4, 1);
+                                ctx.fillRect(x + 2, y + 2 + Math.floor(h * 8), Math.floor(h2 * 8) + 4, 1);
                             }
-                            // Lighter stone facet
                             if (h < 0.2) {
-                                ctx.fillStyle = '#9a9a90';
-                                ctx.fillRect(x + 4, y + 2, 5, 4);
-                                ctx.fillStyle = '#a8a8a0';
-                                ctx.fillRect(x + 4, y + 2, 5, 1); // top highlight of facet
+                                ctx.fillStyle = PAL.rockHi;
+                                ctx.fillRect(x + 4, y + 3, 4, 3);
+                                ctx.fillStyle = '#888884';
+                                ctx.fillRect(x + 4, y + 3, 4, 1);
                             }
                         }
-                        // Lichen/moss on some rocks
                         if (h > 0.7 && h < 0.82) {
-                            ctx.fillStyle = '#4a6a30';
-                            ctx.fillRect(x + h2 * 8, y + h3 * 8 + 4, 3, 2);
+                            ctx.fillStyle = PAL.rockMoss;
+                            ctx.fillRect(x + Math.floor(h2 * 8), y + Math.floor(h3 * 8) + 4, 3, 2);
+                        }
+                        // ===== CROSS-TILE ROCK DECORATIONS (overlap boundaries) =====
+                        const edgeN = fbm2(worldCX, worldCY, 28);
+                        if (edgeN > 0.75) {
+                            ctx.fillStyle = PAL.rockCrack;
+                            ctx.fillRect(x + Math.floor(h2 * 12) + 2, y + TS - 1, 2, 3);
+                        }
+                        if (edgeN < 0.25) {
+                            ctx.fillStyle = PAL.rockHi;
+                            ctx.fillRect(x + TS - 1, y + Math.floor(h3 * 10) + 3, 3, 2);
                         }
                     } else if (t === TerrainType.Dirt) {
                         if (h < 0.35) {
-                            // Dirt grain texture
-                            ctx.fillStyle = '#5a4a32';
-                            ctx.fillRect(x + h * TS, y + h2 * TS, 2, 1);
-                            ctx.fillRect(x + h3 * TS, y + h * TS, 1, 2);
+                            ctx.fillStyle = PAL.dirt3;
+                            ctx.fillRect(x + Math.floor(h * TS), y + Math.floor(h2 * TS), 2, 1);
+                            ctx.fillRect(x + Math.floor(h3 * TS), y + Math.floor(h * TS), 1, 2);
                         }
-                        // Worm trail
                         if (h > 0.88 && h < 0.92) {
-                            ctx.fillStyle = '#4a3a22';
+                            ctx.fillStyle = PAL.dirtDk1;
                             ctx.fillRect(x + 2, y + 5, 1, 3);
                             ctx.fillRect(x + 3, y + 7, 1, 2);
                             ctx.fillRect(x + 4, y + 8, 2, 1);
                         }
-                        // Small twig
                         if (h > 0.6 && h < 0.64) {
-                            ctx.fillStyle = '#7a5a30';
+                            ctx.fillStyle = PAL.twig;
                             ctx.fillRect(x + 4, y + 8, 6, 1);
                             ctx.fillRect(x + 8, y + 7, 1, 2);
                         }
-                        // Subtle 3D height
-                        ctx.fillStyle = 'rgba(255,255,240,0.03)';
-                        ctx.fillRect(x, y, TS, 2);
                     } else if (t === TerrainType.DirtDark) {
-                        // Mud puddle specks
                         if (h < 0.25) {
-                            ctx.fillStyle = '#3a2a18';
-                            ctx.fillRect(x + h * (TS - 4), y + h2 * (TS - 4), 3, 2);
+                            ctx.fillStyle = PAL.dirtWet;
+                            ctx.fillRect(x + Math.floor(h * (TS - 4)), y + Math.floor(h2 * (TS - 4)), 3, 2);
                         }
-                        // Wet sheen (sub-highlights)
                         if (h > 0.7 && h < 0.8) {
-                            ctx.fillStyle = 'rgba(80,100,120,0.12)';
-                            ctx.fillRect(x + 4, y + 4, 5, 3);
+                            ctx.fillStyle = '#5a6a78';
+                            ctx.fillRect(x + 5, y + 5, 1, 1);
+                            ctx.fillRect(x + 7, y + 6, 1, 1);
+                            ctx.fillRect(x + 4, y + 7, 1, 1);
                         }
                     } else if (t === TerrainType.Sand) {
-                        // ===== 3D SAND DUNE RIPPLES =====
                         if (h < 0.4) {
-                            // Wind ripple lines (parallel wavy lines)
                             const rippleY = y + 3 + Math.floor(h * 8);
-                            ctx.fillStyle = '#a8986a'; // highlight (top of ripple)
+                            ctx.fillStyle = PAL.sandHi;
                             ctx.fillRect(x + 1, rippleY, TS - 2, 1);
-                            ctx.fillStyle = '#887848'; // shadow (bottom of ripple)
+                            ctx.fillStyle = PAL.sandSh;
                             ctx.fillRect(x + 1, rippleY + 1, TS - 2, 1);
                         }
-                        // Second ripple layer
                         if (h > 0.3 && h < 0.55) {
                             const rippleY2 = y + 8 + Math.floor(h2 * 5);
-                            ctx.fillStyle = '#b0a070';
+                            ctx.fillStyle = PAL.sandHi;
                             ctx.fillRect(x + 2, rippleY2, TS - 4, 1);
-                            ctx.fillStyle = '#908050';
+                            ctx.fillStyle = PAL.sandSh;
                             ctx.fillRect(x + 2, rippleY2 + 1, TS - 4, 1);
                         }
-                        // Small sand grain clusters
                         if (h > 0.8) {
-                            ctx.fillStyle = '#c8b878';
-                            ctx.fillRect(x + h2 * 10, y + h3 * 10, 2, 1);
+                            ctx.fillStyle = PAL.sandHi;
+                            ctx.fillRect(x + Math.floor(h2 * 10), y + Math.floor(h3 * 10), 2, 1);
                         }
-                        // Subtle muted light on sand
-                        ctx.fillStyle = 'rgba(200,190,150,0.03)';
-                        ctx.fillRect(x, y, TS / 2, TS / 2);
                     } else if (t === TerrainType.Bridge) {
-                        // ===== WOODEN BRIDGE with planks and rails =====
-                        // Plank lines (horizontal)
-                        ctx.fillStyle = '#8a6030';
-                        for (let i = 0; i < 4; i++) {
-                            ctx.fillRect(x, y + i * 4 + 1, TS, 1);
-                        }
-                        // Plank highlight (3D)
-                        ctx.fillStyle = '#c09860';
-                        for (let i = 0; i < 4; i++) {
-                            ctx.fillRect(x + 1, y + i * 4, TS - 2, 1);
-                        }
-                        // Nail dots
-                        ctx.fillStyle = '#3a3030';
+                        ctx.fillStyle = PAL.bridge1;
+                        for (let i = 0; i < 4; i++) ctx.fillRect(x, y + i * 4 + 1, TS, 1);
+                        ctx.fillStyle = PAL.bridgeHi;
+                        for (let i = 0; i < 4; i++) ctx.fillRect(x + 1, y + i * 4, TS - 2, 1);
+                        ctx.fillStyle = PAL.bridgeNail;
                         ctx.fillRect(x + 2, y + 3, 1, 1);
                         ctx.fillRect(x + TS - 3, y + 3, 1, 1);
                         ctx.fillRect(x + 2, y + 11, 1, 1);
                         ctx.fillRect(x + TS - 3, y + 11, 1, 1);
-                        // Side rails (if edge of bridge)
                         const isWaterLeft = c > 0 && this.terrain[r][c - 1] === TerrainType.Water;
                         const isWaterRight = c < this.cols - 1 && this.terrain[r][c + 1] === TerrainType.Water;
                         if (isWaterLeft) {
-                            ctx.fillStyle = '#6a4a22';
+                            ctx.fillStyle = PAL.bridge1;
                             ctx.fillRect(x, y, 2, TS);
-                            ctx.fillStyle = '#8a6a38';
+                            ctx.fillStyle = PAL.bridge2;
                             ctx.fillRect(x, y, 1, TS);
                         }
                         if (isWaterRight) {
-                            ctx.fillStyle = '#6a4a22';
+                            ctx.fillStyle = PAL.bridge1;
                             ctx.fillRect(x + TS - 2, y, 2, TS);
-                            ctx.fillStyle = '#5a3a18';
+                            ctx.fillStyle = PAL.rockCrack;
                             ctx.fillRect(x + TS - 1, y, 1, TS);
                         }
                     } else if (t === TerrainType.Water) {
-                        // Subtle underwater caustic patterns (static, animation is separate)
                         if (h < 0.15) {
-                            ctx.fillStyle = 'rgba(120,200,255,0.08)';
-                            ctx.fillRect(x + h2 * 8, y + h3 * 8, 4, 3);
+                            ctx.fillStyle = PAL.waterCaustic;
+                            ctx.fillRect(x + Math.floor(h2 * 8), y + Math.floor(h3 * 8), 3, 2);
                         }
-                        // Deeper caustic web
-                        if (h > 0.4 && h < 0.55) {
-                            ctx.fillStyle = 'rgba(100,180,240,0.05)';
-                            ctx.fillRect(x + h3 * 6 + 2, y + h2 * 6 + 2, 6, 1);
-                            ctx.fillRect(x + h2 * 8 + 1, y + h3 * 8, 1, 5);
-                        }
-                        // Shore foam — white frothy pixels where water borders land
                         const landAbove = r > 0 && this.terrain[r - 1][c] !== TerrainType.Water;
                         const landBelow = r < this.rows - 1 && this.terrain[r + 1][c] !== TerrainType.Water;
                         const landLeft = c > 0 && this.terrain[r][c - 1] !== TerrainType.Water;
                         const landRight = c < this.cols - 1 && this.terrain[r][c + 1] !== TerrainType.Water;
+                        ctx.fillStyle = PAL.waterFoam;
                         if (landAbove) {
-                            ctx.fillStyle = 'rgba(200,230,255,0.25)';
                             for (let fi = 0; fi < 4; fi++) {
                                 const fh = tileHash(c * 3 + fi, r * 5);
-                                ctx.fillRect(x + fh * (TS - 2), y + fh * 2, 2, 1);
+                                ctx.fillRect(x + Math.floor(fh * (TS - 2)), y + Math.floor(fh * 2), 2, 1);
                             }
                         }
                         if (landBelow) {
-                            ctx.fillStyle = 'rgba(200,230,255,0.20)';
                             for (let fi = 0; fi < 3; fi++) {
                                 const fh = tileHash(c * 5 + fi, r * 7);
-                                ctx.fillRect(x + fh * (TS - 2), y + TS - 2 + fh, 2, 1);
+                                ctx.fillRect(x + Math.floor(fh * (TS - 2)), y + TS - 2, 2, 1);
                             }
                         }
                         if (landLeft) {
-                            ctx.fillStyle = 'rgba(200,230,255,0.22)';
                             for (let fi = 0; fi < 3; fi++) {
                                 const fh = tileHash(c * 9 + fi, r * 3);
-                                ctx.fillRect(x + fh * 2, y + fh * (TS - 2), 1, 2);
+                                ctx.fillRect(x, y + Math.floor(fh * (TS - 2)), 1, 2);
                             }
                         }
                         if (landRight) {
-                            ctx.fillStyle = 'rgba(200,230,255,0.18)';
                             for (let fi = 0; fi < 3; fi++) {
                                 const fh = tileHash(c * 11 + fi, r * 13);
-                                ctx.fillRect(x + TS - 2 + fh, y + fh * (TS - 2), 1, 2);
+                                ctx.fillRect(x + TS - 1, y + Math.floor(fh * (TS - 2)), 1, 2);
                             }
                         }
-                        // Rare lily pad
                         if (h > 0.92 && !landAbove && !landBelow && !landLeft && !landRight) {
-                            ctx.fillStyle = '#2a7a28';
-                            ctx.beginPath(); ctx.arc(x + 8, y + 8, 3, 0, Math.PI * 2); ctx.fill();
+                            ctx.fillStyle = PAL.lilyPad;
+                            ctx.fillRect(x + 6, y + 5, 5, 1);
+                            ctx.fillRect(x + 5, y + 6, 7, 3);
+                            ctx.fillRect(x + 6, y + 9, 5, 1);
                             ctx.fillStyle = '#3a9a38';
-                            ctx.beginPath(); ctx.arc(x + 8, y + 8, 2, 0, Math.PI * 1.6); ctx.fill();
-                            // Tiny flower on lily pad
+                            ctx.fillRect(x + 7, y + 7, 3, 1);
                             if (h > 0.96) {
-                                ctx.fillStyle = '#ff88aa';
+                                ctx.fillStyle = PAL.lilyFlower;
                                 ctx.fillRect(x + 7, y + 6, 2, 2);
-                                ctx.fillStyle = '#ffdd44';
+                                ctx.fillStyle = PAL.flowerCenter;
                                 ctx.fillRect(x + 8, y + 7, 1, 1);
                             }
                         }
-                        // Underwater sand patches (shallow areas)
-                        if (h > 0.75 && h < 0.82) {
-                            ctx.fillStyle = 'rgba(180,160,100,0.08)';
-                            ctx.fillRect(x + h2 * 6, y + h3 * 6, 5, 4);
-                        }
                     }
 
-                    // ===== ENHANCED TERRAIN EDGE SHADOWS (3D Depth) =====
+                    // ===== WATER EDGE SHADOWS (crisp strips) =====
                     if (t !== TerrainType.Water) {
-                        // Water neighbor detection for elevation difference
                         const wAbove = r > 0 && this.terrain[r - 1][c] === TerrainType.Water;
                         const wBelow = r < this.rows - 1 && this.terrain[r + 1][c] === TerrainType.Water;
                         const wLeft = c > 0 && this.terrain[r][c - 1] === TerrainType.Water;
                         const wRight = c < this.cols - 1 && this.terrain[r][c + 1] === TerrainType.Water;
-
                         if (wAbove) {
-                            // Cliff edge shadow (land is higher than water)
-                            ctx.fillStyle = 'rgba(0,0,0,0.18)';
-                            ctx.fillRect(x, y, TS, 4);
-                            ctx.fillStyle = 'rgba(0,0,0,0.08)';
-                            ctx.fillRect(x, y + 4, TS, 2);
+                            ctx.fillStyle = '#00000030';
+                            ctx.fillRect(x, y, TS, 3);
+                            ctx.fillStyle = '#00000012';
+                            ctx.fillRect(x, y + 3, TS, 2);
                         }
                         if (wBelow) {
-                            // Water below — highlight at edge, then shadow at bottom
-                            ctx.fillStyle = 'rgba(255,255,240,0.06)';
-                            ctx.fillRect(x, y + TS - 5, TS, 2);
-                            ctx.fillStyle = 'rgba(0,0,0,0.10)';
+                            ctx.fillStyle = '#ffffff0a';
+                            ctx.fillRect(x, y + TS - 4, TS, 1);
+                            ctx.fillStyle = '#00000018';
                             ctx.fillRect(x, y + TS - 3, TS, 3);
                         }
                         if (wLeft) {
-                            ctx.fillStyle = 'rgba(0,0,0,0.14)';
-                            ctx.fillRect(x, y, 4, TS);
-                            ctx.fillStyle = 'rgba(0,0,0,0.06)';
-                            ctx.fillRect(x + 4, y, 2, TS);
+                            ctx.fillStyle = '#00000024';
+                            ctx.fillRect(x, y, 3, TS);
                         }
                         if (wRight) {
-                            ctx.fillStyle = 'rgba(0,0,0,0.08)';
-                            ctx.fillRect(x + TS - 4, y, 4, TS);
-                        }
-
-                        // Corner shadows for diagonal water adjacency
-                        if (wAbove && wLeft) {
-                            ctx.fillStyle = 'rgba(0,0,0,0.08)';
-                            ctx.fillRect(x, y, 5, 5);
-                        }
-                        if (wAbove && wRight) {
-                            ctx.fillStyle = 'rgba(0,0,0,0.05)';
-                            ctx.fillRect(x + TS - 5, y, 5, 5);
+                            ctx.fillStyle = '#00000012';
+                            ctx.fillRect(x + TS - 3, y, 3, TS);
                         }
                     }
 
-                    // ===== Rock/cliff 3D edges =====
+                    // ===== Rock/cliff pixel edges =====
                     if (t === TerrainType.Rock) {
                         const rAbove = r > 0 ? this.terrain[r - 1][c] : TerrainType.Water;
                         const rBelow = r < this.rows - 1 ? this.terrain[r + 1][c] : TerrainType.Water;
                         const rLeft = c > 0 ? this.terrain[r][c - 1] : TerrainType.Water;
-
                         if (rAbove !== TerrainType.Rock) {
-                            // Top edge: bright highlight (cliff face lit from above)
-                            ctx.fillStyle = 'rgba(255,255,255,0.12)';
-                            ctx.fillRect(x, y, TS, 3);
-                            ctx.fillStyle = 'rgba(255,255,255,0.05)';
-                            ctx.fillRect(x, y + 3, TS, 2);
-                        }
-                        if (rBelow !== TerrainType.Rock) {
-                            // Bottom edge: dark shadow (base of cliff)
-                            ctx.fillStyle = 'rgba(0,0,0,0.20)';
-                            ctx.fillRect(x, y + TS - 3, TS, 3);
-                            ctx.fillStyle = 'rgba(0,0,0,0.08)';
-                            ctx.fillRect(x, y + TS - 5, TS, 2);
-                        }
-                        if (rLeft !== TerrainType.Rock) {
-                            ctx.fillStyle = 'rgba(255,255,255,0.06)';
-                            ctx.fillRect(x, y, 3, TS);
-                        }
-                    }
-
-                    // ===== Sand/Dirt transition edges =====
-                    if (t === TerrainType.Sand) {
-                        if (r > 0 && this.terrain[r - 1][c] !== TerrainType.Sand && this.terrain[r - 1][c] !== TerrainType.Water) {
-                            ctx.fillStyle = 'rgba(180,160,100,0.15)';
+                            ctx.fillStyle = PAL.rockHi;
                             ctx.fillRect(x, y, TS, 2);
                         }
+                        if (rBelow !== TerrainType.Rock) {
+                            ctx.fillStyle = PAL.rockCrack;
+                            ctx.fillRect(x, y + TS - 2, TS, 2);
+                        }
+                        if (rLeft !== TerrainType.Rock) {
+                            ctx.fillStyle = '#6a6a66';
+                            ctx.fillRect(x, y, 2, TS);
+                        }
+                    }
+
+                    // ===== Sand transition (Removed — replaced by organic layered overlap) =====
                     }
                 }
+                const layerIndex = terrainLayers.indexOf(layerTypes);
+                const layerProgress = (layerIndex / terrainLayers.length) * 100;
+                const chunkProgress = ((chunkEnd / this.rows) / terrainLayers.length) * 100;
+                onProgress(layerProgress + chunkProgress);
+                await new Promise(r => setTimeout(r, 0));
             }
-            // Yield to browser and report progress at end of each chunk
-            const progress = (chunkEnd / this.rows) * 100;
-            onProgress(progress);
-            await new Promise(r => setTimeout(r, 0));
-        } // end of chunk loop
+        }
         this.terrainDirty = false;
         this.minimapDirty = true;
     }
@@ -718,20 +697,22 @@ export class TileMap {
     // ---- Query ----
     /** Checks water + ALL occupied (resources + buildings). Used for building placement. */
     isPassable(col: number, row: number): boolean {
-        if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return false;
+        if (!(col >= 0 && col < this.cols && row >= 0 && row < this.rows)) return false;
         if (this.terrain[row][col] === TerrainType.Water) return false;
         return !this.occupied[row][col];
     }
 
     /** Checks water + buildings + resources. Units cannot walk through any solid object. Used for pathfinding. */
     isWalkable(col: number, row: number): boolean {
-        if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return false;
+        // NaN safety: inverted check catches NaN (NaN fails >= 0)
+        if (!(col >= 0 && col < this.cols && row >= 0 && row < this.rows)) return false;
         if (this.terrain[row][col] === TerrainType.Water) return false;
         return !this.occupied[row][col];
     }
 
     getTerrainAt(col: number, row: number): TerrainType {
-        if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return TerrainType.Water;
+        // NaN safety: NaN passes normal comparison guards, so check explicitly
+        if (!(col >= 0 && col < this.cols && row >= 0 && row < this.rows)) return TerrainType.Water;
         return this.terrain[row][col];
     }
 
@@ -784,7 +765,7 @@ export class TileMap {
     canPlace(col: number, row: number, w: number, h: number): boolean {
         for (let r = row; r < row + h; r++)
             for (let c = col; c < col + w; c++) {
-                if (c < 0 || c >= this.cols || r < 0 || r >= this.rows) return false;
+                if (!(c >= 0 && c < this.cols && r >= 0 && r < this.rows)) return false;
                 if (this.terrain[r][c] === TerrainType.Water) return false;
                 if (this.buildingOcc[r][c]) return false;
                 // Block on gold/stone mines (can't build over them)
@@ -802,8 +783,31 @@ export class TileMap {
     }
 
     /** A* pathfinding using binary min-heap */
+    // FPS FIX: Global per-frame A* budget to prevent mass pathfinding spikes
+    private _pathBudgetFull = 0;
+    private _pathBudgetChase = 0;
+    private static readonly MAX_PATHS_PER_FRAME = 5;     // full A* (15k iter)
+    private static readonly MAX_CHASE_PER_FRAME = 8;     // chase A* (3k iter)
+
+    /** Reset A* budgets — call once per frame from EntityManager.update */
+    resetPathBudget(): void {
+        this._pathBudgetFull = 0;
+        this._pathBudgetChase = 0;
+    }
+
     findPath(sc: number, sr: number, ec: number, er: number): [number, number][] | null {
+        if (this._pathBudgetFull >= TileMap.MAX_PATHS_PER_FRAME) return null;
+        this._pathBudgetFull++;
         return findPathA(this, sc, sr, ec, er);
+    }
+
+    /** Chase-optimized A*: lower iteration limit (3000), returns null on failure (no partial paths).
+     *  Used during combat chasing — if this returns null, the target is likely unreachable
+     *  and the unit should look for blocking walls to attack. */
+    findPathForChase(sc: number, sr: number, ec: number, er: number): [number, number][] | null {
+        if (this._pathBudgetChase >= TileMap.MAX_CHASE_PER_FRAME) return null;
+        this._pathBudgetChase++;
+        return findPathA(this, sc, sr, ec, er, 3000, false);
     }
 
     // ---- Render (uses cached offscreen canvas — single drawImage call) ----
@@ -812,14 +816,33 @@ export class TileMap {
             // Cannot synchronously block here anymore. Relying on async init.
         }
 
+        // Fill background beyond map edges so no dark bar appears
+        const mapPxW = this.cols * TILE_SIZE;
+        const mapPxH = this.rows * TILE_SIZE;
+        ctx.fillStyle = '#2a3a2a';
+        // Right edge
+        if (camX + vpW > mapPxW) {
+            ctx.fillRect(mapPxW, camY, (camX + vpW) - mapPxW, vpH);
+        }
+        // Bottom edge
+        if (camY + vpH > mapPxH) {
+            ctx.fillRect(camX, mapPxH, vpW, (camY + vpH) - mapPxH);
+        }
+
         if (this.terrainCanvas) {
-            // Source rect = viewport area on the terrain canvas
-            const sx = Math.max(0, Math.floor(camX));
-            const sy = Math.max(0, Math.floor(camY));
-            const sw = Math.min(vpW + 2, this.cols * TILE_SIZE - sx);
-            const sh = Math.min(vpH + 2, this.rows * TILE_SIZE - sy);
-            if (sw > 0 && sh > 0) {
-                ctx.drawImage(this.terrainCanvas as any, sx, sy, sw, sh, sx, sy, sw, sh);
+            // Source rect = viewport area on the terrain canvas (scaled for iOS)
+            const s = this.terrainScale;
+            const sx = Math.max(0, Math.floor(camX * s));
+            const sy = Math.max(0, Math.floor(camY * s));
+            const sw = Math.min(Math.ceil(vpW * s) + 2, Math.round(this.cols * TILE_SIZE * s) - sx);
+            const sh = Math.min(Math.ceil(vpH * s) + 2, Math.round(this.rows * TILE_SIZE * s) - sy);
+            // Destination = full resolution world coords
+            const dx = Math.max(0, Math.floor(camX));
+            const dy = Math.max(0, Math.floor(camY));
+            const dw = Math.min(vpW + 2, this.cols * TILE_SIZE - dx);
+            const dh = Math.min(vpH + 2, this.rows * TILE_SIZE - dy);
+            if (sw > 0 && sh > 0 && dw > 0 && dh > 0) {
+                ctx.drawImage(this.terrainCanvas as any, sx, sy, sw, sh, dx, dy, dw, dh);
             }
         }
 

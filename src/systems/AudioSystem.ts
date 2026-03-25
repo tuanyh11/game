@@ -173,7 +173,7 @@ export class AudioSystem {
         this.deathCooldown = now;
 
         const volScale = (0.4 + Math.random() * 0.3) * sv;
-        this.playSFXWithPitch('/musics/warrior-death-cry-british-male.wav', volScale, 0.85 + Math.random() * 0.3);
+        this.playSFXWithPitch('./sounds/warrior-death-cry-british-male.wav', volScale, 0.85 + Math.random() * 0.3);
     }
 
     /**
@@ -192,7 +192,7 @@ export class AudioSystem {
         this.spearCooldown = now;
 
         const volScale = (0.4 + Math.random() * 0.3) * sv;
-        this.playSFXWithPitch('/musics/yodguard-spear-thrust.mp3', volScale, 0.9 + Math.random() * 0.2);
+        this.playSFXWithPitch('./sounds/yodguard-spear-thrust.mp3', volScale, 0.9 + Math.random() * 0.2);
     }
 
     /**
@@ -211,7 +211,7 @@ export class AudioSystem {
         this.gallopCooldown = now;
 
         const volScale = (0.2 + Math.random() * 0.15) * sv;
-        this.playSFXWithPitch('/musics/dragon-studio-horse-galloping-339737.mp3', volScale, 0.95 + Math.random() * 0.1);
+        this.playSFXWithPitch('./sounds/dragon-studio-horse-galloping-339737.mp3', volScale, 0.95 + Math.random() * 0.1);
     }
 
     /**
@@ -230,7 +230,7 @@ export class AudioSystem {
         this.bearRoarCooldown = now;
 
         const volScale = (0.5 + Math.random() * 0.2) * sv;
-        this.playSFXWithPitch('/musics/virtualzero-bear-roar.mp3', volScale, 0.9 + Math.random() * 0.2);
+        this.playSFXWithPitch('./sounds/virtualzero-bear-roar.mp3', volScale, 0.9 + Math.random() * 0.2);
     }
     /**
      * Plays the arrow whoosh sound from file with pitch variation.
@@ -248,7 +248,7 @@ export class AudioSystem {
         this.arrowCooldown = now;
 
         const volScale = (0.4 + Math.random() * 0.3) * sv;
-        this.playSFXWithPitch('/musics/arrow-whoosh.mp3', volScale, 0.9 + Math.random() * 0.2);
+        this.playSFXWithPitch('./sounds/arrow-whoosh.mp3', volScale, 0.9 + Math.random() * 0.2);
     }
 
     /**
@@ -268,7 +268,7 @@ export class AudioSystem {
         this.slashCooldown = now;
 
         const volScale = (0.5 + Math.random() * 0.3) * sv;
-        this.playSFXWithPitch('/musics/sword-hit.mp3', volScale, 0.85 + Math.random() * 0.3);
+        this.playSFXWithPitch('./sounds/sword-hit.mp3', volScale, 0.85 + Math.random() * 0.3);
     }
 
     /**

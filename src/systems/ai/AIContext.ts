@@ -8,7 +8,7 @@ import { Unit } from "../../entities/Unit";
 import { Building } from "../../entities/Building";
 import { EntityManager } from "../EntityManager";
 import { PlayerState } from "../PlayerState";
-import { DifficultyParams, AIDifficulty } from "./AIConfig";
+import { DifficultyParams, AIDifficulty, AIStrategy, StrategyParams } from "./AIConfig";
 import { ResourceNodeType } from "../../config/GameConfig";
 
 // Defense stance enum
@@ -24,13 +24,15 @@ export interface AIContext {
     readonly team: number;
     readonly difficulty: AIDifficulty;
     readonly params: DifficultyParams;
+    readonly strategy: AIStrategy;
+    readonly strategyParams: StrategyParams;
 
     // Base position (fallback to unit centroid if no Town Center)
     baseX: number;
     baseY: number;
 
-    // Wave / combat state
-    waveState: 'gathering' | 'attacking' | 'supporting' | 'counterattack' | 'pursuit' | 'retreating';
+    // Wave / combat state (NOTE: 'supporting' removed — now handled by Support Squad)
+    waveState: 'gathering' | 'attacking' | 'counterattack' | 'pursuit' | 'retreating';
     waveResetTimer: number;
     wavesSent: number;
     attackWaveSize: number;
@@ -42,7 +44,13 @@ export interface AIContext {
     retreatRallyY: number;
     retreatRegroupTimer: number;
 
-    // Support state
+    // ===== SUPPORT SQUAD — Independent ally-support system =====
+    // Operates separately from waveState so AI can attack AND support simultaneously
+    supportSquad: Set<number>;                    // IDs of units on support duty
+    supportSquadTarget: { x: number; y: number } | null;  // where to send support
+    supportSquadTimer: number;                    // auto-disband countdown (seconds)
+
+    // Legacy support fields (kept for compatibility but used by squad now)
     supportTarget: { x: number; y: number } | null;
     supportTimer: number;
 

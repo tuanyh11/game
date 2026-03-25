@@ -70,9 +70,9 @@ export class SpartacusStrategy extends MeleeHeroStrategy {
             }
             case 'lama_r1': { // Tên Bạc Nữ Thần
                 if (unit.attackTarget) {
-                    const e = unit.attackTarget; e.hp -= 25 + unit.heroLevel * 3;
+                    const e = unit.attackTarget; e.hp -= 20 + unit.heroLevel * 2;
                     if (e.hp <= 0 && e.alive) unit.addHeroXp(Math.max(10, Math.floor(e.maxHp * 0.3)));
-                    let t = 0; const iv = setInterval(() => { if (e.alive && t < 3) { e.hp -= 5; t++; particles.emit({ x: e.x, y: e.y - 4, count: 4, spread: 3, speed: [15, 40], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.2, 0.5], size: [2, 3], colors: ['#c0c0c0', '#ffd700'], gravity: -30, shape: 'star' }); } else clearInterval(iv); }, 1000);
+                    let t = 0; const iv = setInterval(() => { if (e.alive && t < 3) { e.hp -= 3; t++; particles.emit({ x: e.x, y: e.y - 4, count: 4, spread: 3, speed: [15, 40], angle: [-Math.PI * 0.8, -Math.PI * 0.2], life: [0.2, 0.5], size: [2, 3], colors: ['#c0c0c0', '#ffd700'], gravity: -30, shape: 'star' }); } else clearInterval(iv); }, 1000);
                     const a = Math.atan2(e.y - unit.y, e.x - unit.x);
                     particles.emit({ x: unit.x, y: unit.y - 8, count: 4, spread: 1, speed: [380, 480], angle: [a - 0.02, a + 0.02], life: [0.08, 0.25], size: [4, 8], colors: ['#c0c0c0', '#e0e0e0', '#fff'], gravity: 0, shape: 'rect' });
                     particles.emit({ x: unit.x, y: unit.y - 8, count: 8, spread: 2, speed: [260, 380], angle: [a - 0.05, a + 0.05], life: [0.1, 0.3], size: [2, 3], colors: ['#c0c0c066', '#ffd70044'], gravity: 0, shape: 'circle' });
@@ -110,15 +110,15 @@ export class SpartacusStrategy extends MeleeHeroStrategy {
             // Random lightning strikes around him every ~0.3s
             if (!unit.passiveData) unit.passiveData = { strikeTimer: 0 };
             unit.passiveData.strikeTimer += dt;
-            if (unit.passiveData.strikeTimer >= 0.3) { // 0.3 seconds
+            if (unit.passiveData.strikeTimer >= 0.6) { // 0.6 seconds
                 unit.passiveData.strikeTimer = 0;
                 
                 // Find random enemy within 100px
                 const nearby = getNearbyUnits(unit.x, unit.y, 100).filter(u => u.team !== unit.team && u.alive);
                 if (nearby.length > 0) {
                     const target = nearby[Math.floor(visualRng() * nearby.length)];
-                    // Deal 15 true damage
-                    target.hp -= 15;
+                    // Deal 10 true damage
+                    target.hp -= 10;
                     if (target.hp <= 0 && target.alive) unit.addHeroXp(Math.max(5, Math.floor(target.maxHp * 0.1)));
                     
                     // Lightning strike VFX
@@ -157,7 +157,7 @@ export class SpartacusStrategy extends MeleeHeroStrategy {
             let currentPoint = { x: target.x, y: target.y - 8 };
             
             for (const nextTarget of nearby) {
-                const bounceDmg = 20; 
+                const bounceDmg = 12; 
                 nextTarget.hp -= bounceDmg;
                 if (nextTarget.hp <= 0 && nextTarget.alive) unit.addHeroXp(Math.max(5, Math.floor(nextTarget.maxHp * 0.15)));
                 nextTarget.frozenTimer = Math.max(nextTarget.frozenTimer, 0.2);

@@ -14,7 +14,7 @@ const LANG_KEY = 'pixelEmpires_lang';
 
 const translations: Record<Lang, Record<string, string>> = { vi, en };
 
-let currentLang: Lang = 'vi';
+let currentLang: Lang = 'en';
 
 // Load saved language on module init
 try {

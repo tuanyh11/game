@@ -171,3 +171,23 @@ export function cmdReturnResources(team: number, unitIds: number[], buildingId: 
         data: { unitIds, buildingId },
     };
 }
+
+export function cmdCancelResearch(team: number): GameCommand {
+    return {
+        type: CommandType.CANCEL_RESEARCH,
+        playerId: '',
+        team,
+        tick: 0,
+        data: {},
+    };
+}
+
+export function cmdTowerUpgrade(team: number, buildingId: number, upgradeType: string): GameCommand {
+    return {
+        type: CommandType.TOWER_UPGRADE,
+        playerId: '',
+        team,
+        tick: 0,
+        data: { buildingId, upgradeType },
+    };
+}

@@ -22,7 +22,7 @@ export class HeroSkillUtils {
             );
             if (enemy && !hitSet.has(enemy.id)) {
                 hitSet.add(enemy.id);
-                enemy.hp -= damage + unit.heroLevel * 3;
+                enemy.hp -= damage + unit.heroLevel * 2;
                 if (enemy.hp <= 0 && enemy.alive) {
                     unit.addHeroXp(Math.max(10, Math.floor(enemy.maxHp * 0.3)));
                 }

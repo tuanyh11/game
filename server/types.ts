@@ -48,8 +48,10 @@ export enum CommandType {
     DELETE_BUILDING = 'DELETE_BUILDING',
     STOP = 'STOP',
     CANCEL_TRAIN = 'CANCEL_TRAIN',
+    CANCEL_RESEARCH = 'CANCEL_RESEARCH',
     CHEAT = 'CHEAT',
     RETURN_RESOURCES = 'RETURN_RESOURCES',
+    TOWER_UPGRADE = 'TOWER_UPGRADE',
 }
 
 export interface GameCommand {

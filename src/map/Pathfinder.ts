@@ -85,8 +85,14 @@ export interface PathfindGrid {
     isWalkable(col: number, row: number): boolean;
 }
 
-/** A* pathfinding using binary min-heap */
-export function findPath(grid: PathfindGrid, sc: number, sr: number, ec: number, er: number): [number, number][] | null {
+/** A* pathfinding using binary min-heap
+ *  @param maxIterations - cap on how many tiles to explore (lower = faster but may miss long paths)
+ *  @param returnPartialPath - if true, return partial path when maxIter hit; if false, return null
+ */
+export function findPath(
+    grid: PathfindGrid, sc: number, sr: number, ec: number, er: number,
+    maxIterations = 15000, returnPartialPath = true,
+): [number, number][] | null {
     if (sc === ec && sr === er) return [];
 
     // If START is not walkable (unit on water/building), find nearest walkable start
@@ -173,8 +179,7 @@ export function findPath(grid: PathfindGrid, sc: number, sr: number, ec: number,
     let bestClosestDist = heuristic(sc, sr);
 
     let iterations = 0;
-    const maxIter = 50000; // Increased from 30000 for large maps
-    while (open.length > 0 && iterations < maxIter) {
+    while (open.length > 0 && iterations < maxIterations) {
         iterations++;
         const cur = open.pop();
         const curKey = key(cur.c, cur.r);
@@ -225,7 +230,9 @@ export function findPath(grid: PathfindGrid, sc: number, sr: number, ec: number,
             }
         }
     }
-    if (bestClosestKey !== startKey && parentMap.has(bestClosestKey)) {
+
+    // maxIter hit or no path — return partial path only if requested
+    if (returnPartialPath && bestClosestKey !== startKey && parentMap.has(bestClosestKey)) {
         const path: [number, number][] = [];
         let k = bestClosestKey;
         while (k !== startKey) {

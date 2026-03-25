@@ -10,7 +10,7 @@ export abstract class MeleeHeroStrategy extends BaseCombatStrategy {
         const { particles } = context;
 
         // Hero sword slash sound
-        audioSystem.playSFXWithPitch('/musics/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.6 + Math.random() * 0.2, 0.85 + Math.random() * 0.2, context.unit.x, context.unit.y);
+        audioSystem.playSFXWithPitch('./sounds/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.6 + Math.random() * 0.2, 0.85 + Math.random() * 0.2, context.unit.x, context.unit.y);
 
         // Epic sword slash — wide flame arc
         for (let i = 0; i < 14; i++) {

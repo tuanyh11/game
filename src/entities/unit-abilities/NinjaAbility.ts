@@ -43,7 +43,7 @@ export const NinjaAbility: EliteAbility = {
                 unit.ninjaDashTimer = 0;
                 unit.ninjaPierceTimer = 2.0; // 2s armor penetration after dash
                 // Ninja slash sound on arrival
-                audioSystem.playSFXWithPitch('/musics/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.6 + Math.random() * 0.2, 1.1 + Math.random() * 0.2, unit.x, unit.y);
+                audioSystem.playSFXWithPitch('./sounds/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.6 + Math.random() * 0.2, 1.1 + Math.random() * 0.2, unit.x, unit.y);
                 // Smoke burst on arrival
                 particles.emit({
                     x: unit.x, y: unit.y - 4, count: 12, spread: 8,

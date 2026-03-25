@@ -14,7 +14,6 @@ export class ResourceCache {
     private static autumnCanvas: OffscreenCanvas;
 
     private static goldCanvas: OffscreenCanvas;
-    private static stoneCanvas: OffscreenCanvas;
     private static berryCanvas: OffscreenCanvas;
 
     private static isInitialized = false;
@@ -28,7 +27,6 @@ export class ResourceCache {
         this.autumnCanvas = this.createCache(this.drawAutumn);
 
         this.goldCanvas = this.createCache(this.drawGoldMine);
-        this.stoneCanvas = this.createCache(this.drawStoneMine);
         this.berryCanvas = this.createCache(this.drawBerry);
 
         this.isInitialized = true;
@@ -60,7 +58,6 @@ export class ResourceCache {
     }
 
     static drawStoneCache(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-        ctx.drawImage(this.stoneCanvas, x - this.CENTER_OFS, y - this.CENTER_OFS);
     }
 
     static drawBerryCache(ctx: CanvasRenderingContext2D, x: number, y: number): void {
@@ -305,61 +302,6 @@ export class ResourceCache {
         ctx.fillStyle = '#ffea50';
         ctx.fillRect(x - 9, y - 4, 2, 1);
         ctx.fillRect(x + 6, y - 2, 1, 1);
-    }
-
-    private static drawStoneMine(ctx: OffscreenCanvasRenderingContext2D, x: number, y: number): void {
-        ctx.fillStyle = 'rgba(0,0,0,0.22)';
-        ctx.beginPath(); ctx.ellipse(x + 3, y + 12, 24, 9, 0.1, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(0,0,0,0.07)';
-        ctx.beginPath(); ctx.ellipse(x + 3, y + 12, 28, 11, 0.1, 0, Math.PI * 2); ctx.fill();
-
-        ctx.fillStyle = '#3e4248';
-        ctx.beginPath(); ctx.arc(x, y + 4, 21, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#5a6068';
-        ctx.beginPath(); ctx.arc(x - 4, y - 2, 16, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#6a7078';
-        ctx.beginPath(); ctx.arc(x - 5, y - 5, 11, 0, Math.PI * 2); ctx.fill();
-
-        ctx.fillStyle = '#6a7078';
-        ctx.beginPath(); ctx.arc(x + 8, y + 2, 12, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#7a8088';
-        ctx.beginPath(); ctx.arc(x + 7, y - 1, 8, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#4a5058';
-        ctx.beginPath(); ctx.arc(x + 1, y + 7, 8, 0, Math.PI * 2); ctx.fill();
-
-        ctx.fillStyle = '#5a6068';
-        ctx.beginPath(); ctx.arc(x - 1, y - 8, 10, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#687078';
-        ctx.beginPath(); ctx.arc(x + 3, y - 13, 6, 0, Math.PI * 2); ctx.fill();
-
-        ctx.fillStyle = '#9aa0a8';
-        ctx.fillRect(x - 11, y - 7, 5, 3);
-        ctx.fillRect(x + 1, y - 12, 4, 3);
-        ctx.fillRect(x - 6, y - 11, 3, 2);
-        ctx.fillStyle = '#aab0b8';
-        ctx.fillRect(x - 10, y - 6, 3, 2);
-        ctx.fillRect(x + 2, y - 14, 3, 2);
-
-        ctx.fillStyle = 'rgba(0,0,0,0.10)';
-        ctx.beginPath(); ctx.arc(x + 10, y + 5, 8, 0, Math.PI * 2); ctx.fill();
-
-        ctx.fillStyle = '#b8c0c8';
-        ctx.fillRect(x - 9, y - 5, 2, 2);
-        ctx.fillRect(x + 3, y - 14, 2, 2);
-        ctx.fillRect(x + 9, y - 2, 2, 2);
-
-        ctx.fillStyle = '#3a3e42';
-        ctx.fillRect(x - 5, y - 3, 1, 7);
-        ctx.fillRect(x + 3, y + 2, 4, 1);
-        ctx.fillRect(x - 2, y - 9, 1, 5);
-        ctx.fillRect(x + 6, y - 5, 1, 4);
-        ctx.fillRect(x - 8, y + 1, 1, 3);
-
-        ctx.fillStyle = '#c8d0d8';
-        ctx.fillRect(x - 7, y - 4, 2, 2);
-        ctx.fillRect(x + 5, y - 9, 2, 2);
-        ctx.fillRect(x - 3, y + 3, 2, 1);
-        ctx.fillRect(x + 8, y - 6, 2, 1);
     }
 
     private static drawBerry(ctx: OffscreenCanvasRenderingContext2D, x: number, y: number): void {

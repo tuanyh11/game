@@ -1,4 +1,4 @@
-import { C, CivilizationType } from "../../config/GameConfig";
+import { C, CivilizationType, TowerUpgradeType } from "../../config/GameConfig";
 import type { Building } from "../Building";
 
 export function drawTower(b: Building, ctx: CanvasRenderingContext2D, left: number, top: number, w: number, h: number): void {
@@ -24,6 +24,16 @@ export function drawTower(b: Building, ctx: CanvasRenderingContext2D, left: numb
             drawRomanTower(b, ctx, left, top, w, h);
             break;
     }
+
+    // Draw tower upgrade overlay effects
+    if (b.towerUpgrade !== TowerUpgradeType.None && !b.isTowerUpgrading) {
+        drawTowerUpgradeOverlay(b, ctx, left, top, w, h);
+    }
+
+    // Draw upgrade progress bar
+    if (b.isTowerUpgrading) {
+        drawUpgradeProgressOverlay(b, ctx, left, top, w, h);
+    }
 }
 
 // -------------------------------------------------------------
@@ -32,20 +42,152 @@ export function drawTower(b: Building, ctx: CanvasRenderingContext2D, left: numb
 function drawAttackFlash(ctx: CanvasRenderingContext2D, b: Building, center_x: number, center_y: number) {
     if (b.towerAttackAnimTimer > 0.2) {
         const flashAlpha = (b.towerAttackAnimTimer - 0.2) / 0.15; // 1→0 fading out
-        const isFireArrow = b.age >= 4;
-        const mainColor = isFireArrow ? `rgba(255,100,0,${flashAlpha * 0.7})` : `rgba(255,230,150,${flashAlpha * 0.7})`;
-        const coreColor = isFireArrow ? `rgba(255,150,0,${flashAlpha})` : `rgba(255,255,200,${flashAlpha})`;
+        const isFireArrow = b.age >= 4 || b.towerUpgrade === TowerUpgradeType.Fire;
+        const isIce = b.towerUpgrade === TowerUpgradeType.Ice;
+        const isCannon = b.towerUpgrade === TowerUpgradeType.Cannon;
+
+        let mainColor: string;
+        let coreColor: string;
+
+        if (isCannon) {
+            mainColor = `rgba(255,150,0,${flashAlpha * 0.8})`;
+            coreColor = `rgba(255,255,150,${flashAlpha})`;
+        } else if (isIce) {
+            mainColor = `rgba(100,180,255,${flashAlpha * 0.7})`;
+            coreColor = `rgba(200,230,255,${flashAlpha})`;
+        } else if (isFireArrow) {
+            mainColor = `rgba(255,100,0,${flashAlpha * 0.7})`;
+            coreColor = `rgba(255,150,0,${flashAlpha})`;
+        } else {
+            mainColor = `rgba(255,230,150,${flashAlpha * 0.7})`;
+            coreColor = `rgba(255,255,200,${flashAlpha})`;
+        }
 
         ctx.fillStyle = mainColor;
         ctx.beginPath();
-        ctx.arc(center_x, center_y, 14 * flashAlpha, 0, Math.PI * 2);
+        ctx.arc(center_x, center_y, (isCannon ? 18 : 14) * flashAlpha, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = coreColor;
         ctx.beginPath();
-        ctx.arc(center_x, center_y, 6 * flashAlpha, 0, Math.PI * 2);
+        ctx.arc(center_x, center_y, (isCannon ? 8 : 6) * flashAlpha, 0, Math.PI * 2);
         ctx.fill();
     }
+}
+
+// -------------------------------------------------------------
+// Tower Upgrade Visual Overlay
+// -------------------------------------------------------------
+function drawTowerUpgradeOverlay(b: Building, ctx: CanvasRenderingContext2D, left: number, top: number, w: number, h: number): void {
+    const mx = left + w / 2;
+    const t = Date.now() / 1000;
+
+    if (b.towerUpgrade === TowerUpgradeType.Fire) {
+        // Fiery glow around tower
+        const pulseAlpha = 0.15 + Math.sin(t * 3) * 0.08;
+        const grad = ctx.createRadialGradient(mx, top + h * 0.3, 5, mx, top + h * 0.3, w * 0.6);
+        grad.addColorStop(0, `rgba(255,100,0,${pulseAlpha})`);
+        grad.addColorStop(0.5, `rgba(255,60,0,${pulseAlpha * 0.5})`);
+        grad.addColorStop(1, 'rgba(255,60,0,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(left - 5, top - 25, w + 10, h + 30);
+
+        // Flame tips at top
+        const flameY = top - 15;
+        for (let i = 0; i < 3; i++) {
+            const fx = mx - 8 + i * 8;
+            const fh = 6 + Math.sin(t * 5 + i * 2) * 4;
+            ctx.fillStyle = `rgba(255,${120 + i * 50},0,${0.5 + Math.sin(t * 4 + i) * 0.2})`;
+            ctx.beginPath();
+            ctx.moveTo(fx - 3, flameY);
+            ctx.quadraticCurveTo(fx, flameY - fh, fx + 3, flameY);
+            ctx.fill();
+        }
+
+        // Fire icon
+        ctx.font = 'bold 8px sans-serif';
+        ctx.fillStyle = '#ff6600';
+        ctx.fillText('🔥', mx - 5, top - 20);
+    }
+
+    if (b.towerUpgrade === TowerUpgradeType.Ice) {
+        // Frost shimmer
+        const pulseAlpha = 0.12 + Math.sin(t * 2) * 0.06;
+        const grad = ctx.createRadialGradient(mx, top + h * 0.3, 5, mx, top + h * 0.3, w * 0.6);
+        grad.addColorStop(0, `rgba(100,180,255,${pulseAlpha})`);
+        grad.addColorStop(0.5, `rgba(150,210,255,${pulseAlpha * 0.4})`);
+        grad.addColorStop(1, 'rgba(150,210,255,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(left - 5, top - 25, w + 10, h + 30);
+
+        // Ice crystals at top
+        ctx.strokeStyle = `rgba(150,220,255,${0.6 + Math.sin(t * 3) * 0.2})`;
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 3; i++) {
+            const cx = mx - 6 + i * 6;
+            const cy = top - 12 - Math.sin(t * 2 + i) * 3;
+            // Snowflake cross
+            ctx.beginPath(); ctx.moveTo(cx - 3, cy); ctx.lineTo(cx + 3, cy); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx, cy - 3); ctx.lineTo(cx, cy + 3); ctx.stroke();
+        }
+
+        // Ice icon
+        ctx.font = 'bold 8px sans-serif';
+        ctx.fillStyle = '#88ccff';
+        ctx.fillText('❄️', mx - 5, top - 18);
+    }
+
+    if (b.towerUpgrade === TowerUpgradeType.Cannon) {
+        // Dark smoke with orange embers
+        const pulseAlpha = 0.1 + Math.sin(t * 2.5) * 0.05;
+        const grad = ctx.createRadialGradient(mx, top + h * 0.4, 8, mx, top + h * 0.4, w * 0.7);
+        grad.addColorStop(0, `rgba(60,50,40,${pulseAlpha})`);
+        grad.addColorStop(0.5, `rgba(40,30,20,${pulseAlpha * 0.3})`);
+        grad.addColorStop(1, 'rgba(40,30,20,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(left - 5, top - 25, w + 10, h + 30);
+
+        // Cannon barrel silhouette
+        ctx.fillStyle = '#333';
+        ctx.fillRect(mx - 3, top + h * 0.3, 6, 12);
+        ctx.beginPath();
+        ctx.arc(mx, top + h * 0.3 + 12, 4, 0, Math.PI);
+        ctx.fill();
+
+        // Cannon icon
+        ctx.font = 'bold 8px sans-serif';
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillText('💣', mx - 5, top - 18);
+    }
+}
+
+// -------------------------------------------------------------
+// Upgrade Progress Bar Overlay
+// -------------------------------------------------------------
+function drawUpgradeProgressOverlay(b: Building, ctx: CanvasRenderingContext2D, left: number, top: number, w: number, h: number): void {
+    const pct = b.towerUpgradeProgress / b.towerUpgradeTime;
+    const barW = w - 8;
+    const barH = 4;
+    const barX = left + 4;
+    const barY = top + h + 3;
+
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(barX, barY, barW, barH);
+
+    // Fill color based on upgrade type
+    let barColor = '#fb923c';
+    if (b.towerUpgrade === TowerUpgradeType.Fire) barColor = '#ff6600';
+    else if (b.towerUpgrade === TowerUpgradeType.Ice) barColor = '#66bbff';
+    else if (b.towerUpgrade === TowerUpgradeType.Cannon) barColor = '#ffaa00';
+
+    ctx.fillStyle = barColor;
+    ctx.fillRect(barX + 1, barY + 1, (barW - 2) * pct, barH - 2);
+
+    // Border
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(barX, barY, barW, barH);
 }
 
 // -------------------------------------------------------------------------------------------

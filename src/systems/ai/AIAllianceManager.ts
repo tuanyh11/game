@@ -14,6 +14,15 @@ import type { AIContext } from "./AIContext";
 import { sharedIntel } from "./AIConfig";
 
 // ===================================================================
+//  INTEL CONSTANTS — Consistent timeouts across all intel systems
+// ===================================================================
+const THREAT_DECAY_SECONDS = 20;         // How long threat reports remain relevant
+const COORDINATION_DECAY_SECONDS = 45;    // How long coordinated attacks remain joinable
+const ENEMY_POSITION_DECAY = 30;          // Known enemy position staleness
+const SCOUTED_UNIT_DECAY = 60;            // Scouted enemy unit staleness
+const SUPPORT_GUARD_RANGE = TILE_SIZE * 15; // Range to gather units for guarding support target (was 25)
+
+// ===================================================================
 //  ALLY SUPPORT: Monitor and help allied teams
 // ===================================================================
 export function checkAllyStatus(ai: AIContext): void {
@@ -56,168 +65,237 @@ export function checkAllyStatus(ai: AIContext): void {
             }
         }
 
-        // Check ally buildings taking damage (higher severity)
+        // Check ally buildings — PROACTIVE: detect enemies NEAR buildings BEFORE damage!
         const allyBuildings = ai.entityManager.buildings.filter(
-            b => b.alive && b.team === allyTeam && b.built && b.hp < b.maxHp
+            b => b.alive && b.team === allyTeam && b.built
         );
         for (const ab of allyBuildings) {
-            const enemyNearBldg = ai.findNearestEnemyUnit(ab.x, ab.y, TILE_SIZE * 12);
+            const enemyNearBldg = ai.findNearestEnemyUnit(ab.x, ab.y, TILE_SIZE * 15);
             if (enemyNearBldg) {
-                const sev = Math.min(1.0, 1.0 - (ab.hp / ab.maxHp) + 0.3);
+                // Severity based on building damage state (no expensive unit count scan)
+                const hpRatio = ab.hp / ab.maxHp;
+                const sev = ab.hp < ab.maxHp
+                    ? Math.min(1.0, 1.0 - hpRatio + 0.3)
+                    : 0.5; // Enemy approaching undamaged building
+
                 ai.reportThreat(enemyNearBldg.x, enemyNearBldg.y, sev, allyTeam);
                 highestSeverity = Math.max(highestSeverity, sev);
             }
         }
     }
 
-    // ==== PROACTIVE PATROL: Send support units near ally base ====
-    // DISABLED (TIER-1 FIX): This feature makes units run back and forth aimlessly during peacetime,
-    // cluttering the map and causing pathing lag. Units will now stay home until an emergency is reported.
-    /*
-    if (ai.waveState === 'gathering' && !ownBaseUnderAttack && ai.forceAllocation.supportUnits.length > 0) {
-        // Find nearest ally TC/building
-        ...
-    }
-    */
+    // ===== SUPPORT SQUAD COMBAT: Keep squad moving toward target =====
+    if (ai.supportSquad.size > 0 && ai.supportSquadTarget) {
+        for (const id of ai.supportSquad) {
+            const u = ai.entityManager.units.find(unit => unit.id === id);
+            if (!u || !u.alive) continue;
 
-    // ==== GUARD SUPPORT TARGET ====
-    if (ai.waveState === 'supporting' && ai.supportTarget) {
-        const idleSupporters = ai.forceAllocation.supportUnits.filter(u => u.state === UnitState.Idle);
-        for (let i = 0; i < idleSupporters.length; i++) {
-            const u = idleSupporters[i];
-            const distToTarget = Math.hypot(u.x - ai.supportTarget.x, u.y - ai.supportTarget.y);
-            if (distToTarget > TILE_SIZE * 12) {
-                // Move towards support target (wide spread to avoid clumping while traveling)
-                const spread = (Math.random() - 0.5) * TILE_SIZE * 15;
-                ai.safeMoveTo(u,
-                    ai.supportTarget.x + Math.cos(i) * spread,
-                    ai.supportTarget.y + Math.sin(i) * spread
-                );
-            } else if (distToTarget > TILE_SIZE * 3) {
-                // Active patrol
-                const patrolSpread = (Math.random() - 0.5) * Math.PI * 2;
-                ai.safeMoveTo(u,
-                    ai.supportTarget.x + Math.cos(patrolSpread) * TILE_SIZE * (7 + Math.random() * 7),
-                    ai.supportTarget.y + Math.sin(patrolSpread) * TILE_SIZE * (7 + Math.random() * 7)
-                );
+            const distToTarget = Math.hypot(u.x - ai.supportSquadTarget.x, u.y - ai.supportSquadTarget.y);
+            const isNearTarget = distToTarget < TILE_SIZE * 12;
+
+            if (isNearTarget) {
+                // ARRIVED: Engage enemies in the area
+                const nearbyEnemy = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 15);
+                if (nearbyEnemy) {
+                    u.attackUnit(nearbyEnemy);
+                } else if (u.state === UnitState.Idle) {
+                    // Patrol around target
+                    const angle = Math.random() * Math.PI * 2;
+                    ai.safeMoveTo(u,
+                        ai.supportSquadTarget.x + Math.cos(angle) * TILE_SIZE * 6,
+                        ai.supportSquadTarget.y + Math.sin(angle) * TILE_SIZE * 6
+                    );
+                }
+            } else {
+                // EN ROUTE: March to target area — DO NOT chase distant enemies!
+                // Only fight if enemy is blocking the path (very close)
+                const blockingEnemy = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 5);
+                if (blockingEnemy) {
+                    u.attackUnit(blockingEnemy);
+                } else if (u.state !== UnitState.Moving) {
+                    // Not moving? Issue march order!
+                    ai.safeMoveTo(u,
+                        ai.supportSquadTarget.x + (Math.random() - 0.5) * TILE_SIZE * 6,
+                        ai.supportSquadTarget.y + (Math.random() - 0.5) * TILE_SIZE * 6
+                    );
+                }
             }
         }
     }
 
-    // ==== React to shared threat intel ====
+    // ===== DETECT NEW THREATS & DISPATCH SUPPORT SQUAD =====
+    const hasActiveSquad = ai.supportSquad.size > 0;
     const now = sharedIntel.gameTime;
     const relevantThreats = sharedIntel.threats.filter(t => {
         if (t.targetTeam === ai.team) return false;
         if (!ai.entityManager.isAlly(ai.team, t.targetTeam)) return false;
-        if (now - t.timestamp > 30) return false; // Increased from 20s to 30s to remember threats longer
-        if (t.severity < 0.10) return false; // Decreased from 0.15 to react to minor skirmishes
+        if (now - t.timestamp > THREAT_DECAY_SECONDS) return false;
+        if (t.severity < 0.10) return false;
         return true;
     });
 
+    // Also check DIRECT enemy presence near ally buildings (bypass threat pipeline delay)
+    if (relevantThreats.length === 0 && !hasActiveSquad && highestSeverity >= 0.4) {
+        // Proactive scan found enemies near ally but reportThreat hasn't propagated yet
+        // Find the nearest ally building under threat and dispatch directly
+        for (const allyTeam of allyTeams) {
+            const allyBuildings = ai.entityManager.buildings.filter(
+                b => b.alive && b.team === allyTeam && b.built
+            );
+            for (const ab of allyBuildings) {
+                const enemyNear = ai.findNearestEnemyUnit(ab.x, ab.y, TILE_SIZE * 15);
+                if (enemyNear) {
+                    relevantThreats.push({
+                        x: enemyNear.x, y: enemyNear.y,
+                        severity: highestSeverity,
+                        timestamp: now,
+                        reporterTeam: ai.team,
+                        targetTeam: allyTeam
+                    });
+                    break;
+                }
+            }
+            if (relevantThreats.length > 0) break;
+        }
+    }
     if (relevantThreats.length === 0) return;
 
-    // Find the most severe/recent threat
     const worstThreat = relevantThreats.reduce((a, b) =>
-        (b.severity * (1 - (now - b.timestamp) / 30)) > (a.severity * (1 - (now - a.timestamp) / 30)) ? b : a
+        (b.severity * (1 - (now - b.timestamp) / THREAT_DECAY_SECONDS)) > (a.severity * (1 - (now - a.timestamp) / THREAT_DECAY_SECONDS)) ? b : a
     );
 
-    // Determine if this is a new threat area
+    // Check if this is a new threat area vs current squad target
+    // COMMIT TO TARGET: Don't oscillate between multiple threats!
     let isNewThreatArea = true;
-    if (ai.waveState === 'supporting' && ai.supportTimer > 0 && ai.supportTarget) {
-        const distToNewThreat = Math.hypot(ai.supportTarget.x - worstThreat.x, ai.supportTarget.y - worstThreat.y);
-        if (distToNewThreat < TILE_SIZE * 15) {
+    if (hasActiveSquad && ai.supportSquadTarget) {
+        const dist = Math.hypot(ai.supportSquadTarget.x - worstThreat.x, ai.supportSquadTarget.y - worstThreat.y);
+        if (dist < TILE_SIZE * 15) {
+            isNewThreatArea = false;
+        } else {
+            const lastRedirect = (ai as any)._lastSquadRedirectTime || 0;
+            const redirectCooldown = now - lastRedirect > 15;
+            const currentAreaEnemies = ai.entityManager.units.filter(
+                u => u.alive && ai.entityManager.isEnemy(ai.team, u.team) &&
+                    Math.hypot(u.x - ai.supportSquadTarget!.x, u.y - ai.supportSquadTarget!.y) < TILE_SIZE * 15
+            ).length;
+
+            if (redirectCooldown && worstThreat.severity > 0.7 && currentAreaEnemies <= 1) {
+                ai.supportSquadTarget = { x: worstThreat.x, y: worstThreat.y };
+                ai.supportTarget = ai.supportSquadTarget;
+                ai.supportSquadTimer = Math.max(ai.supportSquadTimer, 30);
+                (ai as any)._lastSquadRedirectTime = now;
+                ai.log(`🔄 Support Squad chuyển hướng: mục tiêu mới nghiêm trọng hơn!`, '#ffcc00');
+            }
             isNewThreatArea = false;
         }
     }
+    if (hasActiveSquad && !isNewThreatArea) return;
 
-    // ==== EMERGENCY: If ally severely threatened AND own base safe, send more troops ====
-    const isEmergency = worstThreat.severity > 0.6 && !ownBaseUnderAttack; // lowered from 0.8
-    const isCritical = worstThreat.severity > 0.35; // lowered from 0.5
-
-    // Build support pool: support units + attack units for critical, + garrison for emergency
-    const supportPool = [
+    // ==== DISPATCH: Build squad from available troops ====
+    const isEmergency = worstThreat.severity > 0.6 && !ownBaseUnderAttack;
+    const isCritical = worstThreat.severity > 0.35;
+    const candidatePool = [
         ...ai.forceAllocation.supportUnits,
-        ...(isCritical ? ai.forceAllocation.attackUnits : []),
+        ...ai.forceAllocation.attackUnits,
         ...(isEmergency ? ai.forceAllocation.garrisonUnits.slice(0, Math.floor(ai.forceAllocation.garrisonUnits.length * 0.5)) : []),
-    ];
-    const availableMilitary = supportPool.filter(
-        u => u.alive && (u.state === UnitState.Idle || u.state === UnitState.Moving ||
-            (isCritical && u.state === UnitState.Attacking))
+    ].filter(u => u.alive && !ai.supportSquad.has(u.id) &&
+        (u.state === UnitState.Idle || u.state === UnitState.Moving || u.state === UnitState.Attacking)
     );
 
+    const maxSquadSize = Math.max(3, Math.floor(myMilitary.length * 0.4));
+    const canAdd = Math.max(0, maxSquadSize - ai.supportSquad.size);
     let sent = 0;
-    for (const u of availableMilitary) {
+    for (const u of candidatePool) {
+        if (sent >= canAdd) break;
         const dist = Math.hypot(u.x - worstThreat.x, u.y - worstThreat.y);
-
-        // Skip units already engaged near the threat
         if (u.state === UnitState.Attacking && dist < TILE_SIZE * 15) continue;
-
-        // Prevent stuttering: skip units already moving toward the threat area
         if (u.state === UnitState.Moving && u.pathWaypoints && u.pathWaypoints.length > 0) {
             const dest = u.pathWaypoints[u.pathWaypoints.length - 1];
-            if (Math.hypot(dest.x - worstThreat.x, dest.y - worstThreat.y) < TILE_SIZE * 15) {
-                // If they are moving toward it, just check for enemies on the way to be safe
-                const enemyOnTheWay = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 10);
-                if (enemyOnTheWay) u.attackUnit(enemyOnTheWay);
-                continue;
-            }
+            if (Math.hypot(dest.x - worstThreat.x, dest.y - worstThreat.y) < TILE_SIZE * 15) continue;
         }
-
-        const enemyNearThreat = ai.findNearestEnemyUnit(worstThreat.x, worstThreat.y, TILE_SIZE * 15);
-        if (enemyNearThreat) {
-            u.attackUnit(enemyNearThreat);
-        } else {
-            // ATTACK-MOVE Logic
-            const enemyOnTheWay = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 10);
-            if (enemyOnTheWay) {
-                u.attackUnit(enemyOnTheWay);
-            } else {
-                ai.safeMoveTo(u,
-                    worstThreat.x + (Math.random() - 0.5) * TILE_SIZE * 6,
-                    worstThreat.y + (Math.random() - 0.5) * TILE_SIZE * 6
-                );
-            }
-        }
+        ai.supportSquad.add(u.id);
+        // ALWAYS move to the AREA, never attackUnit on a far target
+        ai.safeMoveTo(u,
+            worstThreat.x + (Math.random() - 0.5) * TILE_SIZE * 6,
+            worstThreat.y + (Math.random() - 0.5) * TILE_SIZE * 6
+        );
         sent++;
     }
 
     if (sent > 0) {
-        ai.waveState = 'supporting';
-        ai.supportTarget = { x: worstThreat.x, y: worstThreat.y };
+        ai.supportSquadTarget = { x: worstThreat.x, y: worstThreat.y };
+        ai.supportTarget = ai.supportSquadTarget;
+        ai.supportSquadTimer = 40;
         ai.supportTimer = 45;
-        // STATE LOCK: Prevent gathering or base defense from immediately pulling these units back
-        ai.waveResetTimer = 25;
-
-        if (isNewThreatArea || sent >= 4 || isEmergency) {
-            const urgency = isEmergency ? '🚨 KHẨN CẤP' : (isCritical ? '⚠️ GẤP' : '🚑');
-            ai.log(`${urgency} Cử thêm ${sent} lính cứu đồng minh! (Giữ nhà: ${ai.forceAllocation.garrisonUnits.length})`, "#00ffcc");
-        }
+        const urgency = isEmergency ? '🚨 KHẨN CẤP' : (isCritical ? '⚠️ GẤP' : '🚑');
+        ai.log(`${urgency} Support Squad: +${sent} (total: ${ai.supportSquad.size}/${maxSquadSize}). Main army intact!`, '#00ffcc');
     }
 
-    // ===== SUPPORT → COUNTER-ATTACK TRANSITION =====
-    if (ai.waveState === 'supporting' && ai.supportTarget) {
-        const enemiesNearSupport = ai.entityManager.units.filter(
+    // ===== SUPPORT SQUAD COMBAT: units already in squad engage enemies =====
+    if (ai.supportSquad.size > 0 && ai.supportSquadTarget) {
+        let aliveCount = 0;
+        let arrivedCount = 0;
+        const enemiesNearTarget = ai.entityManager.units.filter(
             u => u.alive && ai.entityManager.isEnemy(ai.team, u.team) &&
-                Math.hypot(u.x - ai.supportTarget!.x, u.y - ai.supportTarget!.y) < TILE_SIZE * 12
+                Math.hypot(u.x - ai.supportSquadTarget!.x, u.y - ai.supportSquadTarget!.y) < TILE_SIZE * 15
         );
-        if (enemiesNearSupport.length === 0 && myMilitary.length >= 4) {
-            const nearbyMilitary = myMilitary.filter(
-                u => Math.hypot(u.x - ai.supportTarget!.x, u.y - ai.supportTarget!.y) < TILE_SIZE * 15
-            );
-            if (nearbyMilitary.length >= 3) {
+
+        for (const id of ai.supportSquad) {
+            const u = ai.entityManager.units.find(u => u.id === id);
+            if (!u || !u.alive) continue;
+            aliveCount++;
+
+            const distToTarget = Math.hypot(u.x - ai.supportSquadTarget.x, u.y - ai.supportSquadTarget.y);
+            const hasArrived = distToTarget < SUPPORT_GUARD_RANGE;
+            if (hasArrived) arrivedCount++;
+
+            // If idle and not at target, keep moving!
+            if (u.state === UnitState.Idle && !hasArrived) {
+                // Find enemies on the way
+                const enemyOnWay = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 10);
+                if (enemyOnWay) {
+                    u.attackUnit(enemyOnWay);
+                } else {
+                    // Keep moving to target
+                    ai.safeMoveTo(u,
+                        ai.supportSquadTarget.x + (Math.random() - 0.5) * TILE_SIZE * 6,
+                        ai.supportSquadTarget.y + (Math.random() - 0.5) * TILE_SIZE * 6
+                    );
+                }
+            } else if (u.state === UnitState.Idle && hasArrived) {
+                // Arrived at target: attack nearby enemies if any
+                if (enemiesNearTarget.length > 0) {
+                    const closest = enemiesNearTarget.reduce((a, b) =>
+                        Math.hypot(a.x - u.x, a.y - u.y) < Math.hypot(b.x - u.x, b.y - u.y) ? a : b
+                    );
+                    u.attackUnit(closest);
+                } else {
+                    // Patrol around target
+                    const angle = Math.random() * Math.PI * 2;
+                    ai.safeMoveTo(u,
+                        ai.supportSquadTarget.x + Math.cos(angle) * TILE_SIZE * 4,
+                        ai.supportSquadTarget.y + Math.sin(angle) * TILE_SIZE * 4
+                    );
+                }
+            }
+        }
+
+        // ===== SUPPORT SQUAD → COUNTER-ATTACK TRANSITION =====
+        if (aliveCount >= 3 && ai.supportSquadTimer < 20 && enemiesNearTarget.length === 0) {
+            // Target is clear, and we have enough arrived units -> Counter-attack
+            if (arrivedCount >= 3) {
                 const enemyBldgs = ai.getScoutedEnemyBuildings();
                 if (enemyBldgs.length > 0) {
-                    const closest = enemyBldgs.reduce((a, b) =>
-                        Math.hypot(a.x - ai.supportTarget!.x, a.y - ai.supportTarget!.y) <
-                            Math.hypot(b.x - ai.supportTarget!.x, b.y - ai.supportTarget!.y) ? a : b
+                    const squadUnits = ai.entityManager.units.filter(u => u.alive && ai.supportSquad.has(u.id));
+                    const targetBldg = enemyBldgs.reduce((a, b) =>
+                        Math.hypot(a.x - ai.supportSquadTarget!.x, a.y - ai.supportSquadTarget!.y) <
+                            Math.hypot(b.x - ai.supportSquadTarget!.x, b.y - ai.supportSquadTarget!.y) ? a : b
                     );
-                    ai.counterAttackTarget = { x: closest.x, y: closest.y };
-                    ai.waveState = 'counterattack';
-                    ai.waveResetTimer = 25;
-                    for (const u of nearbyMilitary) {
-                        u.attackBuilding(closest);
-                    }
-                    ai.log(`⚡ Chi viện xong! Phản công ${nearbyMilitary.length} lính!`, '#ffaa00');
+                    for (const u of squadUnits) u.attackBuilding(targetBldg);
+                    ai.supportSquad.clear();
+                    ai.supportSquadTarget = null;
+                    ai.supportTarget = null;
+                    ai.log(`⚡ Support Squad dọn dẹp xong! Phản công lại ${enemyBldgs.length} công trình địch!`, '#ffaa00');
                 }
             }
         }
@@ -236,12 +314,12 @@ export function coordinateWithAllies(ai: AIContext): void {
         // Must not be from us
         if (c.initiatorTeam === ai.team) return false;
         // Must be recent
-        if (now - c.timestamp > 30) return false;
+        if (now - c.timestamp > COORDINATION_DECAY_SECONDS) return false;
         // We haven't joined yet
         return !c.participating.has(ai.team);
     });
 
-    if (activeCoord && (ai.waveState === 'gathering' || ai.waveState === 'supporting')) {
+    if (activeCoord && ai.waveState === 'gathering') {
         // We have enough troops to join? (at least 40% of wave size — be aggressive)
         const military = ai.entityManager.units.filter(
             u => u.alive && u.team === ai.team && !u.isVillager &&
@@ -288,9 +366,11 @@ export function coordinateWithAllies(ai: AIContext): void {
 
     // === PROACTIVE COORDINATED ATTACK: Initiate joint attack if conditions are met ===
     if (ai.waveState === 'gathering' && !activeCoord) {
+        // FIX #6: Also count units that just finished attacking (they're available for coordination)
         const myMilitary = ai.entityManager.units.filter(
             u => u.alive && u.team === ai.team && !u.isVillager &&
-                (u.state === UnitState.Idle || u.state === UnitState.Moving)
+                (u.state === UnitState.Idle || u.state === UnitState.Moving ||
+                 (u.state === UnitState.Attacking && !u.attackTarget?.alive))
         );
         // Only initiate if we have a decent army
         if (myMilitary.length >= ai.attackWaveSize) {
@@ -381,9 +461,9 @@ export function tacticalReassessment(ai: AIContext): void {
         if (u.state !== UnitState.Idle) continue;
 
         // Check if any ally unit is fighting nearby
-        const ally = ai.findAllyInCombat(u.x, u.y, TILE_SIZE * 10);
+        const ally = ai.findAllyInCombat(u.x, u.y, TILE_SIZE * 15);
         if (ally) {
-            const enemy = ai.findNearestEnemyUnit(ally.x, ally.y, TILE_SIZE * 8);
+            const enemy = ai.findNearestEnemyUnit(ally.x, ally.y, TILE_SIZE * 15);
             if (enemy) {
                 u.attackUnit(enemy);
             }
@@ -420,17 +500,15 @@ export function reportThreat(ai: AIContext, x: number, y: number, severity: numb
 
 export function cleanupIntel(ai: AIContext): void {
     const now = sharedIntel.gameTime;
-    // Remove old threats (> 20 seconds)
-    sharedIntel.threats = sharedIntel.threats.filter(t => now - t.timestamp < 20);
-    // Remove old coordinated attacks (> 45 seconds)
-    sharedIntel.coordinatedAttacks = sharedIntel.coordinatedAttacks.filter(c => now - c.timestamp < 45);
-    // Remove old known enemy positions (> 30 seconds)
+    // FIX #9: Use consistent timeout constants
+    sharedIntel.threats = sharedIntel.threats.filter(t => now - t.timestamp < THREAT_DECAY_SECONDS);
+    sharedIntel.coordinatedAttacks = sharedIntel.coordinatedAttacks.filter(c => now - c.timestamp < COORDINATION_DECAY_SECONDS);
     for (const [id, pos] of ai.knownEnemyPositions) {
-        if (now - pos.time > 30) ai.knownEnemyPositions.delete(id);
+        if (now - pos.time > ENEMY_POSITION_DECAY) ai.knownEnemyPositions.delete(id);
     }
-    // Clean stale scouted enemy units (> 60 seconds since last seen)
+    // Clean stale scouted enemy units
     for (const [id, info] of ai.scoutedEnemyUnits) {
-        if (now - info.time > 60) ai.scoutedEnemyUnits.delete(id);
+        if (now - info.time > SCOUTED_UNIT_DECAY) ai.scoutedEnemyUnits.delete(id);
     }
     // Mark scouted buildings as dead if we can see they're gone
     for (const [id, info] of ai.scoutedEnemyBuildings) {

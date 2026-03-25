@@ -31,8 +31,10 @@ const ATTACK_HISTORY_DECAY = 120;                 // Giây để một record h�
 //  TIER-1: Now considers defense stance & early warning
 // ===================================================================
 export function calculateForceAllocation(ai: AIContext): void {
+    // Exclude support squad units — they have their own independent mission
     const military = ai.entityManager.units.filter(
-        u => u.alive && u.team === ai.team && !u.isVillager && !u.manualCommand
+        u => u.alive && u.team === ai.team && !u.isVillager && !u.manualCommand &&
+            !ai.supportSquad.has(u.id)
     );
     if (military.length === 0) {
         ai.forceAllocation.garrisonUnits = [];
@@ -69,7 +71,16 @@ export function calculateForceAllocation(ai: AIContext): void {
             u.team !== ai.team && ai.entityManager.isAlly(ai.team, u.team) &&
             u.state === UnitState.Attacking
     );
-    const allyNeedsHelp = allyUnderAttack || allyUnitsInDanger;
+    // PROACTIVE: Also detect enemies near ally's buildings even before damage occurs
+    const enemiesNearAllyBase = !allyUnderAttack && ai.entityManager.buildings.some(b => {
+        if (!b.alive || !b.built || b.team === ai.team || !ai.entityManager.isAlly(ai.team, b.team)) return false;
+        // Check if any enemy military unit is near this ally building
+        return ai.entityManager.units.some(
+            u => u.alive && !u.isVillager && ai.entityManager.isEnemy(ai.team, u.team) &&
+                Math.hypot(u.x - b.x, u.y - b.y) < TILE_SIZE * 12
+        );
+    });
+    const allyNeedsHelp = allyUnderAttack || allyUnitsInDanger || enemiesNearAllyBase;
 
     // Tower helps with defense
     const towerCount = ownBuildings.filter(b => b.type === BuildingType.Tower).length;
@@ -106,9 +117,9 @@ export function calculateForceAllocation(ai: AIContext): void {
         garrisonCount = Math.min(3, Math.ceil(total * 0.3));
     }
 
-    // === FORTRESS MODE: Most defend (but not ALL) ===
+    // === FORTRESS MODE: More defend but still allow some attack ===
     else if (ai.defenseStance === DefenseStance.Fortress) {
-        garrisonCount = Math.max(Math.ceil(total * 0.6), 1);
+        garrisonCount = Math.max(Math.ceil(total * 0.4), 1); // Reduced from 0.6 to 0.4
     } else if (ai.earlyWarningActive) {
         // Early warning detected: increase garrison proportionally to threat
         const threatLevel = Math.min(1.0, ai.earlyWarningEnemies.length / 8);
@@ -198,9 +209,20 @@ export function earlyWarningCheck(ai: AIContext): void {
 
     if (earlyWarningEnemies.length === 0) {
         // No threats in perimeter — gradually relax stance
+        // FIX: Also check that no buildings are actively damaged before relaxing
+        const baseStillDamaged = ai.entityManager.buildings.some(
+            b => b.alive && b.team === ai.team && b.built && b.hp < b.maxHp * 0.95
+        );
         if (ai.earlyWarningActive) {
             ai.earlyWarningActive = false;
-            if (ai.defenseStance === DefenseStance.Alert) {
+        }
+        // STEP-DOWN DEGRADATION: Fortress → Alert → Peaceful
+        // (Previously only Alert → Peaceful, Fortress was permanent!)
+        if (!baseStillDamaged) {
+            if (ai.defenseStance === DefenseStance.Fortress) {
+                ai.defenseStance = DefenseStance.Alert;
+                ai.log(`✅ Mối đe dọa đã giảm. Chuyển từ Pháo Đài → Cảnh Giác.`, '#44ff88');
+            } else if (ai.defenseStance === DefenseStance.Alert) {
                 ai.defenseStance = DefenseStance.Peaceful;
                 ai.log(`✅ Hết cảnh báo sớm. Chuyển về chế độ Bình Thường.`, '#44ff88');
             }
@@ -469,6 +491,10 @@ function towerLureDefense(ai: AIContext, defender: Unit, enemy: Unit): boolean {
 //  GARRISON RETURN: Defenders return to their barracks after defense
 // ===================================================================
 export function handleDefense(ai: AIContext): void {
+    // CRITICAL: Clear defending units each tick — they get re-assigned below.
+    // Prevents permanent lock when enemies retreat or units die.
+    ai.defendingUnits.clear();
+
     // === TIER-3: One-time chokepoint scan (runs once per game) ===
     if (!ai.chokepointScanDone && ai.aiState.age >= 2) {
         scanForChokepoints(ai);
@@ -489,7 +515,14 @@ export function handleDefense(ai: AIContext): void {
     }
 
     // Recalculate force allocation every defense tick
-    ai.calculateForceAllocation();
+    // BUT: skip when actively supporting allies to prevent garrison from stealing support troops
+    const activelySupporting = ai.supportSquad.size > 0 && ai.supportSquadTimer > 0;
+    const ownBaseDirectlyAttacked = ai.entityManager.buildings.some(
+        b => b.alive && b.team === ai.team && b.built && b.hp < b.maxHp
+    );
+    if (!activelySupporting || ownBaseDirectlyAttacked) {
+        ai.calculateForceAllocation();
+    }
 
     const ownBuildings = ai.entityManager.buildings.filter(
         b => b.alive && b.team === ai.team && b.built
@@ -517,12 +550,18 @@ export function handleDefense(ai: AIContext): void {
         }
     }
 
-    // Combine threat sources: damaged buildings AND villagers under attack
-    const hasOwnBaseThreats = damagedOwnBuildings.length > 0 || villagersUnderAttack.length > 0;
+    // Combine threat sources: damaged buildings, villagers under attack, OR enemies approaching base
+    // Bug fix: also detect enemies near UNDAMAGED buildings (they're approaching but haven't attacked yet)
+    const enemiesApproachingBase = ai.entityManager.units.some(
+        u => u.alive && !u.isVillager && ai.entityManager.isEnemy(ai.team, u.team) &&
+            Math.hypot(u.x - ai.baseX, u.y - ai.baseY) < TILE_SIZE * 15
+    );
+    const hasOwnBaseThreats = damagedOwnBuildings.length > 0 || villagersUnderAttack.length > 0 || enemiesApproachingBase;
 
-    // First find ALL enemies near any of our damaged buildings or threatened villagers
+    // Find ALL enemies near our base, damaged buildings, or threatened villagers
     const allThreats: Unit[] = [];
     if (hasOwnBaseThreats) {
+        // Scan near damaged buildings
         for (const dmgBldg of damagedOwnBuildings) {
             for (const u of ai.entityManager.units) {
                 if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team)) continue;
@@ -537,6 +576,16 @@ export function handleDefense(ai: AIContext): void {
                 if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team)) continue;
                 const d = Math.hypot(u.x - v.x, u.y - v.y);
                 if (d < TILE_SIZE * 8 && !allThreats.includes(u)) {
+                    allThreats.push(u);
+                }
+            }
+        }
+        // Also scan near base center for enemies that haven't caused damage yet
+        if (allThreats.length === 0 && enemiesApproachingBase) {
+            for (const u of ai.entityManager.units) {
+                if (!u.alive || !ai.entityManager.isEnemy(ai.team, u.team) || u.isVillager) continue;
+                const d = Math.hypot(u.x - ai.baseX, u.y - ai.baseY);
+                if (d < TILE_SIZE * 15) {
                     allThreats.push(u);
                 }
             }
@@ -593,27 +642,53 @@ export function handleDefense(ai: AIContext): void {
 
         // Calculate threat power to determine how many units to pull
         const enemyPower = ai.calculateCombatPower(allThreats);
-        const garrisonPower = ai.calculateCombatPower(ai.forceAllocation.garrisonUnits);
 
-        let defenders = [...ai.forceAllocation.garrisonUnits];
+        // When force allocation is stale (during active support), use units actually near base
+        let defenders: Unit[];
         let pulledSupportOrAttack = false;
+        if (activelySupporting) {
+            // STALE ALLOCATION: find military units actually near our base
+            // BUT: never include active Support Squad units!
+            defenders = military.filter(u =>
+                !ai.supportSquad.has(u.id) &&
+                Math.hypot(u.x - ai.baseX, u.y - ai.baseY) < TILE_SIZE * 20 &&
+                (u.state === UnitState.Idle || u.state === UnitState.Moving || u.state === UnitState.Attacking)
+            );
+        } else {
+            const garrisonPower = ai.calculateCombatPower(ai.forceAllocation.garrisonUnits);
+            defenders = [...ai.forceAllocation.garrisonUnits];
 
-        if (enemyPower > garrisonPower * 1.5 || garrisonPower === 0) {
-            defenders.push(...ai.forceAllocation.supportUnits);
-            const combinedPower = ai.calculateCombatPower(defenders);
-            pulledSupportOrAttack = true; // We needed support
+            if (enemyPower > garrisonPower * 1.5 || garrisonPower === 0) {
+                // Pull support reserve (but NOT active Support Squad units)
+                defenders.push(...ai.forceAllocation.supportUnits.filter(u => !ai.supportSquad.has(u.id)));
+                const combinedPower = ai.calculateCombatPower(defenders);
+                pulledSupportOrAttack = true; // We needed support
 
-            if (enemyPower > combinedPower * 1.5 || combinedPower === 0) {
-                defenders.push(...ai.forceAllocation.attackUnits);
+                if (enemyPower > combinedPower * 1.5 || combinedPower === 0) {
+                    defenders.push(...ai.forceAllocation.attackUnits);
+                }
             }
         }
-        defenders = defenders.filter(u => u.alive && u.hp > 0);
+        defenders = defenders.filter(u => u.alive && u.hp > 0 && !ai.supportSquad.has(u.id));
+        const defenderPower = ai.calculateCombatPower(defenders);
 
-        // EMERGENCY: abort ongoing attack/support ONLY if we needed those units
-        if (pulledSupportOrAttack && (ai.waveState === 'attacking' || ai.waveState === 'supporting')) {
-            ai.waveState = 'gathering';
+        // EMERGENCY: abort ongoing attack ONLY if we needed those units and threat is high
+        const isOverwhelming = enemyPower > defenderPower * 3;
+        const ownBuildingsDamaged = damagedOwnBuildings.length > 0;
+        if (pulledSupportOrAttack && ai.waveState === 'attacking') {
+            // 'attacking' — can be recalled when overwhelmed
+            if (ai.waveResetTimer <= 0 || isOverwhelming) {
+                ai.waveState = 'gathering';
+                ai.log(`🛑 CĂN CỨ BỊ TẤN CÔNG MẠNH! RÚT QUÂN VỀ! (Địch: ${Math.round(enemyPower)} vs Thủ: ${Math.round(defenderPower)})`, "#ff0000");
+            }
+        }
+        // If support squad is active AND own base is overwhelmed, disband squad
+        if (ai.supportSquad.size > 0 && ownBuildingsDamaged && isOverwhelming) {
+            ai.supportSquad.clear();
+            ai.supportSquadTarget = null;
+            ai.supportTarget = null;
             ai.supportTimer = 0;
-            ai.log(`🛑 CĂN CỨ BỊ TẤN CÔNG MẠNH (Địch: ${Math.round(enemyPower)} vs Thủ nhà: ${Math.round(garrisonPower)})! RÚT QUÂN VỀ NGAY!`, "#ff0000");
+            ai.log(`🛑 GIẢI TÁN SUPPORT SQUAD! CĂN CỨ ĐANG BỊ PHÁ HỦY!`, "#ff0000");
         }
 
         const referenceBuilding = damagedOwnBuildings.length > 0
@@ -707,19 +782,42 @@ export function handleDefense(ai: AIContext): void {
 
             // === Standard defense (no tower nearby) ===
             if (u.state === UnitState.Attacking && u.attackTarget && u.attackTarget.alive) {
+                // Already fighting — only retarget if current target is NOT a known threat
                 const isTargetingThreat = allThreats.some(t => t === u.attackTarget);
                 if (!isTargetingThreat) {
                     u.attackUnit(closestEnemy);
                 }
+                // Otherwise keep current valid attack (don't interrupt!)
             } else {
-                // TIER-1 FIX (Defense Scatter): Do not clump on one coordinate if far away
                 const distToEnemy = Math.hypot(u.x - closestEnemy.x, u.y - closestEnemy.y);
-                if (distToEnemy > TILE_SIZE * 10) {
-                    ai.safeMoveTo(u,
-                        closestEnemy.x + (Math.random() - 0.5) * TILE_SIZE * 12,
-                        closestEnemy.y + (Math.random() - 0.5) * TILE_SIZE * 12
-                    );
+                if (distToEnemy > TILE_SIZE * 15) {
+                    // Unit is far from the threat — decide: Base Trade or Retreat HOME
+
+                    // Check if unit is deep in enemy base → Base Trade
+                    let nearEnemyCore = false;
+                    for (const eb of ai.getScoutedEnemyBuildings()) {
+                        if (Math.hypot(u.x - eb.x, u.y - eb.y) < TILE_SIZE * 12) {
+                            nearEnemyCore = true; break;
+                        }
+                    }
+                    if (nearEnemyCore && u.state === UnitState.Attacking) {
+                        continue; // Refuse to retreat! Fight to the death (Base Trade)
+                    }
+
+                    // Tactical Retreat → move toward OWN BASE, not toward enemy
+                    // Attack-Move: fight nearby enemies encountered en route
+                    const enemyOnTheWay = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 6);
+                    if (enemyOnTheWay) {
+                        u.attackUnit(enemyOnTheWay);
+                    } else {
+                        // Retreat toward base with slight spread
+                        ai.safeMoveTo(u,
+                            ai.baseX + (Math.random() - 0.5) * TILE_SIZE * 8,
+                            ai.baseY + (Math.random() - 0.5) * TILE_SIZE * 8
+                        );
+                    }
                 } else {
+                    // Close to enemy — engage!
                     u.attackUnit(closestEnemy);
                 }
             }

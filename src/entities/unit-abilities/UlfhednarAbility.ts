@@ -19,10 +19,6 @@ export const UlfhednarAbility: EliteAbility = {
             // Speed boost during rage (+50% move, +50% attack speed)
             unit.speedBonus = 0.5;
 
-            // 🛡️ ABSOLUTE INVINCIBILITY — force-restore HP every frame
-            if (unit.hp < unit.ulfhednarRageHP) {
-                unit.hp = unit.ulfhednarRageHP;
-            }
 
             // ⚡ LIGHTNING BOLTS — fire 3 bolts during rage (every ~1.3s)
             unit.ulfhednarLightningTimer += dt;
@@ -129,7 +125,7 @@ export const UlfhednarAbility: EliteAbility = {
 
 // ---- Lightning bolt visual + damage ----
 function fireLightningBolt(unit: Unit, target: Unit, particles: any): void {
-    const lightDmg = Math.floor(unit.attack * 1.5);
+    const lightDmg = Math.floor(unit.attack * 0.8);
     const finalLightDmg = target.applyPassiveDefense(lightDmg, particles);
     target.hp -= finalLightDmg;
     const tx = target.x, ty = target.y;

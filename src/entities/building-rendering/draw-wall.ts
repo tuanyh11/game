@@ -1,17 +1,11 @@
 import { C, TILE_SIZE } from "../../config/GameConfig";
 import { Building } from "../Building";
 
-export function drawWall(ctx: CanvasRenderingContext2D, b: Building): void {
+export function drawWall(b: Building, ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, left: number, top: number, w: number, h: number): void {
     const age = b.age;
-    const w = b.data.size[0] * TILE_SIZE;
-    const h = b.data.size[1] * TILE_SIZE;
-
-    // Center pivot
-    const cx = w / 2;
-    const cy = h / 2;
 
     ctx.save();
-    ctx.translate(b.x - cx, b.y - cy);
+    ctx.translate(left, top);
 
     // Squish the wall visually to make it look shorter, while keeping the full 3x3 footprint active
     ctx.translate(0, h * 0.3);

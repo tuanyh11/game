@@ -36,13 +36,12 @@ export function unitDoGather(
 
     const node = unit.targetResource;
     const resInfo = GATHER_RATES[node.nodeType];
-    // Use per-resource bonus if available
+    // Apply per-resource gather speed bonus
+    // Game only has 2 resource types: Supplies (from trees) and Gold (from mines)
     let gatherBonus = unit.gatherSpeedBonus;
     switch (resInfo.resourceType) {
-        case ResourceType.Food: gatherBonus = unit.gatherFoodBonus || gatherBonus; break;
-        case ResourceType.Wood: gatherBonus = unit.gatherWoodBonus || gatherBonus; break;
+        case ResourceType.Supplies: gatherBonus = unit.gatherWoodBonus || gatherBonus; break;
         case ResourceType.Gold: gatherBonus = unit.gatherGoldBonus || gatherBonus; break;
-        case ResourceType.Stone: gatherBonus = unit.gatherStoneBonus || gatherBonus; break;
     }
     const gathered = node.gather(dt) * (1 + gatherBonus);
     unit.carriedResources[resInfo.resourceType] = (unit.carriedResources[resInfo.resourceType] || 0) + gathered;
@@ -59,23 +58,11 @@ export function unitDoGather(
         switch (node.nodeType) {
             case ResourceNodeType.Tree:
                 particles.emitWoodChips(ex, ey);
-                audioSystem.playGatherSound('wood', '/musics/freesound-community-knife-throw-2-88028_ojoqm7vv.mp3', 0.2 + Math.random() * 0.1, 0.9 + Math.random() * 0.2, unit.x, unit.y);
+                audioSystem.playGatherSound('wood', './sounds/freesound-community-knife-throw-2-88028_ojoqm7vv.mp3', 0.2 + Math.random() * 0.1, 0.9 + Math.random() * 0.2, unit.x, unit.y);
                 break;
             case ResourceNodeType.GoldMine:
                 particles.emitGoldSparkle(ex, ey);
-                audioSystem.playGatherSound('mine', '/musics/u_xjrmmgxfru-hit-rock-02-266304.mp3', 0.15 + Math.random() * 0.1, 0.9 + Math.random() * 0.2, unit.x, unit.y);
-                break;
-            case ResourceNodeType.StoneMine:
-                particles.emitStoneChips(ex, ey);
-                audioSystem.playGatherSound('mine', '/musics/u_xjrmmgxfru-hit-rock-02-266304.mp3', 0.15 + Math.random() * 0.1, 0.85 + Math.random() * 0.2, unit.x, unit.y);
-                break;
-            case ResourceNodeType.BerryBush:
-                particles.emitBerryPick(ex, ey);
-                audioSystem.playGatherSound('food', '/musics/u_xjrmmgxfru-hit-rock-02-266304.mp3', 0.1 + Math.random() * 0.05, 0.5 + Math.random() * 0.2, unit.x, unit.y);
-                break;
-            case ResourceNodeType.Farm:
-                particles.emitFarmHarvest(ex, ey);
-                audioSystem.playGatherSound('food', '/musics/u_xjrmmgxfru-hit-rock-02-266304.mp3', 0.1 + Math.random() * 0.05, 0.4 + Math.random() * 0.2, unit.x, unit.y);
+                audioSystem.playGatherSound('mine', './sounds/u_xjrmmgxfru-hit-rock-02-266304.mp3', 0.15 + Math.random() * 0.1, 0.9 + Math.random() * 0.2, unit.x, unit.y);
                 break;
         }
     }
@@ -200,7 +187,8 @@ export function unitDoBuilding(
     particles: ParticleSystem,
     spendResource: (team: number, cost: Record<string, number>) => boolean
 ): void {
-    if (!unit.buildTarget) {
+    if (!unit.buildTarget || !unit.buildTarget.alive) {
+        unit.buildTarget = null;
         autoFindNextBuilding(unit);
         return;
     }
@@ -224,7 +212,7 @@ export function unitDoBuilding(
     const prevSwingCycle = Math.floor(prevT / 0.7);
     const currSwingCycle = Math.floor(unit.buildSwingTimer / 0.7);
     if (prevT <= 0 || currSwingCycle > prevSwingCycle) {
-        audioSystem.playSFXWithPitch('/musics/freesound-community-knife-throw-2-88028_ojoqm7vv.mp3', 0.2 + Math.random() * 0.1, 0.9 + Math.random() * 0.2, unit.x, unit.y);
+        audioSystem.playSFXWithPitch('./sounds/freesound-community-knife-throw-2-88028_ojoqm7vv.mp3', 0.2 + Math.random() * 0.1, 0.9 + Math.random() * 0.2, unit.x, unit.y);
     }
     let completed = false;
 
@@ -290,13 +278,17 @@ export function unitDropOff(unit: Unit, particles: ParticleSystem): void {
         
         // Drop-off splash effect using dominant resource color
         const dominantType = unit.carriedType;
+        // Drop-off splash effect — color based on what the villager was gathering
         let dropColor = '#888';
-        if (dominantType) {
+        if (unit.targetResource) {
+            switch (unit.targetResource.nodeType) {
+                case ResourceNodeType.Tree: dropColor = C.wood; break;
+                case ResourceNodeType.GoldMine: dropColor = C.gold; break;
+            }
+        } else if (dominantType) {
             switch (dominantType) {
-                case ResourceType.Food: dropColor = C.food; break;
-                case ResourceType.Wood: dropColor = C.wood; break;
+                case ResourceType.Supplies: dropColor = C.wood; break;
                 case ResourceType.Gold: dropColor = C.gold; break;
-                case ResourceType.Stone: dropColor = C.stone; break;
             }
         }
         particles.emitDropOff(unit.x, unit.y, dropColor);

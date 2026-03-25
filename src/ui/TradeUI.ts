@@ -71,10 +71,8 @@ export class TradeUI {
         inventory.className = 'trade-inventory';
         inventory.innerHTML = `
             <span><strong>${t('trade.inventory')}</strong></span>
-            <span style="color: ${C.food}">🌾 ${Math.floor(res.food)}</span>
-            <span style="color: ${C.wood}">🪵 ${Math.floor(res.wood)}</span>
             <span style="color: ${C.gold}">🪙 ${Math.floor(res.gold)}</span>
-            <span style="color: ${C.stone}">🪨 ${Math.floor(res.stone)}</span>
+            <span style="color: ${C.wood}">📦 ${Math.floor(res.supplies)}</span>
         `;
         this.container.appendChild(inventory);
 
@@ -110,10 +108,8 @@ export class TradeUI {
             grid.className = 'trade-resources-grid';
 
             const resources: { type: ResourceType, label: string, color: string }[] = [
-                { type: ResourceType.Food, label: t('trade.food'), color: C.food },
-                { type: ResourceType.Wood, label: t('trade.wood'), color: C.wood },
                 { type: ResourceType.Gold, label: t('trade.gold'), color: C.gold },
-                { type: ResourceType.Stone, label: t('trade.stone'), color: C.stone }
+                { type: ResourceType.Supplies, label: t('trade.supplies') || '📦 Vật tư', color: C.wood },
             ];
 
             for (const r of resources) {

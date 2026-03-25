@@ -33,7 +33,7 @@ export function getModeSelectTemplate(): string {
                 <div class="zen-mode-desc">${t('menu.playAI.desc')}</div>
                 <div class="zen-mode-hanko">戦</div>
             </button>
-            <button class="zen-mode-card" id="mode-online">
+            <button class="zen-mode-card" id="mode-online" style="display:none">
                 <div class="zen-mode-icon">🌐</div>
                 <div class="zen-mode-name">${t('menu.playOnline')}</div>
                 <div class="zen-mode-desc">${t('menu.playOnline.desc')}</div>

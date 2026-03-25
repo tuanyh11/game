@@ -16,6 +16,7 @@ import { getModeSelectTemplate, getAiSetupTemplate, getLobbyChooseTemplate, getL
 import { MultiplayerLobbyUI } from './MultiplayerLobbyUI';
 import { GuideUI } from './GuideUI';
 import { t, getLang, setLang } from '../i18n/i18n';
+import { audioSystem } from '../systems/AudioSystem';
 
 const DIFFICULTIES = [AIDifficulty.Easy, AIDifficulty.Normal, AIDifficulty.Hard];
 const DIFF_COLORS: Record<AIDifficulty, string> = {
@@ -120,10 +121,13 @@ export class MainMenu {
 
     start(): void {
         this.buildUI();
+        // Start menu BGM immediately (AudioSystem handles deferred play until first user interaction)
+        audioSystem.playBGM('./sounds/Rites.mp3', 0.5);
     }
 
     stop(): void {
         this.stopped = true;
+        audioSystem.stopBGM();
         if (this.container) {
             this.container.remove();
             this.container = null;

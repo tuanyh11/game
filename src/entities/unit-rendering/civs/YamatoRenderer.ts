@@ -156,7 +156,7 @@ export function drawScout_Yamato(unit: Unit, ctx: CanvasRenderingContext2D, age:
     ctx.fillRect(-2.5, -4, 5, 1.5);
 
     // Straight blade
-    const bladeCol = age >= 4 ? '#f0f0f0' : age >= 3 ? '#ddd' : '#ccc';
+    const bladeCol = lvl >= 3 ? cv.bladeColor : (age >= 4 ? '#f0f0f0' : age >= 3 ? '#ddd' : '#ccc');
     ctx.fillStyle = bladeCol;
     ctx.fillRect(-1.5, -4, 3, -18); // Main blade body
     // Edge shine
@@ -211,7 +211,7 @@ export function drawScout_Yamato(unit: Unit, ctx: CanvasRenderingContext2D, age:
         ctx.restore();
     }
 
-    if (lvl > 0) { ctx.fillStyle = '#ffd700'; ctx.font = '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -22 + bob); }
+    if (lvl > 0) { ctx.fillStyle = lvl >= 3 ? '#ff2222' : '#ffd700'; ctx.font = lvl >= 3 ? 'bold 8px sans-serif' : '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -22 + bob); }
     // Ninja speed after-images — civ colored
     if (moving && age >= 3) {
         ctx.globalAlpha = 0.08;
@@ -526,7 +526,7 @@ export function drawSwords_Yamato(unit: Unit, ctx: CanvasRenderingContext2D, age
     ctx.fillRect(-1.5, -7, 3, 2);
 
     // ── BLADE (Katana) ──
-    const bladeColor = age >= 4 ? '#f0f0f0' : '#ddd';
+    const bladeColor = lvl >= 3 ? cv.bladeColor : (age >= 4 ? '#f0f0f0' : '#ddd');
     ctx.fillStyle = bladeColor;
     ctx.beginPath();
     ctx.moveTo(-1.5, -7);

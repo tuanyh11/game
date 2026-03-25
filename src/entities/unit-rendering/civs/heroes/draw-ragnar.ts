@@ -125,7 +125,17 @@ export function drawRagnarComplete(unit: Unit, ctx: CanvasRenderingContext2D, bo
         ctx.scale(1, 1 - Math.abs(walkBob) * 0.03);
         ctx.rotate(berserk ? 0.3 : 0.2);
     } else if (attackState) {
-        ctx.rotate(berserk ? 0.2 : 0.15);
+        // Lean into the chop based on attack phase
+        let lean = 0;
+        if (attackProgress < 0.2) {
+            lean = attackProgress / 0.2 * 0.12; // wind up
+        } else if (attackProgress < 0.6) {
+            lean = 0.12 + (attackProgress - 0.2) / 0.4 * 0.08; // strike lean
+        } else {
+            lean = 0.2 * (1 - (attackProgress - 0.6) / 0.4); // recover
+        }
+        ctx.scale(1, 1 + lean * 0.05);
+        ctx.translate(0, -lean * 8);
     }
 
     const skinTone = berserk ? '#d4a090' : cv.skinColor;
@@ -175,44 +185,62 @@ export function drawRagnarComplete(unit: Unit, ctx: CanvasRenderingContext2D, bo
     ctx.beginPath(); ctx.ellipse(3.5 - legSwing, 18.5, 4, 1.5, 0, 0, Math.PI * 2); ctx.fill();
 
     // ==========================================
-    // THÂN (Muscular Viking torso)
+    // THÂN (Heavy Viking Armor)
     // ==========================================
-    ctx.fillStyle = skinTone;
+    // Chainmail base
+    const armorBase = berserk ? '#5a2a20' : '#4a4a50';
+    const armorLight = berserk ? '#7a3a28' : '#6a6a70';
+    const armorDark = berserk ? '#3a1a10' : '#3a3a40';
+    const metalColor = berserk ? '#8a4a30' : '#7a7a80';
+
+    ctx.fillStyle = armorBase;
     ctx.beginPath();
     ctx.moveTo(-7, -6 + walkBob); ctx.lineTo(7, -6 + walkBob);
     ctx.lineTo(6, 7 + walkBob); ctx.lineTo(-6, 7 + walkBob);
     ctx.fill();
-    // Muscle definition
-    ctx.strokeStyle = berserk ? '#b88070' : '#b8996e'; ctx.lineWidth = 0.4;
-    ctx.beginPath();
-    ctx.moveTo(0, -5 + walkBob); ctx.lineTo(0, 2 + walkBob); ctx.stroke(); // center line
-    ctx.beginPath();
-    ctx.moveTo(-3, -4 + walkBob); ctx.quadraticCurveTo(-4, -1 + walkBob, -3, 1 + walkBob); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(3, -4 + walkBob); ctx.quadraticCurveTo(4, -1 + walkBob, 3, 1 + walkBob); ctx.stroke();
 
-    // Norse rune tattoos — detailed
-    ctx.fillStyle = berserk ? '#882222' : cv.bodyMid;
-    // Tyr rune (↑ arrow) on left chest
-    ctx.fillRect(-4, -4 + walkBob, 0.7, 4);
-    ctx.fillRect(-5, -4 + walkBob, 2.7, 0.7);
-    ctx.fillRect(-4.5, -3 + walkBob, 0.7, 1.5);
-    ctx.fillRect(-2.6, -3 + walkBob, 0.7, 1.5);
-    // Valknut triangle on right
+    // Chainmail ring texture
+    ctx.fillStyle = armorLight;
+    for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 5; col++) {
+            const cx = -5 + col * 2.5 + (row % 2) * 1.2;
+            const cy = -4 + row * 2.5 + walkBob;
+            ctx.beginPath(); ctx.arc(cx, cy, 0.8, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    // Iron chest plate overlay
+    ctx.fillStyle = metalColor;
     ctx.beginPath();
-    ctx.moveTo(3, -4 + walkBob); ctx.lineTo(5, -1 + walkBob); ctx.lineTo(1, -1 + walkBob); ctx.closePath();
-    ctx.fillStyle = berserk ? '#882222' : '#2d5a88';
+    ctx.moveTo(-5, -5 + walkBob); ctx.lineTo(5, -5 + walkBob);
+    ctx.lineTo(4, 2 + walkBob); ctx.lineTo(-4, 2 + walkBob);
     ctx.fill();
-    // Arm band lines
-    ctx.fillRect(-6.5, -2 + walkBob, 1, 0.5);
-    ctx.fillRect(-6.5, -1 + walkBob, 1, 0.5);
-    ctx.fillRect(5.5, -2 + walkBob, 1, 0.5);
-    ctx.fillRect(5.5, -1 + walkBob, 1, 0.5);
+    // Plate shine
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(-3, -4 + walkBob, 6, 1);
+
+    // Valknut emblem on chest
+    ctx.fillStyle = berserk ? '#ff4422' : '#a5f2f3';
+    ctx.beginPath();
+    ctx.moveTo(0, -3 + walkBob); ctx.lineTo(-2.5, 1 + walkBob); ctx.lineTo(2.5, 1 + walkBob);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = armorBase;
+    ctx.beginPath();
+    ctx.moveTo(0, -1.5 + walkBob); ctx.lineTo(-1.2, 0.5 + walkBob); ctx.lineTo(1.2, 0.5 + walkBob);
+    ctx.closePath(); ctx.fill();
+
+    // Iron shoulder guards (pauldrons) — symmetric
+    ctx.fillStyle = metalColor;
+    ctx.beginPath(); ctx.arc(-6, -5 + walkBob, 3.5, Math.PI, 0); ctx.fill();
+    ctx.beginPath(); ctx.arc(6, -5 + walkBob, 3.5, Math.PI, 0); ctx.fill();
+    // Pauldron rivets
+    ctx.fillStyle = '#aaa';
+    ctx.beginPath(); ctx.arc(-6, -6 + walkBob, 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6, -6 + walkBob, 0.5, 0, Math.PI * 2); ctx.fill();
 
     // Thick studded belt
     ctx.fillStyle = '#22140a';
     ctx.fillRect(-7.5, 4.5 + walkBob, 15, 3.5);
-    // Belt studs
     ctx.fillStyle = '#8a8a90';
     for (let i = -6; i <= 6; i += 3) {
         ctx.beginPath(); ctx.arc(i, 6 + walkBob, 0.6, 0, Math.PI * 2); ctx.fill();
@@ -222,12 +250,11 @@ export function drawRagnarComplete(unit: Unit, ctx: CanvasRenderingContext2D, bo
     ctx.fillRect(-3, 5 + walkBob, 6, 3);
     ctx.fillStyle = berserk ? '#ff6600' : '#9e9e9e';
     ctx.fillRect(-2, 5.5 + walkBob, 4, 2);
-    // Buckle wolf eyes
     ctx.fillStyle = berserk ? '#ff2200' : '#4a90e2';
     ctx.beginPath(); ctx.arc(-0.8, 6.2 + walkBob, 0.4, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(0.8, 6.2 + walkBob, 0.4, 0, Math.PI * 2); ctx.fill();
 
-    // Bone fang necklace
+    // Bone fang necklace over armor
     ctx.fillStyle = berserk ? '#ffccaa' : '#e8dcc7';
     for (let i = -2; i <= 2; i++) {
         const nx = i * 1.5;
@@ -238,7 +265,6 @@ export function drawRagnarComplete(unit: Unit, ctx: CanvasRenderingContext2D, bo
         ctx.fillRect(-0.5, 0, 1, 2.5 - Math.abs(i) * 0.3);
         ctx.restore();
     }
-    // Center fang (bigger)
     ctx.fillStyle = berserk ? '#ffddbb' : '#f0e8d8';
     ctx.beginPath();
     ctx.moveTo(-0.6, -2 + walkBob); ctx.lineTo(0.6, -2 + walkBob);
@@ -260,35 +286,30 @@ export function drawRagnarComplete(unit: Unit, ctx: CanvasRenderingContext2D, bo
         ctx.rotate(berserk ? leftRot - 0.15 : leftRot);
     }
 
-    // Muscular arm
-    ctx.fillStyle = skinTone; ctx.fillRect(0, 0, 4, 8);
-    // Tattoo band
-    ctx.fillStyle = berserk ? '#882222' : '#2d5a88';
-    ctx.fillRect(0.5, 1.5, 3, 0.6);
-    ctx.fillRect(0.5, 2.5, 3, 0.6);
-    // Leather vambrace
-    ctx.fillStyle = '#3a2616'; ctx.fillRect(-0.5, 4, 4.5, 3);
-    ctx.fillStyle = '#5a4020'; ctx.fillRect(-0.5, 4, 4.5, 0.6);
-    ctx.fillStyle = '#5a4020'; ctx.fillRect(-0.5, 6.5, 4.5, 0.6);
+    // Armored arm
+    ctx.fillStyle = armorBase; ctx.fillRect(0, 0, 4, 4);
+    ctx.fillStyle = skinTone; ctx.fillRect(0, 4, 4, 4);
+    // Iron vambrace
+    ctx.fillStyle = metalColor; ctx.fillRect(-0.5, 4, 4.5, 3);
+    ctx.fillStyle = armorLight; ctx.fillRect(-0.5, 4, 4.5, 0.6);
+    ctx.fillStyle = armorLight; ctx.fillRect(-0.5, 6.5, 4.5, 0.6);
     // Hand
     ctx.fillStyle = skinTone; ctx.fillRect(0.5, 7, 3, 3);
 
     ctx.translate(1, 10);
-    // Axe handle — wrapped leather
+    // Axe handle
     ctx.fillStyle = '#3d2616'; ctx.fillRect(-1.5, -2, 2.5, 13);
     ctx.fillStyle = '#5a4020'; ctx.fillRect(-1.5, 0, 2.5, 0.5);
     ctx.fillStyle = '#5a4020'; ctx.fillRect(-1.5, 3, 2.5, 0.5);
     ctx.fillStyle = '#5a4020'; ctx.fillRect(-1.5, 6, 2.5, 0.5);
-    // Axe Head — large Viking war axe
+    // Axe Head
     ctx.fillStyle = berserk ? '#993333' : '#788496';
     ctx.beginPath();
     ctx.moveTo(-0.5, 5); ctx.lineTo(-8, 1); ctx.quadraticCurveTo(-12, 7, -8, 13);
     ctx.lineTo(-0.5, 11); ctx.fill();
-    // Axe edge highlight
     ctx.strokeStyle = berserk ? '#cc4444' : '#aabbcc'; ctx.lineWidth = 0.6;
     ctx.beginPath();
     ctx.moveTo(-8, 1); ctx.quadraticCurveTo(-12, 7, -8, 13); ctx.stroke();
-    // Rune engraving on blade
     ctx.fillStyle = berserk ? '#ff4444' : '#d12424';
     ctx.fillRect(-6, 6, 2, 2);
     ctx.fillRect(-5, 5, 0.5, 4);
@@ -305,83 +326,132 @@ export function drawRagnarComplete(unit: Unit, ctx: CanvasRenderingContext2D, bo
     ctx.restore();
 
     // ==========================================
-    // ĐẦU (Norse warrior head)
+    // ĐẦU — Viking Helmet (symmetric)
     // ==========================================
+    ctx.save();
+    const hb = walkBob;
+
+    // Chainmail aventail (neck guard hanging from helmet) — behind face
+    ctx.fillStyle = armorDark;
+    ctx.fillRect(-5, -8 + hb, 10, 3);
+    ctx.fillStyle = armorLight;
+    for (let i = 0; i < 4; i++) ctx.fillRect(-4 + i * 2, -7 + hb, 1, 2);
+
     // Thick neck
-    ctx.fillStyle = skinTone; ctx.fillRect(-3, -9 + walkBob, 6, 4);
-    // Neck tattoo
-    ctx.fillStyle = berserk ? '#882222' : '#2d5a88';
-    ctx.fillRect(-2, -7 + walkBob, 4, 0.5);
+    ctx.fillStyle = skinTone;
+    ctx.fillRect(-3, -9 + hb, 6, 4);
+
     // Face
-    ctx.fillStyle = skinTone; ctx.fillRect(-4, -15 + walkBob, 8, 7);
-    // Battle scar
-    ctx.strokeStyle = berserk ? '#cc8888' : '#c8a888'; ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(-3.5, -13 + walkBob); ctx.lineTo(-2, -10 + walkBob); ctx.stroke();
+    ctx.fillStyle = skinTone;
+    ctx.fillRect(-4, -15 + hb, 8, 7);
 
     // War paint — thick bands across eyes
     ctx.fillStyle = berserk ? '#882222' : '#2d5a88';
-    ctx.fillRect(-4.5, -13 + walkBob, 9, 2.8);
-    // Paint drip detail
-    ctx.fillRect(-3.5, -10.2 + walkBob, 1, 1.5);
-    ctx.fillRect(2.5, -10.2 + walkBob, 1, 1);
+    ctx.fillRect(-4.5, -13.5 + hb, 9, 2.5);
+    ctx.fillRect(-3.5, -11 + hb, 1, 1.2);
+    ctx.fillRect(2.5, -11 + hb, 1, 1);
 
     // Eyes
     if (berserk) {
         ctx.fillStyle = '#ff2200';
-        ctx.shadowColor = '#ff2200'; ctx.shadowBlur = 5;
-        ctx.fillRect(-3, -12 + walkBob, 2, 1.2);
-        ctx.fillRect(1, -12 + walkBob, 2, 1.2);
-        ctx.shadowBlur = 0;
+         
+        ctx.fillRect(-3, -12.5 + hb, 2.2, 1.4);
+        ctx.fillRect(1, -12.5 + hb, 2.2, 1.4);
+        
     } else {
         ctx.fillStyle = '#a5f2f3';
-        ctx.fillRect(-3, -12 + walkBob, 1.8, 1);
-        ctx.fillRect(1.2, -12 + walkBob, 1.8, 1);
-        // Pupils
+        ctx.fillRect(-3, -12.5 + hb, 2, 1.2);
+        ctx.fillRect(1.2, -12.5 + hb, 2, 1.2);
         ctx.fillStyle = '#1a3050';
-        ctx.fillRect(-2.2, -11.8 + walkBob, 0.6, 0.6);
-        ctx.fillRect(1.8, -11.8 + walkBob, 0.6, 0.6);
+        ctx.fillRect(-2.2, -12.3 + hb, 0.7, 0.7);
+        ctx.fillRect(1.8, -12.3 + hb, 0.7, 0.7);
     }
 
-    // Braided beard — detailed
-    ctx.fillStyle = berserk ? '#aa7744' : '#c89a58';
-    ctx.fillRect(-4.5, -9 + walkBob, 9, 3);
-    // Beard braids
-    ctx.fillRect(-3, -6 + walkBob, 2.2, 4);
-    ctx.fillRect(1, -6 + walkBob, 2.2, 4);
-    // Bead ties on braids
-    ctx.fillStyle = berserk ? '#cc4400' : '#8a8a90';
-    ctx.beginPath(); ctx.arc(-2, -3 + walkBob, 0.6, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(2, -3 + walkBob, 0.6, 0, Math.PI * 2); ctx.fill();
-    // Center chin
-    ctx.fillStyle = berserk ? '#997744' : '#b8944e';
-    ctx.fillRect(-1, -7 + walkBob, 2, 2);
+    // Nose
+    ctx.fillStyle = berserk ? '#c89880' : '#c8a878';
+    ctx.fillRect(-0.5, -11.5 + hb, 1, 2);
 
-    // Hair — shaved sides with braided mohawk + flowing braids
+    // Braided beard (symmetric, hanging down)
     ctx.fillStyle = berserk ? '#aa7744' : '#c89a58';
-    // Mohawk top
-    ctx.fillRect(-2.5, -16 + walkBob, 5, 3.5);
-    // Flowing braid behind
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = berserk ? '#aa7744' : '#c89a58';
-    ctx.beginPath();
-    ctx.moveTo(0, -14 + walkBob);
-    ctx.quadraticCurveTo(6, -12 + walkBob, 5, -4 + walkBob + windWave * 0.5);
-    ctx.stroke();
-    // Second braid
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.moveTo(1, -14.5 + walkBob);
-    ctx.quadraticCurveTo(7, -10 + walkBob, 6, -2 + walkBob + windWave * 0.4);
-    ctx.stroke();
-    // Braid beads
+    ctx.fillRect(-4.5, -9 + hb, 9, 3);
+    ctx.fillRect(-3, -6 + hb, 2.2, 4);
+    ctx.fillRect(1, -6 + hb, 2.2, 4);
     ctx.fillStyle = berserk ? '#cc4400' : '#8a8a90';
-    ctx.beginPath(); ctx.arc(5, -5 + walkBob + windWave * 0.4, 0.8, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(6, -3 + walkBob + windWave * 0.3, 0.7, 0, Math.PI * 2); ctx.fill();
-    // Shaved sides detail
-    ctx.fillStyle = berserk ? '#886644' : '#a88048';
-    ctx.fillRect(-4, -14.5 + walkBob, 1.5, 2);
-    ctx.fillRect(2.5, -14.5 + walkBob, 1.5, 2);
+    ctx.beginPath(); ctx.arc(-2, -3 + hb, 0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(2, -3 + hb, 0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = berserk ? '#997744' : '#b8944e';
+    ctx.fillRect(-1, -7 + hb, 2, 2);
+
+    // === VIKING SPECTACLE HELMET (symmetric) ===
+    const helmBase = berserk ? '#5a2a18' : '#5a5a60';
+    const helmLight = berserk ? '#7a3a20' : '#7a7a82';
+    const helmDark = berserk ? '#3a1a10' : '#3a3a40';
+
+    // Helmet dome
+    ctx.fillStyle = helmBase;
+    ctx.beginPath();
+    ctx.arc(0, -14 + hb, 5.5, Math.PI, 0);
+    ctx.fill();
+    // Helmet base band
+    ctx.fillRect(-5.5, -14 + hb, 11, 2);
+
+    // Center ridge (nasal to back)
+    ctx.fillStyle = helmLight;
+    ctx.fillRect(-0.8, -19 + hb, 1.6, 7);
+
+    // Nose guard (nasal)
+    ctx.fillStyle = helmLight;
+    ctx.fillRect(-0.8, -14 + hb, 1.6, 5);
+
+    // Eye guard frames (spectacle shape — symmetric)
+    ctx.strokeStyle = helmLight; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(-2.5, -13 + hb, 2, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(2.5, -13 + hb, 2, 0, Math.PI * 2); ctx.stroke();
+
+    // Helmet rivets (symmetric)
+    ctx.fillStyle = '#aaa';
+    ctx.beginPath(); ctx.arc(-4, -15 + hb, 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4, -15 + hb, 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-3, -17 + hb, 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -17 + hb, 0.4, 0, Math.PI * 2); ctx.fill();
+
+    // BERSERK: Glowing horns + red-hot helmet
+    if (berserk) {
+        // Burning horns
+        ctx.fillStyle = '#eee';
+        ctx.beginPath();
+        ctx.moveTo(-5, -15 + hb); ctx.lineTo(-8, -22 + hb); ctx.lineTo(-4, -16 + hb);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(5, -15 + hb); ctx.lineTo(8, -22 + hb); ctx.lineTo(4, -16 + hb);
+        ctx.fill();
+        // Horn glow
+        ctx.fillStyle = '#ff4400';
+        ctx.globalAlpha = 0.4 + Math.sin(unit.animTimer * 8) * 0.2;
+        ctx.beginPath(); ctx.arc(-7, -20 + hb, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(7, -20 + hb, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        // Red hot edge
+        ctx.strokeStyle = '#cc3300'; ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.arc(0, -14 + hb, 5.5, Math.PI, 0); ctx.stroke();
+    } else {
+        // Normal: small iron horns
+        ctx.fillStyle = '#8a8a88';
+        ctx.beginPath();
+        ctx.moveTo(-5, -15 + hb); ctx.lineTo(-7, -20 + hb); ctx.lineTo(-4, -16 + hb);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(5, -15 + hb); ctx.lineTo(7, -20 + hb); ctx.lineTo(4, -16 + hb);
+        ctx.fill();
+        // Frost rune on helmet
+        ctx.fillStyle = '#a5f2f3';
+        ctx.globalAlpha = 0.4;
+        ctx.fillRect(-0.3, -18 + hb, 0.6, 3);
+        ctx.fillRect(-1.5, -16.5 + hb, 3, 0.5);
+        ctx.globalAlpha = 1;
+    }
+
+    ctx.restore(); // End head
 
     // ==========================================
     // RIGHT ARM & FROST AXE (Main attack)
@@ -435,20 +505,20 @@ export function drawRagnarComplete(unit: Unit, ctx: CanvasRenderingContext2D, bo
     if (attackState && attackProgress > 0.4 && attackProgress < 0.8) {
         if (berserk) {
             // Blood slash effect
-            ctx.shadowColor = '#ff2200'; ctx.shadowBlur = 8;
+             
             ctx.strokeStyle = '#ff4400'; ctx.lineWidth = 3;
             ctx.beginPath(); ctx.arc(0, 10, 24, -Math.PI / 8, Math.PI / 2); ctx.stroke();
             ctx.strokeStyle = '#ff8800'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.arc(0, 10, 20, Math.PI / 2, Math.PI + Math.PI / 8); ctx.stroke();
-            ctx.shadowBlur = 0;
+            
         } else {
-            ctx.shadowColor = '#a5f2f3'; ctx.shadowBlur = 10;
+             
             ctx.strokeStyle = '#e0ffff'; ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.arc(0, 10, 24, -Math.PI / 8, Math.PI / 2); ctx.stroke();
-            ctx.shadowColor = '#d12424';
+            
             ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.arc(0, 10, 22, Math.PI / 2, Math.PI + Math.PI / 8); ctx.stroke();
-            ctx.shadowBlur = 0;
+            
         }
     }
 

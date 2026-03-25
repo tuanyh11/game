@@ -16,7 +16,7 @@ export class RagnarStrategy extends MeleeHeroStrategy {
         switch (sid) {
             case 'viking_w0': { // Berserkergang 
                 const pct = unit.hp / unit.maxHp;
-                const bonus = pct < 0.25 ? 1.0 : (pct < 0.5 ? 0.5 : 0.25);
+                const bonus = pct < 0.25 ? 0.7 : (pct < 0.5 ? 0.35 : 0.20);
                 unit.attack = Math.round(unit._baseAttack * (1 + bonus));
                 const n = bonus > 0.5 ? 60 : 36;
                 particles.emit({ x: unit.x, y: unit.y, count: n, spread: 6, speed: [100, 260], angle: [0, Math.PI * 2], life: [0.3, 0.9], size: [3, 8], colors: ['#ff0000', '#cc0000', '#ff2200', '#ff4400'], gravity: -15, shape: 'circle' });
@@ -95,7 +95,7 @@ export class RagnarStrategy extends MeleeHeroStrategy {
             }
             case 'viking_r0': { // Rìu Băng
                 if (unit.attackTarget) {
-                    const e = unit.attackTarget; const dmg = 30 + unit.heroLevel * 3 + Math.floor(e.armor * 0.5);
+                    const e = unit.attackTarget; const dmg = 25 + unit.heroLevel * 2 + Math.floor(e.armor * 0.5);
                     e.hp -= dmg; if (e.hp <= 0 && e.alive) unit.addHeroXp(Math.max(10, Math.floor(e.maxHp * 0.3)));
                     const a = Math.atan2(e.y - unit.y, e.x - unit.x);
                     particles.emit({ x: unit.x, y: unit.y - 6, count: 4, spread: 1, speed: [300, 420], angle: [a - 0.04, a + 0.04], life: [0.1, 0.3], size: [5, 9], colors: ['#888', '#aaa', '#ccc'], gravity: 8, shape: 'rect' });

@@ -11,9 +11,14 @@ import {
 import { Unit } from "../../entities/Unit";
 import { Building } from "../../entities/Building";
 import type { AIContext } from "./AIContext";
-import { sharedIntel, AIDifficulty } from "./AIConfig";
+import { sharedIntel, AIDifficulty, AIStrategy, STRATEGY_PARAMS } from "./AIConfig";
 
 export function sendAttackWave(ai: AIContext): void {
+    // FIX: Only block attacks while squad is freshly dispatched (en-route).
+    // Once timer drops below 20s, squad has had time to arrive — allow attacks again.
+    // Old code blocked ALL attacks whenever squad was active, causing permanent stall.
+    if (ai.supportSquad.size > 0 && ai.supportTimer > 20) return;
+
     // Recalculate allocation to know how many we can send
     ai.calculateForceAllocation();
 
@@ -33,7 +38,7 @@ export function sendAttackWave(ai: AIContext): void {
                 u => u.state === UnitState.Idle || u.state === UnitState.Moving
             )
         );
-    if (military.length < ai.attackWaveSize) return;
+    if (military.length < (ai.strategyParams.minWaveSizeOverride || ai.attackWaveSize)) return;
 
     // === PRE-ATTACK POWER CHECK (only against enemies near target, not global) ===
     const ownPower = ai.calculateCombatPower(military);
@@ -104,7 +109,6 @@ export function sendAttackWave(ai: AIContext): void {
         if (b.type === BuildingType.TownCenter) s += 60; // Then the economic heart
         if (b.type === BuildingType.Barracks || b.type === BuildingType.Stable) s += 45;
         if (b.type === BuildingType.HeroAltar) s += 40;
-        if (b.type === BuildingType.Farm || b.type === BuildingType.Market) s += 20;
         if (b.type === BuildingType.House) s += 10;
 
         // Distance penalty (prefer closer buildings)
@@ -290,10 +294,11 @@ export function rallyTroops(ai: AIContext): void {
         }
     }
 
-    // === ATTACK units ONLY: rally to staging area ===
-    // Support units are managed by AIAllianceManager
+    // === ATTACK and SUPPORT-RESERVE units: rally to staging area ===
+    // Active support squad units are managed by AIAllianceManager, but reserve support units must rally with the main army!
     const rallyUnits = [
         ...ai.forceAllocation.attackUnits,
+        ...ai.forceAllocation.supportUnits, // FIX: Don't leave reserve support units stranded
     ].filter(u => u.state === UnitState.Idle && !garrisonSet.has(u));
 
     for (const u of rallyUnits) {
@@ -329,7 +334,9 @@ export function handleRaiding(ai: AIContext): void {
         if (aliveRaiders.length === 0) {
             ai.raidActive = false;
             ai.raidingUnits.clear();
-            ai.raidCooldown = 30; // Wait 30s before next raid
+            // Faster raid cycles: Hard=15s, Normal=20s, Easy=30s
+            ai.raidCooldown = ai.difficulty === AIDifficulty.Hard ? 15 :
+                              ai.difficulty === AIDifficulty.Normal ? 20 : 30;
         }
 
         // Raid units: retreat if facing more than 3 military enemies
@@ -342,9 +349,21 @@ export function handleRaiding(ai: AIContext): void {
                     Math.hypot(e.x - u.x, e.y - u.y) < TILE_SIZE * 8
             );
 
-            if (nearbyDefenders.length >= 3 || u.hp < u.maxHp * 0.3) {
-                // RETREAT! Run home
+            // HIT-AND-RUN: Retreat if facing 4+ military enemies OR health very low
+            if (nearbyDefenders.length >= 4 || u.hp < u.maxHp * 0.3) {
                 ai.raidingUnits.delete(id);
+                const safeBldg = ai.findNearestAllyBuilding(u.x, u.y);
+                if (safeBldg) {
+                    ai.safeMoveTo(u, safeBldg.x + (Math.random() - 0.5) * TILE_SIZE * 3,
+                        safeBldg.y + (Math.random() - 0.5) * TILE_SIZE * 3);
+                }
+            } else if (u.hp < u.maxHp * 0.5 && nearbyDefenders.length >= 2) {
+                // KITE: health low + some defenders → retreat and re-engage
+                const angleAway = Math.atan2(u.y - nearbyDefenders[0].y, u.x - nearbyDefenders[0].x);
+                ai.safeMoveTo(u,
+                    u.x + Math.cos(angleAway) * TILE_SIZE * 5,
+                    u.y + Math.sin(angleAway) * TILE_SIZE * 5
+                );
                 const safeBldg = ai.findNearestAllyBuilding(u.x, u.y);
                 if (safeBldg) {
                     ai.safeMoveTo(u, safeBldg.x + (Math.random() - 0.5) * TILE_SIZE * 3,
@@ -381,14 +400,16 @@ export function handleRaiding(ai: AIContext): void {
 
     if (fastUnits.length < 2) return; // Need at least 2 raiders
 
-    // Select 2-4 raiders (fast units)
-    const raidSize = Math.min(4, fastUnits.length);
+    // Select 3-6 raiders (larger groups for more impact)
+    const maxRaidSize = ai.difficulty === AIDifficulty.Hard ? 6 :
+                        ai.difficulty === AIDifficulty.Normal ? 5 : 3;
+    const raidSize = Math.min(maxRaidSize, fastUnits.length);
     const raiders = fastUnits.slice(0, raidSize);
 
     // Find enemy villager locations or economy buildings
     const scoutedBuildings = ai.getScoutedEnemyBuildings();
     const ecoBuildings = scoutedBuildings.filter(
-        b => b.type === BuildingType.Farm || b.type === BuildingType.Market
+        b => b.type === BuildingType.Market || b.type === BuildingType.House
     );
     // Prefer TC area (villagers gather there)
     const enemyTC = scoutedBuildings.find(b => b.type === BuildingType.TownCenter);
@@ -452,4 +473,74 @@ export function analyzeEnemyComposition(ai: AIContext): void {
     }
 
     ai.enemyComposition = { melee, ranged, cavalry, heroes, total, lastUpdate: now };
+
+    // Trigger adaptive strategy evaluation
+    adaptStrategy(ai);
+}
+
+// ===================================================================
+//  ADAPTIVE STRATEGY: Switch strategy mid-game based on battle results
+//  Inspired by AoE2, StarCraft2 AI behavior
+// ===================================================================
+export function adaptStrategy(ai: AIContext): void {
+    const now = sharedIntel.gameTime;
+    if (now < 120) return; // Wait for game to develop
+
+    // Only evaluate every 60s
+    const lastAdaptTime = (ai as any)._lastAdaptTime || 0;
+    if (now - lastAdaptTime < 60) return;
+
+    const ec = ai.enemyComposition;
+    if (ec.total === 0) return;
+
+    // === RUSH FAILURE DETECTION ===
+    if (ai.strategy === AIStrategy.Rush && ai.wavesSent >= 3) {
+        const enemyBldgs = ai.getScoutedEnemyBuildings();
+        const enemyTCs = enemyBldgs.filter(b => b.type === BuildingType.TownCenter);
+        if (enemyTCs.length > 0 && ec.total >= 5) {
+            ai.log(`🧠 Rush thất bại sau ${ai.wavesSent} đợt! Chuyển Balanced.`, '#ffaa00');
+            (ai as any).strategy = AIStrategy.Balanced;
+            (ai as any).strategyParams = STRATEGY_PARAMS[AIStrategy.Balanced];
+            ai.attackWaveSize = ai.params.startingWaveSize;
+            (ai as any)._lastAdaptTime = now;
+            return;
+        }
+    }
+
+    // === DETECT ENEMY BOOMING ===
+    const enemyVillagers = ai.entityManager.units.filter(
+        u => u.alive && u.isVillager && ai.entityManager.isEnemy(ai.team, u.team) &&
+            ai.isPositionVisible(u.x, u.y)
+    ).length;
+    if (enemyVillagers > ec.total * 2 && ai.strategy !== AIStrategy.Rush && ec.total < 5) {
+        ai.log(`🧠 Địch boom kinh tế! Rush trừng phạt!`, '#ff4400');
+        (ai as any).strategy = AIStrategy.Rush;
+        (ai as any).strategyParams = STRATEGY_PARAMS[AIStrategy.Rush];
+        ai.attackWaveSize = 3;
+        (ai as any)._lastAdaptTime = now;
+        return;
+    }
+
+    // === COUNTER-COMPOSITION ===
+    if (ec.total >= 3) {
+        const meleeRatio = ec.melee / ec.total;
+        const rangedRatio = ec.ranged / ec.total;
+        const cavalryRatio = ec.cavalry / ec.total;
+
+        if (meleeRatio > 0.5) {
+            ai.defenseTrainingPriority.needAntiMelee = Math.min(1.0, meleeRatio + 0.2);
+            ai.defenseTrainingPriority.suggestedUnitType = 'archer';
+        }
+        if (rangedRatio > 0.5) {
+            ai.defenseTrainingPriority.needAntiRanged = Math.min(1.0, rangedRatio + 0.2);
+            ai.defenseTrainingPriority.suggestedUnitType = 'cavalry';
+        }
+        if (cavalryRatio > 0.4) {
+            ai.defenseTrainingPriority.needAntiCavalry = Math.min(1.0, cavalryRatio + 0.2);
+            ai.defenseTrainingPriority.suggestedUnitType = 'spearman';
+        }
+        ai.defenseTrainingPriority.lastUpdate = now;
+    }
+
+    (ai as any)._lastAdaptTime = now;
 }

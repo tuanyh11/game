@@ -34,27 +34,22 @@ export class ResourceNode {
         const rate = GATHER_RATES[this.nodeType].rate;
         const gathered = Math.min(rate * dt, this.amount);
         this.amount -= gathered;
-        if (this.amount <= 0) { this.amount = 0; this.alive = false; }
+        if (this.amount <= 0) {
+            this.amount = 0;
+            this.alive = false;
+        }
         return gathered;
     }
 
     get radius(): number {
         switch (this.nodeType) {
             case ResourceNodeType.Tree: return 18;
-            case ResourceNodeType.GoldMine: case ResourceNodeType.StoneMine: return 22;
-            case ResourceNodeType.BerryBush: return 12;
-            case ResourceNodeType.Farm: return 20;
+            case ResourceNodeType.GoldMine: return 12;
             default: return 14;
         }
     }
 
     containsPoint(px: number, py: number): boolean {
-        if (this.nodeType === ResourceNodeType.Farm) {
-            // Farm is rectangular — use AABB
-            const halfW = 24, halfH = 24;
-            return px >= this.x - halfW && px <= this.x + halfW &&
-                py >= this.y - halfH && py <= this.y + halfH;
-        }
         return Math.hypot(px - this.x, py - this.y) <= this.radius + 2;
     }
 
@@ -64,13 +59,10 @@ export class ResourceNode {
         switch (this.nodeType) {
             case ResourceNodeType.Tree: ResourceCache.drawTreeVariant(ctx, this.treeVariant, x, y); break;
             case ResourceNodeType.GoldMine: ResourceCache.drawGoldCache(ctx, x, y); break;
-            case ResourceNodeType.StoneMine: ResourceCache.drawStoneCache(ctx, x, y); break;
-            case ResourceNodeType.BerryBush: ResourceCache.drawBerryCache(ctx, x, y); break;
-            case ResourceNodeType.Farm: this.drawFarm(ctx, x, y); break;
         }
 
         // Depletion indicator for mines
-        if (this.nodeType === ResourceNodeType.GoldMine || this.nodeType === ResourceNodeType.StoneMine) {
+        if (this.nodeType === ResourceNodeType.GoldMine) {
             const pct = this.amount / this.maxAmount;
             if (pct < 0.3) {
                 ctx.globalAlpha = 0.4;
@@ -281,6 +273,70 @@ export class ResourceNode {
             ctx.fillRect(left + 4, top + 4, s - 8, s - 8);
             ctx.globalAlpha = 1;
         }
+
+        // === DEPLETED FARM OVERLAY ===
+        if (this.amount <= 0) {
+            const tt = Date.now() / 1000;
+
+            // Darken everything — brownish withered overlay
+            ctx.fillStyle = 'rgba(80, 50, 20, 0.4)';
+            ctx.fillRect(left, top, s, s);
+
+            // Cracked dry soil lines
+            ctx.strokeStyle = '#4a3010';
+            ctx.lineWidth = 0.8;
+            for (let i = 0; i < 5; i++) {
+                const cx = left + 8 + Math.abs((i * 43) % (s - 16));
+                const cy = top + 6 + Math.abs((i * 67) % (s - 12));
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx + 6 + (i % 3) * 3, cy + 4 + (i % 2) * 3);
+                ctx.lineTo(cx + 10 + (i % 2) * 4, cy + 2);
+                ctx.stroke();
+            }
+
+            // Draw withered crops — bent, dried, leaning stalks
+            const rowCount2 = age >= 3 ? 7 : 6;
+            const rowSpacing2 = (s - 16) / rowCount2;
+            for (let i = 0; i < rowCount2; i++) {
+                const ry = top + 8 + i * rowSpacing2;
+                const cropCount2 = age >= 3 ? 9 : 8;
+                const spacing2 = (s - 20) / cropCount2;
+                for (let j = 0; j < cropCount2; j++) {
+                    const cx = left + 10 + j * spacing2;
+                    const lean = Math.sin(i * 2.3 + j * 1.7) * 3; // random lean direction
+
+                    // Dried bent stalk
+                    ctx.strokeStyle = '#7a5a20';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(cx + 1, ry + 8);
+                    ctx.quadraticCurveTo(cx + lean, ry + 3, cx + lean * 1.5, ry + 1);
+                    ctx.stroke();
+
+                    // Dry broken head
+                    ctx.fillStyle = '#8a6a25';
+                    ctx.fillRect(cx + lean * 1.5 - 1, ry, 3, 2);
+
+                    // Occasional fallen leaf debris
+                    if ((i + j) % 4 === 0) {
+                        ctx.fillStyle = '#6a4a18';
+                        ctx.fillRect(cx + 2, ry + 9, 3, 1);
+                    }
+                }
+            }
+
+            // Subtle dust particles floating up (animated)
+            for (let p = 0; p < 4; p++) {
+                const px = left + 10 + Math.abs((p * 53) % (s - 20));
+                const py = top + s - 10 - ((tt * 8 + p * 7) % 30);
+                const alpha = 0.15 + Math.sin(tt * 2 + p) * 0.1;
+                ctx.fillStyle = `rgba(160, 130, 80, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
     }
 
     // Minimap color
@@ -288,9 +344,6 @@ export class ResourceNode {
         switch (this.nodeType) {
             case ResourceNodeType.Tree: return '#1a5520';
             case ResourceNodeType.GoldMine: return C.gold;
-            case ResourceNodeType.StoneMine: return C.stone;
-            case ResourceNodeType.BerryBush: return '#ff8800'; // Bright orange instead of red
-            case ResourceNodeType.Farm: return '#8a7040';
             default: return '#888';
         }
     }

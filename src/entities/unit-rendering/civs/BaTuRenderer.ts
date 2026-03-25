@@ -88,7 +88,7 @@ export function drawScout_BaTu(unit: Unit, ctx: CanvasRenderingContext2D, age: n
     }
     ctx.restore(); ctx.restore();
 
-    if (lvl > 0) { ctx.fillStyle = '#ffd700'; ctx.font = '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -22 + bob); }
+    if (lvl > 0) { ctx.fillStyle = lvl >= 3 ? '#ff2222' : '#ffd700'; ctx.font = lvl >= 3 ? 'bold 8px sans-serif' : '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -22 + bob); }
     if (moving && age >= 2) { ctx.globalAlpha = 0.15; ctx.fillStyle = cv.accent; for (let i = 0; i < 3; i++) { ctx.fillRect(-12 - i * 3, 10 + bob + i * 3, 4, 2); } ctx.globalAlpha = 1; }
     if (age >= 4) { ctx.globalAlpha = 0.08; ctx.fillStyle = cv.accent; ctx.beginPath(); ctx.arc(0, 0 + bob, 14, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
 }
@@ -288,7 +288,7 @@ export function drawSwords_BaTu(unit: Unit, ctx: CanvasRenderingContext2D, age: 
     ctx.restore();
 
     // Blade
-    const bladeColor = age >= 4 ? '#f0f0f0' : '#cccccc';
+    const bladeColor = lvl >= 3 ? cv.bladeColor : (age >= 4 ? '#f0f0f0' : '#cccccc');
     ctx.fillStyle = bladeColor;
     ctx.beginPath();
     ctx.moveTo(1, 0); ctx.lineTo(1.5, -6);
@@ -580,7 +580,6 @@ export function drawSpears_BaTu(unit: Unit, ctx: CanvasRenderingContext2D, age: 
     // Beard (Persian style, dark, thick)
     ctx.fillStyle = '#111';
     ctx.fillRect(-3, -7 + bob, 6, 3);
-    ctx.fillRect(3, -9 + bob, 1, 3); // sideburns/mustache
 
     if (age >= 3) {
         // Fluted Bronze/Gold Helmet for elites
@@ -591,8 +590,13 @@ export function drawSpears_BaTu(unit: Unit, ctx: CanvasRenderingContext2D, age: 
         ctx.fill();
         ctx.fillRect(-5, -11 + bob, 10, 1.5); // Rim
 
-        // Cheek plates
+        // Cheek plates (both sides symmetric)
         ctx.fillRect(-4.5, -9.5 + bob, 2, 4);
+        ctx.fillRect(2.5, -9.5 + bob, 2, 4);
+
+        // Skin peeking between cheek plates
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(-2.5, -9.5 + bob, 5, 3);
 
         // Ribs (fluting)
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -600,17 +604,24 @@ export function drawSpears_BaTu(unit: Unit, ctx: CanvasRenderingContext2D, age: 
         ctx.fillRect(0, -15 + bob, 1, 4);
         ctx.fillRect(2, -15 + bob, 1, 4);
     } else {
-        // Soft felt cap (Tiara) - folded forward
-        ctx.fillStyle = age >= 2 ? goldTrim : '#888'; // Yellow/Gold turban/headwrap
+        // Soft felt cap (Tiara) - centered
+        ctx.fillStyle = age >= 2 ? goldTrim : '#888';
         ctx.beginPath();
-        ctx.moveTo(-5, -11 + bob);
-        ctx.quadraticCurveTo(-2, -16 + bob, 4, -14 + bob);
-        ctx.lineTo(4, -11 + bob);
+        ctx.moveTo(-4, -11 + bob);
+        ctx.quadraticCurveTo(0, -16 + bob, 4, -11 + bob);
         ctx.fill();
         // Wrap/Band
         ctx.fillStyle = '#b31515';
-        ctx.fillRect(-5.5, -12 + bob, 11, 2);
+        ctx.fillRect(-5, -12 + bob, 10, 2);
     }
+
+    // Eyes (drawn AFTER helmet so they stay visible)
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-1.5, -9.5 + bob, 1.2, 1.2);
+    ctx.fillRect(0.5, -9.5 + bob, 1.2, 1.2);
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-1, -9.5 + bob, 0.6, 0.6);
+    ctx.fillRect(1, -9.5 + bob, 0.6, 0.6);
 
     // ── LEFT ARM (L-shape) — drawn on top of body ──
     ctx.save();

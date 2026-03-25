@@ -27,7 +27,7 @@ export class NinjaStrategy extends BaseCombatStrategy {
                 unit.ninjaDashTargetY = unit.y;
             }
 
-            unit.ninjaDashCooldown = 4; // 4s cooldown
+            unit.ninjaDashCooldown = 6; // 6s cooldown
 
             // Smoke puff at departure
             particles.emit({ x: unit.x, y: unit.y - 4, count: 10, spread: 6, speed: [30, 80], angle: [0, Math.PI * 2], life: [0.3, 0.6], size: [3, 6], colors: ['#333', '#555', '#888', '#222'], gravity: -20, shape: 'circle' });
@@ -43,8 +43,8 @@ export class NinjaStrategy extends BaseCombatStrategy {
 
         // Dash + Assassinate
         if (unit.isStealthed || unit.ninjaDashTimer > 0) {
-            // Just finished Độn Thổ dash → ASSASSINATION! 4x damage
-            dmg *= 4;
+            // Just finished Độn Thổ dash → ASSASSINATION! 2.5x damage
+            dmg *= 2.5;
             // Massive purple slash explosion
             particles.emit({ x: target.x, y: target.y - 6, count: 20, spread: 8, speed: [80, 200], angle: [0, Math.PI * 2], life: [0.3, 0.7], size: [3, 7], colors: ['#8800ff', '#aa44ff', '#fff', '#ff00ff'], gravity: -20, shape: 'star' });
             // X-slash marks
@@ -70,7 +70,7 @@ export class NinjaStrategy extends BaseCombatStrategy {
         const { unit, particles } = context;
 
         // Ninja slash sound on every attack
-        audioSystem.playSFXWithPitch('/musics/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.5 + Math.random() * 0.2, 1.1 + Math.random() * 0.3, unit.x, unit.y);
+        audioSystem.playSFXWithPitch('./sounds/daviddumaisaudio-sword-slash-and-swing-185432_GYwhZ0VB.mp3', 0.5 + Math.random() * 0.2, 1.1 + Math.random() * 0.3, unit.x, unit.y);
 
         // Ninja Reverse-grip fast slashes
         const slashColors = ['#aa44ff', '#8800ff', '#1a1a2e', '#ffffff'];

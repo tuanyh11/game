@@ -21,13 +21,13 @@ export const MagiAbility: EliteAbility = {
                     unit.magiCastTimer = 0;
                     unit.magiFreezeTargets = [];
 
-                    // ⏳ QUICKSAND (Freeze): Find up to 3 enemies in range and trap them in golden sand
+                    // ⏳ QUICKSAND (Freeze): Find up to 2 enemies in range and trap them in golden sand
                     const freezeRange = 220;
-                    const freezeDuration = 3; // 3 seconds
+                    const freezeDuration = 1.5; // 1.5 seconds
                     let frozen = 0;
 
                     // Trap the nearest enemy first
-                    if (nearEnemy.alive && frozen < 3) {
+                    if (nearEnemy.alive && frozen < 2) {
                         nearEnemy.frozenTimer = freezeDuration;
                         unit.magiFreezeTargets.push(nearEnemy);
                         frozen++;
@@ -49,8 +49,8 @@ export const MagiAbility: EliteAbility = {
                         });
                     }
 
-                    // Try to trap 2 more nearby enemies
-                    for (let fi = 0; fi < 2 && frozen < 3; fi++) {
+                    // Try to trap 1 more nearby enemy
+                    for (let fi = 0; fi < 1 && frozen < 2; fi++) {
                         const extraEnemy = findNearestEnemy(
                             unit.x + (visualRng() - 0.5) * 60,
                             unit.y + (visualRng() - 0.5) * 60,
@@ -77,8 +77,8 @@ export const MagiAbility: EliteAbility = {
                         }
                     }
 
-                    // ☀️ HEAL: DESERT SUN - Heal nearby allies +10 HP
-                    healNearbyAllies(unit, 100, 4, 1.0, particles, ctx.allUnits);
+                    // ☀️ HEAL: DESERT SUN - Heal nearby allies +2 HP
+                    healNearbyAllies(unit, 100, 2, 1.0, particles, ctx.allUnits);
 
                     // Healing aura visual on self (Warm Crimson/Gold glow)
                     particles.emit({
@@ -130,7 +130,7 @@ export const MagiAbility: EliteAbility = {
             // Cast ends after 2s
             if (unit.magiCastTimer >= 2.0) {
                 unit.magiCastActive = false;
-                unit.magiCooldown = 4; // 4s cooldown
+                unit.magiCooldown = 6; // 6s cooldown
                 unit.magiFreezeTargets = [];
             }
         }

@@ -3,9 +3,12 @@
  *
  * Hỗ trợ:
  *  • Pan bằng phím mũi tên (WASD cũng được)
- *  • Pan bằng edge-scrolling (đưa chuột ra mép màn hình)
+ *  • Pan bằng edge-scrolling (desktop only — đưa chuột ra mép màn hình)
+ *  • Pan bằng 2 ngón tay (mobile)
  *  • Giới hạn camera trong phạm vi bản đồ (clamping)
  */
+
+import { IS_MOBILE } from "../config/PlatformConfig";
 
 export interface CameraConfig {
     /** Tốc độ cuộn (pixels / giây) */
@@ -33,8 +36,18 @@ export class Camera {
     public viewportWidth = 0;
     public viewportHeight = 0;
 
+    /** Camera zoom level (0.7 = zoomed out, 1.0 = normal) */
+    public zoom = IS_MOBILE ? 0.7 : 1.0;
+
+    /** Effective viewport size in world-space (larger when zoomed out) */
+    public get effectiveWidth(): number { return this.viewportWidth / this.zoom; }
+    public get effectiveHeight(): number { return this.viewportHeight / this.zoom; }
+
     /** Phần lề UI ở dưới cùng (để game area mở rộng xuống) */
     public uiBottomMargin = 0;
+
+    /** Bật/tắt Edge Scrolling */
+    public edgeScrollEnabled = true;
 
     private config: CameraConfig;
 
@@ -104,14 +117,14 @@ export class Camera {
         let dx = 0;
         let dy = 0;
 
-        // ---- Phím mũi tên / WASD ----
-        if (this.keys.has("ArrowLeft") || this.keys.has("a")) dx -= 1;
-        if (this.keys.has("ArrowRight") || this.keys.has("d")) dx += 1;
-        if (this.keys.has("ArrowUp") || this.keys.has("w")) dy -= 1;
-        if (this.keys.has("ArrowDown") || this.keys.has("s")) dy += 1;
+        // ---- Phím mũi tên (Arrow keys only) ----
+        if (this.keys.has("ArrowLeft")) dx -= 1;
+        if (this.keys.has("ArrowRight")) dx += 1;
+        if (this.keys.has("ArrowUp")) dy -= 1;
+        if (this.keys.has("ArrowDown")) dy += 1;
 
-        // ---- Edge scrolling ----
-        if (this.mouseInWindow) {
+        // ---- Edge scrolling (desktop only) ----
+        if (this.mouseInWindow && !IS_MOBILE && this.edgeScrollEnabled) {
             const margin = this.config.edgeMargin;
             if (this.mouseX <= margin) dx -= 1;
             if (this.mouseX >= this.viewportWidth - margin) dx += 1;
@@ -135,15 +148,18 @@ export class Camera {
 
     /** Giới hạn camera không ra ngoài bản đồ */
     private clamp(): void {
-        const maxX = this.config.worldWidth - this.viewportWidth;
-        const maxY = this.config.worldHeight - (this.viewportHeight - this.uiBottomMargin);
+        const eW = this.effectiveWidth;
+        const eH = this.effectiveHeight;
+        const maxX = this.config.worldWidth - eW;
+        const maxY = this.config.worldHeight - (eH - this.uiBottomMargin / this.zoom);
         this.x = Math.max(0, Math.min(this.x, maxX));
         this.y = Math.max(0, Math.min(this.y, maxY));
     }
 
     /** Áp đặt transform lên CanvasRenderingContext2D */
     public applyTransform(ctx: CanvasRenderingContext2D): void {
-        ctx.setTransform(1, 0, 0, 1, -Math.round(this.x), -Math.round(this.y));
+        const z = this.zoom;
+        ctx.setTransform(z, 0, 0, z, -Math.round(this.x * z), -Math.round(this.y * z));
     }
 
     /** Reset transform (dùng để vẽ HUD lên trên) */
@@ -153,18 +169,18 @@ export class Camera {
 
     /** Chuyển toạ độ màn hình → toạ độ thế giới */
     public screenToWorld(sx: number, sy: number): { x: number; y: number } {
-        return { x: sx + this.x, y: sy + this.y };
+        return { x: sx / this.zoom + this.x, y: sy / this.zoom + this.y };
     }
 
     /** Chuyển toạ độ thế giới → toạ độ màn hình */
     public worldToScreen(wx: number, wy: number): { x: number; y: number } {
-        return { x: wx - this.x, y: wy - this.y };
+        return { x: (wx - this.x) * this.zoom, y: (wy - this.y) * this.zoom };
     }
 
     /** Center camera on a world position */
     public centerOn(wx: number, wy: number): void {
-        this.x = wx - this.viewportWidth / 2;
-        this.y = wy - this.viewportHeight / 2;
+        this.x = wx - this.effectiveWidth / 2;
+        this.y = wy - this.effectiveHeight / 2;
         this.clamp();
     }
 
@@ -227,9 +243,9 @@ export class Camera {
             const dx = mx - this.touchStartX;
             const dy = my - this.touchStartY;
 
-            // Invert dx/dy so map follows finger
-            this.x -= dx;
-            this.y -= dy;
+            // Invert dx/dy so map follows finger, scale by 1/zoom for natural feel
+            this.x -= dx / this.zoom;
+            this.y -= dy / this.zoom;
 
             this.touchStartX = mx;
             this.touchStartY = my;

@@ -331,4 +331,70 @@ export function drawBlacksmith(b: Building, ctx: CanvasRenderingContext2D, x: nu
         ctx.fill();
         ctx.globalAlpha = 1;
     }
+
+    // === RESEARCH/UPGRADE ANIMATION ===
+    if (b.isResearching) {
+        const t = Date.now() / 1000;
+
+        // 1. Intensified forge glow (pulsating orange-red)
+        const forgeGlow = 0.15 + Math.sin(t * 4) * 0.1;
+        ctx.globalAlpha = forgeGlow;
+        ctx.fillStyle = '#ff4400';
+        ctx.beginPath();
+        ctx.ellipse(x + w / 2, y + 24, 16, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffaa00';
+        ctx.beginPath();
+        ctx.ellipse(x + w / 2, y + 22, 10, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // 2. Sparks flying from anvil
+        for (let i = 0; i < 5; i++) {
+            const sparkAge = (t * 3 + i * 1.3) % 2;
+            if (sparkAge > 1) continue; // only visible half the time
+            const sx = x + 14 + Math.sin(t * 8 + i * 2.5) * 8;
+            const sy = (y + h - 20) - sparkAge * 20 + Math.sin(t * 12 + i) * 4;
+            const sparkAlpha = 1 - sparkAge;
+            ctx.fillStyle = `rgba(255, ${150 + Math.floor(sparkAge * 100)}, 0, ${sparkAlpha * 0.8})`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, 1 + (1 - sparkAge), 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 3. Hammer strike flash (periodic)
+        const strikePhase = (t * 2) % 1;
+        if (strikePhase < 0.08) {
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(x + 16, y + h - 18, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+
+        // 4. Progress bar below building
+        const prog = b.upgradeProgress;
+        const barW = w - 8;
+        const barH = 3;
+        const barX = x + 4;
+        const barY = y + h + 2;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = '#ff8800';
+        ctx.fillRect(barX, barY, barW * prog, barH);
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(barX, barY, barW * prog, 1);
+
+        // 5. Intensified smoke
+        const smokeT2 = t * 1.5;
+        ctx.fillStyle = 'rgba(80,80,80,0.4)';
+        for (let i = 0; i < 5; i++) {
+            const sy2 = y - 12 - i * 5 - (smokeT2 % 3) * 4;
+            const sx2 = x + w / 2 + Math.sin(smokeT2 + i * 0.8) * 5;
+            ctx.beginPath();
+            ctx.arc(sx2, sy2, 2.5 + i * 0.8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
 }

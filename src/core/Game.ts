@@ -13,18 +13,22 @@ import { SelectionSystem } from "../systems/SelectionSystem";
 import { GameUI } from "../ui/GameUI";
 import { ParticleSystem } from "../effects/ParticleSystem";
 import { FogOfWar } from "../systems/FogOfWar";
+// CreepManager removed — neutral monster system disabled
 import { AIController, AIDifficulty } from "../systems/AIController";
+import { sharedIntel } from "../systems/ai/AIConfig";
 import { CommandConsole, ConsoleHost } from "../ui/CommandConsole";
 import { SettingsMenu } from "../ui/SettingsMenu";
-import { WORLD_W, WORLD_H, TILE_SIZE, UnitType, BuildingType, ResourceType, CivilizationType, CIVILIZATION_DATA, CIV_ELITE_UNIT, resetId } from "../config/GameConfig";
+import { WORLD_W, WORLD_H, TILE_SIZE, UnitType, BuildingType, ResourceType, CivilizationType, CIVILIZATION_DATA, CIV_ELITE_UNIT, UpgradeType, resetId } from "../config/GameConfig";
 import { Unit } from "../entities/Unit";
 import { ResourceCache } from "../entities/ResourceCache";
 import { audioSystem } from "../systems/AudioSystem";
+import { t } from "../i18n/i18n";
 // Multiplayer
 import type { NetworkClient } from "../network/NetworkClient";
 import type { GameCommand } from "../network/NetworkCommands";
 import { cmdCheat, CommandType } from "../network/NetworkCommands";
 import { SeededRandom } from "../utils/SeededRandom";
+import { getItem } from "../config/EquipmentData";
 
 /** Configuration for each AI player slot from the lobby */
 export interface AISlotConfig {
@@ -50,6 +54,7 @@ export class Game implements ConsoleHost {
     private fog: FogOfWar;
     private aiControllers: AIController[] = [];
     public aiStates: PlayerState[] = [];
+    // creepManager removed — neutral monster system disabled
     private console: CommandConsole;
     private settingsMenu: SettingsMenu;
 
@@ -60,8 +65,11 @@ export class Game implements ConsoleHost {
     private onExitToMenu: (() => void) | null = null;
 
     // Game state
-    public gameState: 'playing' | 'victory' | 'defeat' = 'playing';
+    public gameState: 'playing' | 'victory' | 'defeat' | 'defeat_prompt' = 'playing';
     private stateCheckTimer = 0;
+    // Second Chance: rewarded ad to continue after defeat (once per match)
+    public secondChanceUsed = false;
+    public secondChanceAdInProgress = false;
 
     // Game speed multiplier
     private gameSpeed = 1;
@@ -219,11 +227,11 @@ export class Game implements ConsoleHost {
 
     private async _doInit(onProgress: (percent: number, stepName: string) => void): Promise<void> {
         // Step 1: Pre-render generic complex sprites into bitmaps
-        onProgress(5, "Đang tối ưu hóa tài nguyên ảnh...");
+        onProgress(5, t('loading.optimizing'));
         ResourceCache.init();
 
         // Step 2: TileMap generation — MUST be synchronous + seeded for multiplayer determinism
-        onProgress(10, "Đang định hình địa hình...");
+        onProgress(10, t('loading.terrain'));
         if (this.gameSeed !== null) {
             console.log(`🎲 Using seeded random: ${this.gameSeed}`);
             // Generate terrain synchronously with deterministic random
@@ -238,7 +246,7 @@ export class Game implements ConsoleHost {
         await this.tileMap.buildTerrainCache(onProgress);
 
         // Step 3: Initialize AI controllers and build bases
-        onProgress(70, "Đang xây dựng vương quốc...");
+        onProgress(70, t('loading.kingdom'));
 
         // Re-sort slots for team consistency
         const sortedSlots = [...this.aiSlots].sort((a, b) => a.team - b.team);
@@ -286,12 +294,17 @@ export class Game implements ConsoleHost {
 
         // ---- FREE MODE: Empty sandbox ----
         if (this.freeMode) {
-            onProgress(80, "Đang thiết lập Chế Độ Tự Do...");
+            onProgress(80, t('loading.freeMode'));
             // Don't setup normal game (no TC, no villagers, no AI)
             // Just an empty map with forests
             this.entityManager.freeMode = true;
             this.playerState.age = 4;
             this.playerState.maxPopulation = 999;
+            // Infinite resources for sandbox
+            this.playerState.resources.supplies = 99999;
+            this.playerState.resources.supplies = 99999;
+            this.playerState.resources.gold = 99999;
+            this.playerState.resources.supplies = 99999;
             this.fogEnabled = false;
             this.entityManager.fog = null;
             // Start PAUSED for placement phase
@@ -332,12 +345,11 @@ export class Game implements ConsoleHost {
                 this.aiControllers.push(ai);
             }
 
-            // Center camera in middle of map
-            this.camera.x = WORLD_W / 2 - 400;
-            this.camera.y = WORLD_H / 2 - 300;
+            // Center camera in middle of map (after resize)
+            this.camera.centerOn(WORLD_W / 2, WORLD_H / 2);
         } else {
             // Setup game world with all AI players (pass allyCount for strategic spawn placement)
-            onProgress(85, "Đang bố trí tài nguyên...");
+            onProgress(85, t('loading.resources'));
             if (this.gameSeed !== null) {
                 // CRITICAL: Reset ID counter + run setupGame with seeded random
                 // ALL in one synchronous block — no interruptions possible!
@@ -361,12 +373,13 @@ export class Game implements ConsoleHost {
             // Center camera on player TC (find actual position)
             const playerTC = this.entityManager.buildings.find(b => b.team === 0);
             if (playerTC) {
-                this.camera.x = playerTC.x - 400;
-                this.camera.y = playerTC.y - 300;
+                this.camera.centerOn(playerTC.x, playerTC.y);
             }
+
+            // Neutral creep camps removed
         }
 
-        onProgress(100, "Chuẩn bị xuất trận!");
+        onProgress(100, t('loading.ready'));
         await new Promise(r => setTimeout(r, 100)); // Brief pause on 100%
 
         // ---- Input listeners for Settings Menu ----
@@ -431,10 +444,18 @@ export class Game implements ConsoleHost {
         // Use capture phase so settings menu gets clicks before game canvas
         this.canvas.addEventListener('click', this._onClick, true);
 
-        // Resize
+        // Resize FIRST so viewport dimensions are valid for camera.centerOn()
         this.handleResize();
         this._onResize = () => this.handleResize();
         window.addEventListener("resize", this._onResize);
+
+        // Re-center camera after resize (now viewport dimensions are known)
+        if (this.freeMode) {
+            this.camera.centerOn(WORLD_W / 2, WORLD_H / 2);
+        } else {
+            const tc = this.entityManager.buildings.find(b => b.team === (this.isMultiplayer ? this.myTeam : 0));
+            if (tc) this.camera.centerOn(tc.x, tc.y);
+        }
     }
 
     // Stored event handlers for cleanup
@@ -449,6 +470,8 @@ export class Game implements ConsoleHost {
 
     start(): void {
         this.loop.start();
+        // Notify SDK that gameplay has started
+        import('../sdk/CrazyGamesSDK').then(({ gameplayStart }) => gameplayStart()).catch(e => console.error(e));
     }
 
     destroy(): void {
@@ -460,6 +483,9 @@ export class Game implements ConsoleHost {
         window.removeEventListener('resize', this._onResize);
         if (this.gameUI) {
             this.gameUI.destroy();
+        }
+        if (this.settingsMenu) {
+            this.settingsMenu.destroy();
         }
         // Disconnect network if multiplayer
         if (this.networkClient) {
@@ -538,8 +564,7 @@ export class Game implements ConsoleHost {
         // Center camera on MY team's Town Center
         const myTC = this.entityManager.buildings.find(b => b.team === mySlot);
         if (myTC) {
-            this.camera.x = myTC.x - 400;
-            this.camera.y = myTC.y - 300;
+            this.camera.centerOn(myTC.x, myTC.y);
         }
 
         // Listen for tick advances from server
@@ -630,7 +655,7 @@ export class Game implements ConsoleHost {
             ctx.fillStyle = '#c2185b'; // Crimson
             ctx.font = `600 ${Math.floor(18 * dpr)}px 'Inter', sans-serif`;
             ctx.letterSpacing = `${2 * dpr}px`;
-            ctx.fillText("ĐANG TẢI MENU...", w / 2, h / 2 - (10 * dpr));
+            ctx.fillText(t('loading.menu'), w / 2, h / 2 - (10 * dpr));
             
             // Percentage
             ctx.fillStyle = '#a0a0aa'; // Zinc
@@ -682,6 +707,7 @@ export class Game implements ConsoleHost {
         audioSystem.setVolume(targetVol);
 
         // Camera always updates (even when paused, for Free Mode placement)
+        this.camera.edgeScrollEnabled = this.settingsMenu.settings.edgeScroll;
         this.camera.update(dt);
         // Update spatial audio with camera position
         audioSystem.updateCamera(this.camera.x, this.camera.y, this.camera.viewportWidth, this.camera.viewportHeight);
@@ -707,7 +733,6 @@ export class Game implements ConsoleHost {
 
                 // Apply commands for this tick
                 for (const cmd of tickData.commands) {
-                    console.log(`🎯 Applying cmd: ${cmd.type} team=${cmd.team}`, cmd.data);
                     if (cmd.type === CommandType.CHEAT) {
                         this.applyCheatCommand(cmd);
                     } else {
@@ -720,6 +745,8 @@ export class Game implements ConsoleHost {
                 this.particles.update(FIXED_DT);
 
                 // AI runs deterministically on ALL clients within the tick loop
+                // Increment shared game time ONCE before all AI updates (Fix: was duplicated per AI)
+                sharedIntel.gameTime += FIXED_DT;
                 for (const ai of this.aiControllers) {
                     if (this.humanTeams.has(ai.team)) continue; // Skip human-controlled teams
                     ai.update(FIXED_DT, this.particles);
@@ -729,7 +756,7 @@ export class Game implements ConsoleHost {
                 Math.random = origRandom;
 
                 // ★ DESYNC DETECTION: Log state hash for ALL teams
-                if (tickData.tick % 100 === 0) {
+                if (tickData.tick % 1000 === 0) {
                     const allUnits = this.entityManager.units.filter(u => u.alive);
                     const allHash = allUnits.reduce((h, u) => h + Math.round(u.x * 10) + Math.round(u.y * 10), 0);
                     const teamCounts: string[] = [];
@@ -756,7 +783,7 @@ export class Game implements ConsoleHost {
             // Game logic ticks at 20Hz but render runs at 60fps.
             // Use a fast lerp so units visually catch up within ~2 frames
             // to minimize perceived input lag while staying smooth.
-            const lerpFactor = Math.min(1, dt * 18); // ~0.3 per frame at 60fps → catches up in ~3 frames
+            const lerpFactor = Math.min(1, dt * 25); // ~0.42 per frame at 60fps → catches up in ~2 frames
             for (const u of this.entityManager.units) {
                 if (!u.alive) continue;
                 const dx = u.x - u.renderX;
@@ -769,6 +796,21 @@ export class Game implements ConsoleHost {
                 } else {
                     u.renderX += dx * lerpFactor;
                     u.renderY += dy * lerpFactor;
+                }
+            }
+
+            // Advance visual animation timers with real dt (60fps) between logic ticks
+            // animTimer is already advanced by FIXED_DT in Unit.update(), but that only
+            // runs at 20Hz. Here we add the remaining time so animations appear 60fps-smooth.
+            // Since this runs every render frame, and the tick loop above already added FIXED_DT,
+            // we only add dt when NO ticks were processed this frame.
+            if (maxTicks === 0) {
+                for (const u of this.entityManager.units) {
+                    if (!u.alive) continue;
+                    u.animTimer += dt;
+                    if (u.state === 5 /* UnitState.Attacking */) {
+                        u.attackAnimTimer += dt;
+                    }
                 }
             }
         } else {
@@ -797,8 +839,23 @@ export class Game implements ConsoleHost {
                         if (playerEntityCount > 0) this.freeModeHadPlayer = true;
                         if (enemyEntityCount > 0) this.freeModeHadEnemy = true;
                     } else {
-                        if (playerEntityCount === 0) this.gameState = 'defeat';
-                        else if (enemyEntityCount === 0) this.gameState = 'victory';
+                        if (playerEntityCount === 0) {
+                            // Second Chance: show prompt first if not yet used
+                            if (!this.secondChanceUsed) {
+                                this.gameState = 'defeat_prompt';
+                            } else {
+                                this.gameState = 'defeat';
+                            }
+                            import('../sdk/CrazyGamesSDK').then(({ gameplayStop }) => gameplayStop()).catch(e => console.error(e));
+                        }
+                        else if (enemyEntityCount === 0) {
+                            this.gameState = 'victory';
+                            // CrazyGames: signal positive moment
+                            import('../sdk/CrazyGamesSDK').then(({ gameplayStop, happytime }) => {
+                                gameplayStop();
+                                happytime();
+                            }).catch(e => console.error(e));
+                        }
                     }
                 }
             }
@@ -825,9 +882,12 @@ export class Game implements ConsoleHost {
         // In singleplayer, AI runs with variable dt
         if (!this.isMultiplayer) {
             const aiDt = dt * this.gameSpeed;
+            // Increment shared game time ONCE before all AI updates (Fix: was duplicated per AI)
+            sharedIntel.gameTime += aiDt;
             for (const ai of this.aiControllers) {
                 ai.update(aiDt, this.particles);
             }
+            // Neutral creeps removed
         }
         this.selectionSystem.updateIndicators(dt);
     }
@@ -841,35 +901,62 @@ export class Game implements ConsoleHost {
 
         // Clear
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.fillStyle = "#1a1a2e";
+        ctx.fillStyle = "#2a3a2a";
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // World rendering (DPR + camera)
-        ctx.setTransform(dpr, 0, 0, dpr, -Math.round(cam.x) * dpr, -Math.round(cam.y) * dpr);
+        // World rendering (DPR + camera + zoom)
+        const z = cam.zoom;
+        ctx.setTransform(dpr * z, 0, 0, dpr * z, -Math.round(cam.x * z) * dpr, -Math.round(cam.y * z) * dpr);
 
         let t0 = performance.now();
         // Layer 1: Terrain tiles
-        this.tileMap.render(ctx, cam.x, cam.y, cam.viewportWidth, cam.viewportHeight);
+        this.tileMap.render(ctx, cam.x, cam.y, cam.effectiveWidth, cam.effectiveHeight);
         let t1 = performance.now();
         this.loop.renderMetrics.terrain = t1 - t0;
+
+        // Neutral creep camp decorations removed
 
         t0 = performance.now();
         // Layer 2-4: Y-sorted entities (resources + buildings + units)
         // This creates depth: entities lower on screen (higher Y) draw on top
-        this.entityManager.renderAllYSorted(ctx, cam.x, cam.y, cam.viewportWidth, cam.viewportHeight);
+        this.entityManager.renderAllYSorted(ctx, cam.x, cam.y, cam.effectiveWidth, cam.effectiveHeight);
         t1 = performance.now();
         this.loop.renderMetrics.entities = t1 - t0;
 
+        // Dropped equipment items (world space)
+        for (const drop of this.entityManager.droppedItems) {
+            const sx = drop.x, sy = drop.y;
+            // Viewport cull
+            if (sx < cam.x - 20 || sx > cam.x + cam.effectiveWidth + 20 ||
+                sy < cam.y - 20 || sy > cam.y + cam.effectiveHeight + 20) continue;
+            const pulse = 0.7 + Math.sin(Date.now() / 400) * 0.3;
+            // Golden glow circle
+            ctx.globalAlpha = pulse * 0.5;
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.arc(sx, sy, 10, 0, Math.PI * 2);
+            ctx.fill();
+            // Item icon
+            ctx.globalAlpha = 1;
+            const itemData = getItem(drop.itemId);
+            if (itemData) {
+                ctx.font = "14px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText(itemData.icon, sx, sy + 5);
+                ctx.textAlign = 'left';
+            }
+        }
+
         t0 = performance.now();
         // Layer 5: Particles (world space, with viewport culling, hidden under fog)
-        this.particles.render(ctx, cam.x, cam.y, cam.viewportWidth, cam.viewportHeight, this.fogEnabled ? this.fog : null);
+        this.particles.render(ctx, cam.x, cam.y, cam.effectiveWidth, cam.effectiveHeight, this.fogEnabled ? this.fog : null);
         t1 = performance.now();
         this.loop.renderMetrics.particles = t1 - t0;
 
         t0 = performance.now();
         // Layer 6: Fog of War (world space)
         if (this.fogEnabled) {
-            this.fog.render(ctx, cam.x, cam.y, cam.viewportWidth, cam.viewportHeight);
+            this.fog.render(ctx, cam.x, cam.y, cam.effectiveWidth, cam.effectiveHeight);
         }
         t1 = performance.now();
         this.loop.renderMetrics.fog = t1 - t0;
@@ -900,14 +987,7 @@ export class Game implements ConsoleHost {
             ctx.textAlign = 'left';
         }
 
-        // Settings menu hint (top-right)
-        if (!this.settingsMenu.visible && !this.paused) {
-            ctx.fillStyle = '#5a4a3a';
-            ctx.font = "10px 'Inter', sans-serif";
-            ctx.textAlign = 'right';
-            ctx.fillText('F10 / Esc — Cài đặt', cam.viewportWidth - 10, 14);
-            ctx.textAlign = 'left';
-        }
+
 
         // Command Console (always on top)
         this.console.render(ctx, cam.viewportWidth, cam.viewportHeight);
@@ -919,6 +999,114 @@ export class Game implements ConsoleHost {
         this.loop.renderMetrics.ui = t1 - t0;
 
         this.loop.lastRenderTimeMs = performance.now() - perfRenderStart;
+    }
+
+    // ============================================================
+    //  Second Chance — Rewarded ad to continue after defeat
+    // ============================================================
+
+    /** Player chose to skip second chance → final defeat */
+    skipSecondChance(): void {
+        if (this.gameState !== 'defeat_prompt') return;
+        this.gameState = 'defeat';
+    }
+
+    /** Player chose to watch ad for second chance */
+    async useSecondChance(): Promise<void> {
+        if (this.gameState !== 'defeat_prompt' || this.secondChanceAdInProgress) return;
+        this.secondChanceAdInProgress = true;
+
+        // Import SDK dynamically to avoid circular deps
+        const { showRewardedAd } = await import('../sdk/CrazyGamesSDK');
+        const adWatched = await showRewardedAd();
+
+        this.secondChanceAdInProgress = false;
+        this.secondChanceUsed = true;
+
+        if (!adWatched) {
+            // Ad failed or skipped — go to defeat
+            this.gameState = 'defeat';
+            return;
+        }
+
+        // --- Grant second chance ---
+
+        // Find a safe spawn position (same zones as AI bases, furthest from enemies)
+        const mapW = this.tileMap.cols;
+        const mapH = this.tileMap.rows;
+        const candidates = [
+            [Math.floor(mapW * 0.15), Math.floor(mapH * 0.15)],
+            [Math.floor(mapW * 0.85), Math.floor(mapH * 0.15)],
+            [Math.floor(mapW * 0.15), Math.floor(mapH * 0.85)],
+            [Math.floor(mapW * 0.85), Math.floor(mapH * 0.85)],
+            [Math.floor(mapW * 0.50), Math.floor(mapH * 0.15)],
+            [Math.floor(mapW * 0.50), Math.floor(mapH * 0.85)],
+            [Math.floor(mapW * 0.15), Math.floor(mapH * 0.50)],
+            [Math.floor(mapW * 0.85), Math.floor(mapH * 0.50)],
+            [Math.floor(mapW * 0.50), Math.floor(mapH * 0.50)],
+        ];
+
+        // Score each candidate by distance from enemies
+        let bestCorner = candidates[0];
+        let bestDist = -1;
+        for (const [cx, cy] of candidates) {
+            let minEnemyDist = Infinity;
+            for (const u of this.entityManager.units) {
+                if (u.alive && this.entityManager.isEnemy(this.myTeam, u.team)) {
+                    const [tx, ty] = this.tileMap.worldToTile(u.x, u.y);
+                    const d = Math.abs(tx - cx) + Math.abs(ty - cy);
+                    if (d < minEnemyDist) minEnemyDist = d;
+                }
+            }
+            for (const b of this.entityManager.buildings) {
+                if (b.alive && this.entityManager.isEnemy(this.myTeam, b.team)) {
+                    const d = Math.abs(b.tileX - cx) + Math.abs(b.tileY - cy);
+                    if (d < minEnemyDist) minEnemyDist = d;
+                }
+            }
+            if (minEnemyDist > bestDist) {
+                bestDist = minEnemyDist;
+                bestCorner = [cx, cy];
+            }
+        }
+
+        // Find valid spawn position away from water
+        const validPos = this.entityManager.findValidTileAwayFromWater(bestCorner[0], bestCorner[1], 4, 4);
+        if (!validPos) {
+            this.gameState = 'defeat';
+            return;
+        }
+        const [spawnTX, spawnTY] = validPos;
+
+        // Spawn 4 villagers with 10s invulnerability
+        const { ResourceType, UnitType } = await import('../config/GameConfig');
+        const INVULN_TIME = 180; // 3 minutes
+        const TILE_SIZE = 32;
+        const centerX = (spawnTX + 2) * TILE_SIZE;
+        const centerY = (spawnTY + 2) * TILE_SIZE;
+        for (let i = 0; i < 4; i++) {
+            const sx = centerX + (Math.random() - 0.5) * 60;
+            const sy = centerY + (Math.random() - 0.5) * 60;
+            const vp = this.entityManager.findValidWorldPos(sx, sy);
+            if (vp) {
+                const u = this.entityManager.spawnUnit(UnitType.Villager, vp[0], vp[1], this.myTeam);
+                if (u) u.invulnerableTimer = INVULN_TIME;
+            }
+        }
+
+        // Add gold + wood
+        const ps = this.entityManager.getTeamState(this.myTeam);
+        if (ps) {
+            ps.resources[ResourceType.Gold] += 500;
+            ps.resources[ResourceType.Supplies] += 500;
+        }
+
+        // Pan camera to villagers
+        this.camera.centerOn(centerX, centerY);
+
+        // Reset to playing
+        this.gameState = 'playing';
+        import('../sdk/CrazyGamesSDK').then(({ gameplayStart }) => gameplayStart()).catch(e => console.error(e));
     }
 
     // ============================================================
@@ -960,10 +1148,10 @@ export class Game implements ConsoleHost {
                 // Add resources to the commanding team's state (deterministic for all clients)
                 const ts = this.teamStatesMap.get(team) ?? this.playerState;
                 switch (resourceType) {
-                    case 'food': ts.addResource(ResourceType.Food, amount); break;
-                    case 'wood': ts.addResource(ResourceType.Wood, amount); break;
+                    case 'food': ts.addResource(ResourceType.Supplies, amount); break;
+                    case 'wood': ts.addResource(ResourceType.Supplies, amount); break;
                     case 'gold': ts.addResource(ResourceType.Gold, amount); break;
-                    case 'stone': ts.addResource(ResourceType.Stone, amount); break;
+                    case 'stone': ts.addResource(ResourceType.Supplies, amount); break;
                 }
                 break;
             }
@@ -991,10 +1179,10 @@ export class Game implements ConsoleHost {
                 audioSystem.setFogOfWar(null as any);
                 this.gameSpeed = 3;
                 const ggTs = this.teamStatesMap.get(team) ?? this.playerState;
-                ggTs.addResource(ResourceType.Food, 99999);
-                ggTs.addResource(ResourceType.Wood, 99999);
+                ggTs.addResource(ResourceType.Supplies, 99999);
+                ggTs.addResource(ResourceType.Supplies, 99999);
                 ggTs.addResource(ResourceType.Gold, 99999);
-                ggTs.addResource(ResourceType.Stone, 99999);
+                ggTs.addResource(ResourceType.Supplies, 99999);
                 break;
             }
 
@@ -1028,6 +1216,18 @@ export class Game implements ConsoleHost {
                     const sy = baseY2 + Math.sin(angle) * radius;
                     this.entityManager.spawnUnit(unitType, sx, sy, team);
                 }
+                break;
+            }
+            case 'upgradeAll': {
+                const { level } = cmd.data;
+                const upTs = this.teamStatesMap.get(team) ?? this.playerState;
+                upTs.upgrades[UpgradeType.MeleeAttack] = level;
+                upTs.upgrades[UpgradeType.MeleeDefense] = level;
+                upTs.upgrades[UpgradeType.RangedAttack] = level;
+                upTs.upgrades[UpgradeType.RangedDefense] = level;
+                upTs.upgrades[UpgradeType.EliteAttack] = level;
+                upTs.upgrades[UpgradeType.EliteDefense] = level;
+                upTs.upgrades[UpgradeType.CavalryAttack] = level;
                 break;
             }
         }
@@ -1168,5 +1368,13 @@ export class Game implements ConsoleHost {
         for (const u of this.selectionSystem.selectedUnits) {
             if (u.isHero) u.addHeroXp(amount);
         }
+    }
+
+    upgradeAllUnits(level: number): void {
+        if (this.isMultiplayer && !this.isHost) {
+            this.console.log('❌ Chỉ host mới dùng được lệnh này', '#ff4444');
+            return;
+        }
+        this.sendCheat('upgradeAll', { level });
     }
 }

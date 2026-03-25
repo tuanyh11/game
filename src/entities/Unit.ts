@@ -10,7 +10,7 @@ import {
     genId, UnitType, UnitState, UNIT_DATA, ResourceType, ResourceNodeType,
     C, TILE_SIZE, MAP_COLS, MAP_ROWS, TerrainType,
     CivilizationType, CIVILIZATION_DATA, CIV_UNIT_MODIFIERS,
-    isInfantryType, isCavalryType, isRangedType, isCivElite
+    isInfantryType, isCavalryType, isRangedType, isCivElite, isCreepType
 } from "../config/GameConfig";
 import { ResourceNode } from "./ResourceNode";
 import { type HeroSkill, getHeroSkills, HERO_XP_TABLE, HERO_MAX_LEVEL } from "../config/HeroSkillsData";
@@ -18,6 +18,8 @@ export type { HeroSkill } from "../config/HeroSkillsData";
 export { getHeroSkills, HERO_SKILLS, HERO_XP_TABLE, HERO_MAX_LEVEL } from "../config/HeroSkillsData";
 
 import { Building } from "./Building";
+import { unequipItem } from "./unit-abilities/EquipmentSystem";
+import { EquipmentSlot } from "../config/EquipmentData";
 import { ParticleSystem } from "../effects/ParticleSystem";
 import { audioSystem } from "../systems/AudioSystem";
 
@@ -52,9 +54,13 @@ export class Unit {
     state = UnitState.Idle;
     selected = false;
     alive = true;
+    /** Seconds of invulnerability remaining (second chance shield) */
+    invulnerableTimer = 0;
     upgradeLevel = 0; // 0-3, affects visuals
     age = 1; // Current age (1-4), affects visuals
     spawnBuildingId = -1; // ID of the building that spawned this unit (-1 = none)
+    isMilitia = false; // Town Bell militia mode — villager with armor and combat bonuses
+    isMilitiaRallying = false; // Villager is moving to TC to get armor (not yet equipped)
 
     // Hero XP/Level system
     heroXp = 0;
@@ -68,6 +74,28 @@ export class Unit {
     civRange = 0;                               // civ-modified attack range
     civAttackSpeed = 0;                         // civ-modified attack speed
 
+    // Hero Aura buff state (set by HeroAuraSystem each frame)
+    auraBuffType: string = '';        // '' = no buff, 'armor'|'atkSpeed'|'regen'|'speed'|'hp'
+    auraBuffValue: number = 0;        // buff strength (e.g., 0.15 for 15%)
+    auraDebuffType: string = '';      // secondary debuff type (e.g. Ragnar's armor penalty)
+    auraDebuffValue: number = 0;      // secondary debuff strength
+    auraSourceId: number = -1;        // hero unit id providing the aura
+    auraRegenAccum: number = 0;       // accumulator for regen-type auras
+    _auraHpApplied: number = 0;       // tracks HP bonus currently applied (for clean removal)
+    _auraArmorApplied: number = 0;    // tracks armor bonus currently applied
+    _auraAtkSpeedApplied: number = 0; // tracks atkSpeed multiplier applied (stored as %)
+    _auraSpeedApplied: number = 0;    // tracks speed multiplier applied (stored as %)
+
+    // Hero Equipment (hero only — managed by EquipmentSystem)
+    equipment: { weapon: string | null; armor: string | null; accessory: string | null } = { weapon: null, armor: null, accessory: null };
+    _equipBonuses: import('../entities/unit-abilities/EquipmentSystem').EquipmentBonuses | null = null;
+    _onDropEquipment: ((itemId: string, x: number, y: number, team: number) => void) | null = null;
+    _pickupTarget: { dropIndex: number; x: number; y: number } | null = null;
+
+    // Equipment debuff values (timers use existing slowTimer/healReductionTimer)
+    slowAmount = 0;              // % speed reduction from equipment (e.g. 0.30 = 30%)
+    antiHealAmount = 0;          // % healing reduction from equipment (e.g. 0.50 = 50%)
+
     // Movement
     targetX = 0; targetY = 0;
     moveCallback: (() => void) | null = null;
@@ -77,10 +105,8 @@ export class Unit {
     carriedResources: Partial<Record<ResourceType, number>> = {};
     
     get totalCarriedAmount(): number {
-        return (this.carriedResources[ResourceType.Wood] || 0) + 
-               (this.carriedResources[ResourceType.Food] || 0) + 
-               (this.carriedResources[ResourceType.Gold] || 0) + 
-               (this.carriedResources[ResourceType.Stone] || 0);
+        return (this.carriedResources[ResourceType.Supplies] || 0) + 
+               (this.carriedResources[ResourceType.Gold] || 0);
     }
 
     get isCarrying(): boolean {
@@ -135,6 +161,7 @@ export class Unit {
     stuckCount = 0;
     lastX = 0;
     lastY = 0;
+    pathfindCooldown = 0; // Rate-limit A* recalculations (seconds remaining)
 
     // Animation
     animFrame = 0;
@@ -262,6 +289,9 @@ export class Unit {
     }
     get isVillager() { return this.type === UnitType.Villager; }
     get isHero() { return this.type === UnitType.HeroSpartacus || this.type === UnitType.HeroZarathustra || this.type === UnitType.HeroQiJiguang || this.type === UnitType.HeroMusashi || this.type === UnitType.HeroRagnar; }
+    get isCreep() { return isCreepType(this.type); }
+    campOriginX = 0;  // creep camp origin for leash
+    campOriginY = 0;
     get isUnstoppable() { return this.type === UnitType.WarElephant; }
     get data() { return UNIT_DATA[this.type]; }
     get isDead() { return this.hp <= 0; }
@@ -377,6 +407,8 @@ export class Unit {
         this.pathIndex = 0;
         this.stuckTimer = 0;
         this.stuckCount = 0;
+        // FPS FIX: Stagger initial pathfinding so units don't all call A* on the same frame
+        this.pathfindCooldown = (this.id % 10) * 0.04;
         this.manualAttackCommand = manual;
         this.state = UnitState.Attacking;
         // Centurion: default to spear mode (ranged) when given a new attack target
@@ -398,6 +430,8 @@ export class Unit {
         this.pathIndex = 0;
         this.stuckTimer = 0;
         this.stuckCount = 0;
+        // FPS FIX: Stagger initial pathfinding so units don't all call A* on the same frame
+        this.pathfindCooldown = (this.id % 10) * 0.04;
         this.manualAttackCommand = manual;
         this.state = UnitState.Attacking;
         // Centurion: default to spear mode (ranged) when given a new attack target
@@ -408,17 +442,20 @@ export class Unit {
     }
 
     gatherFrom(node: ResourceNode, findDropOff: () => Building | null): void {
+        if (this.isMilitia) return; // Militia villagers cannot gather
         this.targetResource = node;
         this.buildTarget = null;
         this.attackTarget = null;
         this.attackBuildingTarget = null;
         this.state = UnitState.Moving;
-        // Stand at the EDGE of the resource, not on top of it
-        const gatherStandoff = node.radius + 6;
+        // Stand at the EDGE of the resource, not on top of it (with jitter for clump avoidance)
+        const gatherStandoff = node.radius + 6 + (this.id % 4);
         const dx = this.x - node.x, dy = this.y - node.y;
-        const d = Math.hypot(dx, dy) || 1;
-        this.targetX = node.x + (dx / d) * gatherStandoff;
-        this.targetY = node.y + (dy / d) * gatherStandoff;
+        const angleOriginal = Math.atan2(dy, dx);
+        const angleJitter = ((this.id % 7) - 3) * 0.15;
+        const finalAngle = angleOriginal + angleJitter;
+        this.targetX = node.x + Math.cos(finalAngle) * gatherStandoff;
+        this.targetY = node.y + Math.sin(finalAngle) * gatherStandoff;
         this.pathWaypoints = [];
         this.pathIndex = 0;
         this.stuckTimer = 0;
@@ -434,21 +471,24 @@ export class Unit {
 
     /** Command villager to build/repair a building */
     buildAt(building: Building): void {
-        if (!this.isVillager) return;
+        if (!this.isVillager || this.isMilitia) return; // Militia villagers cannot build
         this.buildTarget = building;
         this.targetResource = null;
         this.targetBuilding = null;
         this.attackTarget = null;
         this.attackBuildingTarget = null;
         this.state = UnitState.Moving;
-        this.targetX = building.x;
-        this.targetY = building.y;
+        const standoff = Math.max(building.tileW, building.tileH) * 32 * 0.4 + 4 + (this.id % 5);
+        const dx = this.x - building.x, dy = this.y - building.y;
+        const finalAngle = Math.atan2(dy, dx) + ((this.id % 7) - 3) * 0.15;
+        this.targetX = building.x + Math.cos(finalAngle) * standoff;
+        this.targetY = building.y + Math.sin(finalAngle) * standoff;
         this.pathWaypoints = [];
         this.pathIndex = 0;
         this.stuckTimer = 0;
         this.stuckCount = 0;
         this.moveCallback = () => {
-            if (this.buildTarget && (!this.buildTarget.built || this.buildTarget.hp < this.buildTarget.maxHp)) {
+            if (this.buildTarget && this.buildTarget.alive && (!this.buildTarget.built || this.buildTarget.hp < this.buildTarget.maxHp)) {
                 this.state = UnitState.Building;
                 this.buildSwingTimer = 0;
             } else {
@@ -466,8 +506,11 @@ export class Unit {
         this.attackBuildingTarget = null;
         
         this.targetBuilding = building;
-        this.targetX = building.x;
-        this.targetY = building.y;
+        const standoff = Math.max(building.tileW, building.tileH) * 32 * 0.4 + 4 + (this.id % 5);
+        const dx = this.x - building.x, dy = this.y - building.y;
+        const finalAngle = Math.atan2(dy, dx) + ((this.id % 7) - 3) * 0.15;
+        this.targetX = building.x + Math.cos(finalAngle) * standoff;
+        this.targetY = building.y + Math.sin(finalAngle) * standoff;
         this.pathWaypoints = [];
         this.pathIndex = 0;
         this.stuckTimer = 0;
@@ -483,8 +526,12 @@ export class Unit {
     _findNearbyUnbuiltBuilding: ((x: number, y: number, team: number, maxDist: number) => Building | null) | null = null;
     /** Set by EntityManager — used by Magi for healing nearby allies */
     _allUnits: Unit[] = [];
+    /** Callback to query SpatialGrid for nearby units ($O(1)$) */
+    _getNearbyUnits?: (x: number, y: number, r: number) => Unit[];
     /** Callback to spawn a clone unit at position (set by EntityManager) */
     _spawnClone: ((sourceUnit: Unit, x: number, y: number, duration: number) => Unit | null) | null = null;
+    /** Callback to find enemy wall/building blocking path between two points (set by EntityManager) */
+    _findBlockingWall: ((x: number, y: number, targetX: number, targetY: number, myTeam: number) => import("./Building").Building | null) | null = null;
 
     // ---- Update (called every frame) ----
     update(
@@ -512,6 +559,31 @@ export class Unit {
 
                 // Play synthetic retro death sound
                 audioSystem.playDeathSound(this.x, this.y);
+
+                // ---- DROP EQUIPMENT ON HERO DEATH ----
+                if (this.isHero && this._onDropEquipment) {
+                    const slots = ['weapon', 'armor', 'accessory'] as const;
+                    for (const slot of slots) {
+                        const itemId = this.equipment[slot];
+                        if (itemId) {
+                            // Drop item at death location with slight offset
+                            const offsetX = (Math.random() - 0.5) * 30;
+                            const offsetY = (Math.random() - 0.5) * 30;
+                            this._onDropEquipment(itemId, this.x + offsetX, this.y + offsetY, this.team);
+                            this.equipment[slot] = null;
+                            // Gold sparkle particles for dropped item
+                            particles.emit({
+                                x: this.x + offsetX, y: this.y + offsetY,
+                                count: 6, spread: 8,
+                                speed: [10, 30], angle: [0, Math.PI * 2],
+                                life: [0.5, 1.2], size: [2, 4],
+                                colors: ['#ffd700', '#daa520', '#ffcc00'],
+                                gravity: 40, shape: 'circle',
+                            });
+                        }
+                    }
+                    this._equipBonuses = null;
+                }
             }
             this.deathTimer -= dt;
             return;
@@ -523,6 +595,7 @@ export class Unit {
         this.attackCooldown = Math.max(0, this.attackCooldown - dt);
         this.passiveCooldown = Math.max(0, this.passiveCooldown - dt);
         this.passiveBuffTimer = Math.max(0, this.passiveBuffTimer - dt);
+        if (this.pathfindCooldown > 0) this.pathfindCooldown = Math.max(0, this.pathfindCooldown - dt);
         if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - dt);
         if (this.healReductionTimer > 0) this.healReductionTimer = Math.max(0, this.healReductionTimer - dt);
         if (this.frozenTimer > 0) {
@@ -560,12 +633,42 @@ export class Unit {
         // ---- HERO SKILL SYSTEM (delegated to HeroSkillSystem) ----
         if (this.isHero) {
             updateHeroSkills(this, dt, particles, findNearestEnemy, findNearestEnemyBuilding);
+
+            // ---- EQUIPMENT REGEN ----
+            const eb = this._equipBonuses;
+            if (eb && eb.hasRegen && this.hp < this.maxHp) {
+                let healAmount = eb.regenValue * dt;
+                // Anti-heal debuff reduces healing
+                if (this.healReductionTimer > 0) {
+                    healAmount *= (1 - this.antiHealAmount);
+                }
+                this.hp = Math.min(this.maxHp, this.hp + healAmount);
+            }
+
+            // ---- AUTO-USE HEALTH POTION (consume when HP < 30%) ----
+            if (this.hp < this.maxHp * 0.3 && this.equipment.accessory === 'health_potion') {
+                // Burst heal 50% of max HP
+                let potionHeal = this.maxHp * 0.5;
+                if (this.healReductionTimer > 0) {
+                    potionHeal *= (1 - this.antiHealAmount);
+                }
+                this.hp = Math.min(this.maxHp, this.hp + potionHeal);
+                this.healingTimer = 1.5; // visual green heal particles
+
+                // Consume the potion (remove from equipment)
+                unequipItem(this, EquipmentSlot.Accessory);
+            }
         }
 
 
         switch (this.state) {
             case UnitState.Idle: {
                 this.manualCommand = false; // Reset so AI can take over again
+                // Creeps far from camp should NOT auto-aggro (let them walk home)
+                if (this.isCreep && this.campOriginX !== 0) {
+                    const distFromCamp = Math.hypot(this.x - this.campOriginX, this.y - this.campOriginY);
+                    if (distFromCamp > TILE_SIZE * 6) break; // Too far from camp, skip aggro
+                }
                 // Auto-attack nearby enemy UNITS first
                 const aggroRange = this.data.sight * TILE_SIZE * 0.6;
                 if (findNearestEnemy) {
@@ -621,7 +724,7 @@ export class Unit {
 
     // ---- CHASE MOVE (delegated to UnitMovement) ----
     chaseMove(dx: number, dy: number, dist: number, dt: number, tileMap?: TileMapRef): void {
-        unitChaseMove(this, dx, dy, dist, dt, tileMap);
+        unitChaseMove(this, dx, dy, dist, dt, tileMap, this._getNearbyUnits);
     }
 
     isTileOfTarget(col: number, row: number): boolean {
@@ -629,7 +732,7 @@ export class Unit {
     }
 
     private doMove(dt: number, particles: ParticleSystem, tileMap?: TileMapRef): void {
-        unitDoMove(this, dt, particles, tileMap);
+        unitDoMove(this, dt, particles, tileMap, this._getNearbyUnits);
     }
 
     escapeToWalkableTile(tileMap: TileMapRef, destX: number, destY: number): boolean {

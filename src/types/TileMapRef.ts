@@ -13,6 +13,8 @@ export type TileMapRef = {
     worldToTile: (x: number, y: number) => [number, number];
     tileToWorld: (col: number, row: number) => [number, number];
     findPath: (sc: number, sr: number, ec: number, er: number) => [number, number][] | null;
+    /** Chase-optimized pathfinding: lower iteration limit, returns null on failure (no partial paths) */
+    findPathForChase: (sc: number, sr: number, ec: number, er: number) => [number, number][] | null;
     getTerrainAt: (col: number, row: number) => TerrainType;
     getAllUnits: () => import("../entities/Unit").Unit[];
 };

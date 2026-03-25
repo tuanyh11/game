@@ -184,4 +184,114 @@ export function drawVillager(unit: Unit, ctx: CanvasRenderingContext2D, age: num
         ctx.fillRect(-6, 14 + legOffset, 5, 3);
         ctx.fillRect(0, 14 - legOffset, 5, 3);
     }
+
+    // === MILITIA ARMOR & HELMET (Town Bell active) ===
+    if (unit.isMilitia) {
+        // Body armor overlay — chainmail/plate
+        ctx.globalAlpha = 0.7;
+        switch (civ) {
+            case CivilizationType.BaTu:
+                // Golden lamellar armor
+                ctx.fillStyle = '#b89040';
+                ctx.fillRect(-6, -2 + bob, 12, 10);
+                ctx.fillStyle = '#9a7030';
+                for (let i = 0; i < 3; i++) ctx.fillRect(-5, i * 3 + bob, 10, 1);
+                break;
+            case CivilizationType.DaiMinh:
+                // Red lacquered brigandine
+                ctx.fillStyle = '#8a2020';
+                ctx.fillRect(-6, -2 + bob, 12, 10);
+                ctx.fillStyle = '#c9a84c';
+                ctx.fillRect(-6, -2 + bob, 12, 2);
+                ctx.fillRect(-6, 6 + bob, 12, 2);
+                break;
+            case CivilizationType.Yamato:
+                // Dark samurai dō
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(-6, -2 + bob, 12, 10);
+                ctx.fillStyle = '#444';
+                for (let i = 0; i < 4; i++) ctx.fillRect(-5, i * 2.5 - 1 + bob, 10, 1);
+                ctx.fillStyle = '#cc3333';
+                ctx.fillRect(-6, 6 + bob, 12, 2);
+                break;
+            case CivilizationType.LaMa:
+                // Roman lorica segmentata
+                ctx.fillStyle = '#8a8888';
+                ctx.fillRect(-6, -2 + bob, 12, 10);
+                ctx.fillStyle = '#6a6868';
+                for (let i = 0; i < 4; i++) ctx.fillRect(-5, i * 2.5 - 1 + bob, 10, 1);
+                ctx.fillStyle = '#daa520';
+                ctx.fillRect(-2, 0 + bob, 4, 8);
+                break;
+            case CivilizationType.Viking:
+                // Chainmail hauberk
+                ctx.fillStyle = '#5a5a58';
+                ctx.fillRect(-6, -2 + bob, 12, 10);
+                ctx.fillStyle = '#777';
+                for (let i = 0; i < 5; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        ctx.fillRect(-4 + j * 3, i * 2 - 1 + bob, 1, 1);
+                    }
+                }
+                break;
+        }
+        ctx.globalAlpha = 1;
+
+        // Helmet overlay (drawn over head)
+        switch (civ) {
+            case CivilizationType.BaTu:
+                // Persian-style pointed helm
+                ctx.fillStyle = '#c9a040';
+                ctx.fillRect(-5, -14 + bob, 10, 6);
+                ctx.fillRect(-3, -17 + bob, 6, 4);
+                ctx.fillRect(-1, -19 + bob, 2, 3);
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(-5, -10 + bob, 10, 2);
+                break;
+            case CivilizationType.DaiMinh:
+                // Ming kettle helm
+                ctx.fillStyle = '#8a6a30';
+                ctx.fillRect(-6, -13 + bob, 12, 5);
+                ctx.fillRect(-7, -9 + bob, 14, 2);
+                ctx.fillStyle = '#dd3333';
+                ctx.fillRect(0, -16 + bob, 2, 5);
+                break;
+            case CivilizationType.Yamato:
+                // Kabuto (samurai helmet)
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(-5, -15 + bob, 10, 7);
+                ctx.fillStyle = '#cc3333';
+                ctx.fillRect(-6, -10 + bob, 12, 2);
+                ctx.fillStyle = '#daa520';
+                ctx.fillRect(-2, -17 + bob, 4, 3);
+                // Neck guard
+                ctx.fillStyle = '#333';
+                ctx.fillRect(-6, -9 + bob, 2, 4);
+                ctx.fillRect(4, -9 + bob, 2, 4);
+                break;
+            case CivilizationType.LaMa:
+                // Roman galea
+                ctx.fillStyle = '#8a8888';
+                ctx.fillRect(-5, -15 + bob, 10, 7);
+                ctx.fillStyle = '#cc3333';
+                ctx.fillRect(-2, -18 + bob, 4, 4);
+                ctx.fillRect(-1, -20 + bob, 2, 3);
+                // Cheek guards
+                ctx.fillStyle = '#7a7878';
+                ctx.fillRect(-6, -10 + bob, 2, 4);
+                ctx.fillRect(4, -10 + bob, 2, 4);
+                break;
+            case CivilizationType.Viking:
+                // Norse spangenhelm with nose guard
+                ctx.fillStyle = '#5a5a58';
+                ctx.fillRect(-5, -15 + bob, 10, 7);
+                ctx.fillStyle = '#777';
+                ctx.fillRect(-1, -16 + bob, 2, 8);
+                ctx.fillRect(-5, -12 + bob, 10, 2);
+                // Nose guard
+                ctx.fillStyle = '#5a5a58';
+                ctx.fillRect(-1, -10 + bob, 2, 4);
+                break;
+        }
+    }
 }

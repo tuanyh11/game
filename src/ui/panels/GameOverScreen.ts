@@ -1,5 +1,5 @@
 // ============================================================
-//  GameOverScreen — Victory / Defeat overlay
+//  GameOverScreen — Victory / Defeat / Second Chance overlay
 //  Extracted from GameUI.ts
 // ============================================================
 
@@ -9,14 +9,21 @@ import { t } from '../../i18n/i18n';
 
 export interface GameOverContext {
     isVictory: boolean;
+    isDefeatPrompt: boolean;   // true = show "Watch Ad" button
+    adInProgress: boolean;     // true = ad is currently showing
     viewportWidth: number;
     viewportHeight: number;
     mouseX: number;
     mouseY: number;
 }
 
+// Export button hit areas so GameUI can detect clicks
+export let secondChanceButtonArea = { x: 0, y: 0, w: 0, h: 0 };
+export let skipButtonArea = { x: 0, y: 0, w: 0, h: 0 };
+export let exitButtonArea = { x: 0, y: 0, w: 0, h: 0 };
+
 export function renderGameOverScreen(ctx: CanvasRenderingContext2D, go: GameOverContext): void {
-    const { isVictory, viewportWidth: w, viewportHeight: h, mouseX, mouseY } = go;
+    const { isVictory, isDefeatPrompt, adInProgress, viewportWidth: w, viewportHeight: h, mouseX, mouseY } = go;
 
     const color = isVictory ? '#c2185b' : '#f87171'; // Crimson or soft red
     const colorDim = isVictory ? 'rgba(194,24,91,0.2)' : 'rgba(248,113,113,0.2)';
@@ -56,41 +63,115 @@ export function renderGameOverScreen(ctx: CanvasRenderingContext2D, go: GameOver
     ctx.fillStyle = gradLine;
     ctx.fillRect(w / 2 - 150, h / 2 + 20, 300, 1);
 
-    // Exit Button
-    const btnW = 200;
-    const btnH = 44;
-    const btnX = w / 2 - btnW / 2;
-    const btnY = h / 2 + 60;
+    // ---- Second Chance prompt (defeat_prompt state) ----
+    if (isDefeatPrompt && !isVictory) {
+        // "Watch Ad" button (gold/highlighted)
+        const adBtnW = 280;
+        const adBtnH = 48;
+        const adBtnX = w / 2 - adBtnW / 2;
+        const adBtnY = h / 2 + 50;
+        secondChanceButtonArea = { x: adBtnX, y: adBtnY, w: adBtnW, h: adBtnH };
 
-    const isHover = (mouseX >= btnX && mouseX <= btnX + btnW &&
-        mouseY >= btnY && mouseY <= btnY + btnH);
+        const isAdHover = !adInProgress && (mouseX >= adBtnX && mouseX <= adBtnX + adBtnW &&
+            mouseY >= adBtnY && mouseY <= adBtnY + adBtnH);
 
-    // Button background
-    ctx.fillStyle = isHover ? C.uiButtonHover : C.uiButton;
-    roundRect(ctx, btnX, btnY, btnW, btnH, 4);
-    ctx.fill();
+        // Gold gradient button
+        const btnGrad = ctx.createLinearGradient(adBtnX, adBtnY, adBtnX, adBtnY + adBtnH);
+        btnGrad.addColorStop(0, isAdHover ? '#3a3020' : '#2a2418');
+        btnGrad.addColorStop(1, isAdHover ? '#2a2010' : '#1a180e');
+        ctx.fillStyle = btnGrad;
+        roundRect(ctx, adBtnX, adBtnY, adBtnW, adBtnH, 6);
+        ctx.fill();
 
-    // Button border
-    ctx.strokeStyle = isHover ? C.uiBorderLight : C.uiBorder;
-    ctx.lineWidth = 1;
-    roundRect(ctx, btnX, btnY, btnW, btnH, 4);
-    ctx.stroke();
+        ctx.strokeStyle = isAdHover ? '#daa520' : '#8b7020';
+        ctx.lineWidth = isAdHover ? 2 : 1;
+        roundRect(ctx, adBtnX, adBtnY, adBtnW, adBtnH, 6);
+        ctx.stroke();
 
-    // Button Glow
-    if (isHover) {
-        ctx.shadowColor = C.uiBorderLight;
-        ctx.shadowBlur = 10;
+        if (isAdHover) {
+            ctx.shadowColor = '#daa520';
+            ctx.shadowBlur = 12;
+            roundRect(ctx, adBtnX, adBtnY, adBtnW, adBtnH, 6);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        // Button text
+        ctx.fillStyle = adInProgress ? '#888' : (isAdHover ? '#ffd700' : '#daa520');
+        ctx.font = "600 14px 'Inter', sans-serif";
+        ctx.letterSpacing = "1px";
+        const adText = adInProgress ? t('gameover.adLoading') : t('gameover.watchAd');
+        ctx.fillText(adText, w / 2, adBtnY + adBtnH / 2 + 2);
+        ctx.letterSpacing = "0px";
+
+        // Reward description
+        ctx.fillStyle = '#71717a';
+        ctx.font = "11px 'Inter', sans-serif";
+        ctx.fillText(t('gameover.adReward'), w / 2, adBtnY + adBtnH + 18);
+
+        // Skip button (smaller, dimmer)
+        const skipBtnW = 160;
+        const skipBtnH = 36;
+        const skipBtnX = w / 2 - skipBtnW / 2;
+        const skipBtnY = adBtnY + adBtnH + 40;
+        skipButtonArea = { x: skipBtnX, y: skipBtnY, w: skipBtnW, h: skipBtnH };
+
+        const isSkipHover = (mouseX >= skipBtnX && mouseX <= skipBtnX + skipBtnW &&
+            mouseY >= skipBtnY && mouseY <= skipBtnY + skipBtnH);
+
+        ctx.fillStyle = isSkipHover ? C.uiButtonHover : C.uiButton;
+        roundRect(ctx, skipBtnX, skipBtnY, skipBtnW, skipBtnH, 4);
+        ctx.fill();
+
+        ctx.strokeStyle = isSkipHover ? '#666' : C.uiBorder;
+        ctx.lineWidth = 1;
+        roundRect(ctx, skipBtnX, skipBtnY, skipBtnW, skipBtnH, 4);
+        ctx.stroke();
+
+        ctx.fillStyle = isSkipHover ? C.uiTextDim : '#555';
+        ctx.font = "500 12px 'Inter', sans-serif";
+        ctx.fillText(t('gameover.skipDefeat'), w / 2, skipBtnY + skipBtnH / 2 + 2);
+
+        // Clear exit button area (not used in prompt mode)
+        exitButtonArea = { x: 0, y: 0, w: 0, h: 0 };
+    } else {
+        // ---- Normal Victory / Final Defeat: Exit Button ----
+        // Clear second chance areas
+        secondChanceButtonArea = { x: 0, y: 0, w: 0, h: 0 };
+        skipButtonArea = { x: 0, y: 0, w: 0, h: 0 };
+
+        const btnW = 200;
+        const btnH = 44;
+        const btnX = w / 2 - btnW / 2;
+        const btnY = h / 2 + 60;
+        exitButtonArea = { x: btnX, y: btnY, w: btnW, h: btnH };
+
+        const isHover = (mouseX >= btnX && mouseX <= btnX + btnW &&
+            mouseY >= btnY && mouseY <= btnY + btnH);
+
+        ctx.fillStyle = isHover ? C.uiButtonHover : C.uiButton;
+        roundRect(ctx, btnX, btnY, btnW, btnH, 4);
+        ctx.fill();
+
+        ctx.strokeStyle = isHover ? C.uiBorderLight : C.uiBorder;
+        ctx.lineWidth = 1;
         roundRect(ctx, btnX, btnY, btnW, btnH, 4);
         ctx.stroke();
-        ctx.shadowBlur = 0;
-    }
 
-    // Button text
-    ctx.fillStyle = isHover ? C.uiTextBright : C.uiTextDim;
-    ctx.font = "600 13px 'Inter', sans-serif";
-    ctx.letterSpacing = "1px";
-    ctx.fillText(t('gameover.backToMenu'), w / 2, btnY + btnH / 2 + 2);
-    ctx.letterSpacing = "0px";
+        if (isHover) {
+            ctx.shadowColor = C.uiBorderLight;
+            ctx.shadowBlur = 10;
+            roundRect(ctx, btnX, btnY, btnW, btnH, 4);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        ctx.fillStyle = isHover ? C.uiTextBright : C.uiTextDim;
+        ctx.font = "600 13px 'Inter', sans-serif";
+        ctx.letterSpacing = "1px";
+        ctx.fillText(t('gameover.backToMenu'), w / 2, btnY + btnH / 2 + 2);
+        ctx.letterSpacing = "0px";
+    }
 
     // Reset text align
     ctx.textAlign = "left";

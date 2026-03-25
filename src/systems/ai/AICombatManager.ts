@@ -27,16 +27,31 @@ export function handleCombat(ai: AIContext): void {
         u => u.alive && u.team === ai.team
     );
     const isAttacking = ai.waveState === 'attacking';
-    const isSupporting = ai.waveState === 'supporting';
     const isCounterAttacking = ai.waveState === 'counterattack';
     const isPursuing = ai.waveState === 'pursuit';
     const isRetreating = ai.waveState === 'retreating';
-    const isAggressive = isAttacking || isSupporting || isCounterAttacking || isPursuing;
+    const isGlobalAggressive = isAttacking || isCounterAttacking || isPursuing;
 
     for (const u of aiUnits) {
         // Skip building villagers
         if (u.state === UnitState.Building) continue;
         if (u.state === UnitState.Gathering) continue;
+
+        // Determine if this specific unit should behave aggressively
+        const isUnitInSquad = ai.supportSquad.has(u.id);
+        const unitAggressive = isGlobalAggressive || isUnitInSquad;
+
+        // --- TIER-4 BUGFIX: CHỐNG PING-PONG LỆNH ---
+        // Chỉ bảo vệ lệnh phòng thủ khi AI đang ở trạng thái thủ thực sự (gathering/retreating)
+        // Khi đang tấn công hoặc hỗ trợ đồng minh, cho phép CombatManager điều phối tự do
+        // Support Squad units are NEVER locked by defendingUnits
+        if (ai.defendingUnits.has(u.id) && !unitAggressive && !isUnitInSquad) continue;
+
+        // FPS FIX: Don't override units that are attacking a building (e.g. wall blocking path)
+        // They need to chase and destroy it before re-targeting, regardless of distance
+        if (u.state === UnitState.Attacking && u.attackBuildingTarget && u.attackBuildingTarget.alive) {
+            continue;
+        }
 
         // --- VILLAGER BEHAVIOR ---
         if (u.isVillager) {
@@ -100,21 +115,23 @@ export function handleCombat(ai: AIContext): void {
 
             // EXPLORATION COMPLETE: Scout joins the army
             // If idle, return to where military is grouped
-            if (u.state === UnitState.Idle && !isAggressive) {
+            if (u.state === UnitState.Idle && !unitAggressive) {
                 ai.returnScoutToArmy(u);
                 continue;
             }
             // Otherwise fall through to normal military behavior (attack with army)
         }
 
-        // Already attacking? Apply smart combat logic
+        // Already attacking? Apply smart combat logic (retarget, kiting, focus fire)
+        // IMPORTANT: This must come BEFORE priorities 1-3, so we don't
+        // re-issue new attack commands on a unit that's already fighting effectively.
         if (u.state === UnitState.Attacking) {
-            ai.handleActiveAttacker(u, aiUnits, isAggressive);
+            ai.handleActiveAttacker(u, aiUnits, unitAggressive);
             continue;
         }
 
         // Sight range depends on phase, support status, and difficulty
-        const baseSight = (isAggressive || isSupporting) ? TILE_SIZE * 20 : TILE_SIZE * 10;
+        const baseSight = (unitAggressive || isUnitInSquad) ? TILE_SIZE * 20 : TILE_SIZE * 10;
         const sightRange = baseSight * ai.params.combatAwareness;
 
         // PRIORITY 1: Help nearby allied units in combat
@@ -146,7 +163,7 @@ export function handleCombat(ai: AIContext): void {
             );
 
             // FOCUS FIRE: nearby allies also attack same target
-            if (isAggressive) {
+            if (unitAggressive) {
                 ai.callFocusFire(u, bestTarget || nearestEnemy, aiUnits);
             }
             continue;
@@ -155,7 +172,7 @@ export function handleCombat(ai: AIContext): void {
         // PRIORITY 3: Attack enemy buildings
         // Ensures units destroy ALL nearby buildings (including Farms) when attacking, or if they stumble too close while gathering
         if (u.state === UnitState.Idle || u.state === UnitState.Moving) {
-            const buildingSightRange = isAggressive ? TILE_SIZE * 15 : TILE_SIZE * 8; // If not aggressive, only attack if very close
+            const buildingSightRange = unitAggressive ? TILE_SIZE * 15 : TILE_SIZE * 8; // If not aggressive, only attack if very close
             const nearestEnemyBuilding = ai.findNearestEnemyBuilding(u.x, u.y, buildingSightRange);
             if (nearestEnemyBuilding) {
                 u.attackBuilding(nearestEnemyBuilding);
@@ -166,21 +183,47 @@ export function handleCombat(ai: AIContext): void {
             }
         }
 
-        // PRIORITY 4: If idle and supporting, move toward support target OR attack nearby enemies
-        if (isSupporting && ai.supportTarget && u.state === UnitState.Idle) {
-            // Check for enemies near the support target first
-            const enemyNearSupport = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 15);
-            if (enemyNearSupport) {
-                u.attackUnit(enemyNearSupport);
+        // PRIORITY 4: If supporting, actively seek enemies near support target AND unit position
+        if (isUnitInSquad && ai.supportTarget && (u.state === UnitState.Idle || u.state === UnitState.Moving)) {
+            // Search for enemies near the unit itself
+            const enemyNearUnit = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 15);
+            if (enemyNearUnit) {
+                u.attackUnit(enemyNearUnit);
                 continue;
             }
 
-            const dist = Math.hypot(u.x - ai.supportTarget.x, u.y - ai.supportTarget.y);
-            if (dist > TILE_SIZE * 5) {
-                ai.safeMoveTo(u,
-                    ai.supportTarget.x + (Math.random() - 0.5) * TILE_SIZE * 3,
-                    ai.supportTarget.y + (Math.random() - 0.5) * TILE_SIZE * 3
-                );
+            // Search for enemies near the support target (enemies may be far from unit but near ally)
+            const enemyNearTarget = ai.findNearestEnemyUnit(
+                ai.supportTarget.x, ai.supportTarget.y, TILE_SIZE * 20
+            );
+            if (enemyNearTarget) {
+                u.attackUnit(enemyNearTarget);
+                continue;
+            }
+
+            // Also check if any ally building is being attacked nearby and go help
+            const allyBldgUnderAttack = ai.entityManager.buildings.find(
+                b => b.alive && b.built && b.hp < b.maxHp &&
+                    b.team !== ai.team && ai.entityManager.isAlly(ai.team, b.team) &&
+                    Math.hypot(b.x - ai.supportTarget!.x, b.y - ai.supportTarget!.y) < TILE_SIZE * 20
+            );
+            if (allyBldgUnderAttack) {
+                const enemyNearBldg = ai.findNearestEnemyUnit(allyBldgUnderAttack.x, allyBldgUnderAttack.y, TILE_SIZE * 15);
+                if (enemyNearBldg) {
+                    u.attackUnit(enemyNearBldg);
+                    continue;
+                }
+            }
+
+            // No enemy found — move toward support target if far
+            if (u.state === UnitState.Idle) {
+                const dist = Math.hypot(u.x - ai.supportTarget.x, u.y - ai.supportTarget.y);
+                if (dist > TILE_SIZE * 5) {
+                    ai.safeMoveTo(u,
+                        ai.supportTarget.x + (Math.random() - 0.5) * TILE_SIZE * 3,
+                        ai.supportTarget.y + (Math.random() - 0.5) * TILE_SIZE * 3
+                    );
+                }
             }
         }
 
@@ -216,28 +259,28 @@ export function handleCombat(ai: AIContext): void {
             }
         }
 
-        // PRIORITY 7: PROACTIVE BASE DEFENSE — idle military near base auto-engage enemies
-        // This prevents the "standing around" problem when returning to defend
-        if (!isAggressive && (u.state === UnitState.Idle || u.state === UnitState.Moving)) {
+        // PRIORITY 7: PROACTIVE BASE DEFENSE — military near base auto-engage enemies
+        // This ALWAYS runs regardless of wave state — units at home must defend their base!
+        if (u.state === UnitState.Idle || u.state === UnitState.Moving) {
             const aiTC = ai.entityManager.buildings.find(
                 b => b.alive && b.team === ai.team && b.type === BuildingType.TownCenter
             );
             if (aiTC) {
                 const distToBase = Math.hypot(u.x - aiTC.x, u.y - aiTC.y);
-                // Units within 15 tiles of base actively scan for enemies
-                if (distToBase < TILE_SIZE * 15) {
-                    const enemyNearBase = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 12);
+                // Units within 18 tiles of base actively scan for enemies
+                if (distToBase < TILE_SIZE * 18) {
+                    const enemyNearBase = ai.findNearestEnemyUnit(u.x, u.y, TILE_SIZE * 15);
                     if (enemyNearBase) {
                         u.attackUnit(enemyNearBase);
                         continue;
                     }
-                    // Also check for enemy units near any of our buildings
+                    // Also check for enemy units near any of our damaged buildings
                     const damagedBldg = ai.entityManager.buildings.find(
                         b => b.alive && b.team === ai.team && b.built && b.hp < b.maxHp
                     );
                     if (damagedBldg) {
                         const threatNearBldg = ai.findNearestEnemyUnit(
-                            damagedBldg.x, damagedBldg.y, TILE_SIZE * 10
+                            damagedBldg.x, damagedBldg.y, TILE_SIZE * 12
                         );
                         if (threatNearBldg) {
                             u.attackUnit(threatNearBldg);
@@ -327,6 +370,24 @@ export function handleVillagerCombat(ai: AIContext, u: Unit): void {
 
 // --- Smart combat for units already attacking ---
 export function handleActiveAttacker(ai: AIContext, u: Unit, aiUnits: Unit[], isAggressive: boolean): void {
+    // RECALL TO BASE: Only if base is under REAL attack (enemy military near base)
+    // Cache per tick to avoid O(n) scan per unit
+    if (!ai.supportSquad.has(u.id) && ai.waveState !== 'attacking' && ai.waveState !== 'counterattack') {
+        const now = sharedIntel.gameTime;
+        const cache = ai as any;
+        if (!cache._baseCheckTime || cache._baseCheckTime < now - 0.4) {
+            cache._baseCheckTime = now;
+            cache._enemyNearBase = ai.findNearestEnemyUnit(ai.baseX, ai.baseY, TILE_SIZE * 15);
+        }
+        if (cache._enemyNearBase) {
+            const distToBase = Math.hypot(u.x - ai.baseX, u.y - ai.baseY);
+            if (distToBase > TILE_SIZE * 25 && !u.isHero) {
+                u.attackUnit(cache._enemyNearBase);
+                return;
+            }
+        }
+    }
+
     // ADVANCED KITING: Ranged units maintain optimal range
     if (isRangedType(u.type) && u.attackTarget && u.attackTarget.alive) {
         const distToTarget = Math.hypot(u.x - u.attackTarget.x, u.y - u.attackTarget.y);
@@ -485,52 +546,49 @@ export function calculateCombatPower(ai: AIContext, units: Unit[]): number {
 // ===================================================================
 export function evaluateBattlefield(ai: AIContext): void {
     if (ai.waveState !== 'attacking' && ai.waveState !== 'counterattack') return;
-    // Don't retreat too early — need at least 5s of combat
     if (ai.waveResetTimer > 30) return;
 
-    // Find our attacking military (non-garrison, in combat or aggressive area)
     const ownMilitary = ai.entityManager.units.filter(
         u => u.alive && u.team === ai.team && !u.isVillager &&
             (u.state === UnitState.Attacking || u.state === UnitState.Moving)
     );
-    if (ownMilitary.length < 2) return; // Too few to evaluate
+    if (ownMilitary.length < 2) return;
 
-    // Calculate center of our attacking force
     let avgX = 0, avgY = 0;
     for (const u of ownMilitary) { avgX += u.x; avgY += u.y; }
     avgX /= ownMilitary.length;
     avgY /= ownMilitary.length;
 
-    // Find nearby enemies around our force center
     const battleRadius = TILE_SIZE * 15;
     const nearbyEnemies = ai.entityManager.units.filter(
         u => u.alive && ai.entityManager.isEnemy(ai.team, u.team) &&
             Math.hypot(u.x - avgX, u.y - avgY) < battleRadius
     );
+    if (nearbyEnemies.length === 0) return;
 
-    if (nearbyEnemies.length === 0) return; // No enemies nearby
-
-    // Calculate combat power comparison
     const ownPower = ai.calculateCombatPower(ownMilitary);
     const enemyPower = ai.calculateCombatPower(nearbyEnemies);
-
-    // Retreat if enemy is OVERWHELMINGLY stronger (>2x more powerful)
-    // Higher difficulty AIs are braver (retreat at higher disadvantage)
     const retreatThreshold = ai.params.combatAwareness > 1.2 ? 2.5 : 2.0;
 
-    if (enemyPower > ownPower * retreatThreshold && ownMilitary.length >= 3) {
-        // Count units with low HP — if many units are injured, retreat faster
-        const injuredCount = ownMilitary.filter(u => u.hp < u.maxHp * 0.5).length;
-        const injuredRatio = injuredCount / ownMilitary.length;
+    // Count injured units
+    const injuredCount = ownMilitary.filter(u => u.hp < u.maxHp * 0.5).length;
+    const injuredRatio = injuredCount / ownMilitary.length;
 
-        // Only retreat if truly losing badly
-        if (enemyPower > ownPower * 1.8 || injuredRatio > 0.5) {
-            ai.triggerRetreat(ownMilitary);
-            ai.log(
-                `🏃 RÚT LUI! Địch quá mạnh (${nearbyEnemies.length} địch vs ${ownMilitary.length} ta). Tập hợp lại...`,
-                '#ff4444'
-            );
-        }
+    // === SMART RETREAT CONDITIONS ===
+    // 1. Enemy overwhelmingly stronger AND we have losses
+    const overwhelmed = enemyPower > ownPower * retreatThreshold && injuredRatio > 0.3;
+    // 2. Most of army is injured even if power is close (attrition war we're losing)
+    const bleedingOut = injuredRatio > 0.5 && enemyPower > ownPower * 1.3;
+    // 3. Very few units left (army nearly wiped)
+    const nearlyWiped = ownMilitary.length <= 3 && enemyPower > ownPower * 1.5;
+
+    if (overwhelmed || bleedingOut || nearlyWiped) {
+        // Save army power before retreat for counter-attack comparison
+        (ai as any)._preRetreatPower = ownPower;
+        ai.triggerRetreat(ownMilitary);
+        const reason = nearlyWiped ? 'gần bị xóa sổ' :
+                       bleedingOut ? 'quân bị thương nặng' : 'địch quá mạnh';
+        ai.log(`🏃 RÚT LUI! (${reason}: ${nearbyEnemies.length} địch vs ${ownMilitary.length} ta, ${injuredCount} bị thương)`, '#ff4444');
     }
 }
 
@@ -538,32 +596,45 @@ export function evaluateBattlefield(ai: AIContext): void {
 //  RETREAT: Order units to fall back to nearest friendly base
 // ===================================================================
 export function triggerRetreat(ai: AIContext, units: Unit[]): void {
-    // Find best rally point — nearest TC or building with most friendly units nearby
     const ownBuildings = ai.entityManager.buildings.filter(
         b => b.alive && b.team === ai.team && b.built
     );
     const tc = ownBuildings.find(b => b.type === BuildingType.TownCenter);
     const rallyBldg = tc || ownBuildings[0];
-
     if (!rallyBldg) return;
 
     ai.retreatRallyX = rallyBldg.x;
     ai.retreatRallyY = rallyBldg.y;
 
-    // Command all units to retreat to rally point (with some spread)
-    for (let i = 0; i < units.length; i++) {
-        const u = units[i];
-        // Spread units around rally point to avoid clumping (wider spread)
-        const angle = (i / units.length) * Math.PI * 2;
-        const spreadDist = TILE_SIZE * 6 + Math.random() * TILE_SIZE * 6;
-        const tx = ai.retreatRallyX + Math.cos(angle) * spreadDist;
-        const ty = ai.retreatRallyY + Math.sin(angle) * spreadDist;
-        ai.safeMoveTo(u, tx, ty);
+    // === STAGGERED RETREAT: Injured units retreat first, healthy units cover ===
+    const injured = units.filter(u => u.hp < u.maxHp * 0.5);
+    const healthy = units.filter(u => u.hp >= u.maxHp * 0.5);
+
+    // Injured: retreat immediately to rally point
+    for (let i = 0; i < injured.length; i++) {
+        const u = injured[i];
+        const angle = (i / Math.max(1, injured.length)) * Math.PI * 2;
+        const spreadDist = TILE_SIZE * 4 + Math.random() * TILE_SIZE * 3;
+        ai.safeMoveTo(u,
+            ai.retreatRallyX + Math.cos(angle) * spreadDist,
+            ai.retreatRallyY + Math.sin(angle) * spreadDist
+        );
     }
 
-    // Set state to retreating with regroup timer
+    // Healthy: fall back slightly slower (rear guard — spread wider)
+    for (let i = 0; i < healthy.length; i++) {
+        const u = healthy[i];
+        const angle = (i / Math.max(1, healthy.length)) * Math.PI * 2;
+        const spreadDist = TILE_SIZE * 8 + Math.random() * TILE_SIZE * 5;
+        ai.safeMoveTo(u,
+            ai.retreatRallyX + Math.cos(angle) * spreadDist,
+            ai.retreatRallyY + Math.sin(angle) * spreadDist
+        );
+    }
+
     ai.waveState = 'retreating';
-    ai.retreatRegroupTimer = 15; // Wait 15s before evaluating counter-attack
+    // Longer regroup time to let reinforcements arrive
+    ai.retreatRegroupTimer = 20;
 }
 
 // ===================================================================
@@ -678,22 +749,31 @@ export function selectBestTarget(ai: AIContext, attacker: Unit, range: number): 
 //  Enhanced: wider range, smarter unit selection, reserves consideration
 // ===================================================================
 export function callFocusFire(ai: AIContext, caller: Unit, target: Unit, aiUnits: Unit[]): void {
+    // DEDUP: Only focus fire once per target per tick to prevent O(n²)
+    const cache = ai as any;
+    if (!cache._focusFireTargets) cache._focusFireTargets = new Set<number>();
+    const now = sharedIntel.gameTime;
+    if (cache._focusFireTime !== now) {
+        cache._focusFireTime = now;
+        cache._focusFireTargets.clear();
+    }
+    if (cache._focusFireTargets.has(target.id ?? 0)) return; // Already focused this target this tick
+    cache._focusFireTargets.add(target.id ?? 0);
+
     let assigned = 0;
-    const maxFocusUnits = Math.min(5, Math.ceil(aiUnits.length * 0.4)); // Don't focus too many
+    const maxFocusUnits = Math.min(5, Math.ceil(aiUnits.length * 0.4));
 
     for (const ally of aiUnits) {
         if (assigned >= maxFocusUnits) break;
         if (ally === caller || ally.isVillager) continue;
-        // Only redirect idle, moving, or attacking a different (low-priority) target
         if (ally.state === UnitState.Attacking && ally.attackTarget && ally.attackTarget.alive) {
-            // Don't redirect if they're fighting a high-value target
             if (ally.attackTarget.isHero || ally.attackTarget.hp < ally.attackTarget.maxHp * 0.2) continue;
         }
         if (ally.state !== UnitState.Idle && ally.state !== UnitState.Moving &&
             !(ally.state === UnitState.Attacking && ally.attackTarget !== target)) continue;
 
         const allyDist = Math.hypot(ally.x - caller.x, ally.y - caller.y);
-        if (allyDist < TILE_SIZE * 10) { // Increased from 6 to 10
+        if (allyDist < TILE_SIZE * 10) {
             ally.attackUnit(target);
             assigned++;
         }

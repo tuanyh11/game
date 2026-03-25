@@ -41,22 +41,40 @@ export function drawFarm(b: Building, ctx: CanvasRenderingContext2D, x: number, 
             fenceColor = '#8a6a3a'; fencePostColor = '#6a4a2a';
     }
 
-    // Tilled soil base
+    // Organic tilled soil base (rounded blob)
     ctx.fillStyle = soilDark;
-    ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+    ctx.beginPath();
+    ctx.roundRect(x + 4, y + 2, w - 8, h - 4, 15);
+    ctx.roundRect(x + 2, y + 6, w - 4, h - 12, 10);
+    ctx.fill();
 
-    // Soil rows
-    ctx.fillStyle = civ === CivilizationType.DaiMinh ? '#4a5a48' : '#' + soilDark.slice(1);
+    // Wavy soil rows
+    ctx.strokeStyle = civ === CivilizationType.DaiMinh ? '#4a5a48' : '#' + soilDark.slice(1);
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
     for (let r = 0; r < 4; r++) {
-        const ry = y + 4 + r * (h - 8) / 4;
-        ctx.fillRect(x + 4, ry, w - 8, 2);
+        const ry = y + 10 + r * (h - 20) / 4;
+        ctx.beginPath();
+        for(let px = 8; px < w - 8; px += 5) {
+            const py = ry + Math.sin((x + px) * 0.1 + r) * 2;
+            if (px === 8) ctx.moveTo(x + px, py);
+            else ctx.lineTo(x + px, py);
+        }
+        ctx.stroke();
     }
 
-    // Lighter soil between rows
-    ctx.fillStyle = soilLight;
+    // Lighter wavy soil between rows
+    ctx.strokeStyle = soilLight;
+    ctx.lineWidth = 5;
     for (let r = 0; r < 4; r++) {
-        const ry = y + 8 + r * (h - 8) / 4;
-        ctx.fillRect(x + 4, ry, w - 8, (h - 8) / 4 - 4);
+        const ry = y + 16 + r * (h - 20) / 4;
+        ctx.beginPath();
+        for(let px = 10; px < w - 10; px += 5) {
+            const py = ry + Math.sin((x + px) * 0.1 + r + 0.5) * 2;
+            if (px === 10) ctx.moveTo(x + px, py);
+            else ctx.lineTo(x + px, py);
+        }
+        ctx.stroke();
     }
 
     // === CIV-SPECIFIC WATER/DECORATION ===
@@ -104,8 +122,11 @@ export function drawFarm(b: Building, ctx: CanvasRenderingContext2D, x: number, 
 
     for (let r = 0; r < numRows; r++) {
         for (let c = 0; c < numCols; c++) {
-            const cx = x + 6 + c * (w - 12) / numCols;
-            const cy = y + 6 + r * (h - 10) / numRows;
+            // Scatter the positions organically so they don't form a strict grid
+            const scatterX = Math.sin(r * 13 + c * 29) * 4;
+            const scatterY = Math.cos(r * 17 + c * 31) * 3;
+            const cx = x + 10 + c * (w - 20) / (numCols - 1 > 0 ? numCols - 1 : 1) + scatterX;
+            const cy = y + 12 + r * (h - 24) / (numRows - 1 > 0 ? numRows - 1 : 1) + scatterY;
             const sway = Math.sin(t * 2 + c * 0.7 + r * 1.1) * 1.5 * growthPct;
 
             switch (civ) {
@@ -282,5 +303,66 @@ export function drawFarm(b: Building, ctx: CanvasRenderingContext2D, x: number, 
             ctx.fillRect(x - 1, y + h - 4, 5, 5);
             ctx.fillRect(x + w - 4, y + h - 4, 5, 5);
             break;
+    }
+
+    // === DEPLETED FARM OVERLAY — withered crops ===
+    if (b.farmResource && b.farmResource.amount <= 0) {
+        const dt = Date.now() / 1000;
+
+        // Brownish withered overlay
+        ctx.fillStyle = 'rgba(80, 50, 20, 0.45)';
+        ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+
+        // Cracked dry soil lines
+        ctx.strokeStyle = '#4a3010';
+        ctx.lineWidth = 0.8;
+        for (let i = 0; i < 5; i++) {
+            const cx = x + 6 + Math.abs((i * 43) % (w - 12));
+            const cy = y + 6 + Math.abs((i * 67) % (h - 12));
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + 6 + (i % 3) * 3, cy + 4 + (i % 2) * 3);
+            ctx.lineTo(cx + 10 + (i % 2) * 4, cy + 2);
+            ctx.stroke();
+        }
+
+        // Withered crops — bent, dried, leaning stalks replacing green ones
+        const numC = 6, numR = 4;
+        for (let r = 0; r < numR; r++) {
+            for (let c = 0; c < numC; c++) {
+                const cx = x + 6 + c * (w - 12) / numC;
+                const cy = y + 6 + r * (h - 10) / numR;
+                const lean = Math.sin(r * 2.3 + c * 1.7) * 3;
+
+                // Dried bent stalk
+                ctx.strokeStyle = '#7a5a20';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx + 1, cy + 8);
+                ctx.quadraticCurveTo(cx + lean, cy + 3, cx + lean * 1.5, cy + 1);
+                ctx.stroke();
+
+                // Dry broken head
+                ctx.fillStyle = '#8a6a25';
+                ctx.fillRect(cx + lean * 1.5 - 1, cy, 3, 2);
+
+                // Scattered dry leaf debris
+                if ((r + c) % 3 === 0) {
+                    ctx.fillStyle = '#6a4a18';
+                    ctx.fillRect(cx + 2, cy + 9, 3, 1);
+                }
+            }
+        }
+
+        // Subtle dust particles floating up (animated)
+        for (let p = 0; p < 4; p++) {
+            const px = x + 8 + Math.abs((p * 53) % (w - 16));
+            const py = y + h - 8 - ((dt * 8 + p * 7) % (h - 10));
+            const alpha = 0.15 + Math.sin(dt * 2 + p) * 0.1;
+            ctx.fillStyle = `rgba(160, 130, 80, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 }

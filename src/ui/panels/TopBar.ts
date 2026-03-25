@@ -4,6 +4,7 @@
 // ============================================================
 
 import { C, CIVILIZATION_DATA } from "../../config/GameConfig";
+import { IS_IOS } from "../../config/PlatformConfig";
 import { t } from '../../i18n/i18n';
 import type { PlayerState } from "../../systems/PlayerState";
 import type { EntityManager } from "../../systems/EntityManager";
@@ -23,10 +24,11 @@ export interface TopBarContext {
     tradeUI: { isVisible: boolean; toggle: () => void };
     clickAreas: ClickArea[];
     isHovered: (x: number, y: number, w: number, h: number) => boolean;
+    setTooltip: (tip: { x: number; y: number; lines: string[] }) => void;
 }
 
 export function renderTopBar(ctx: CanvasRenderingContext2D, vpW: number, tb: TopBarContext): void {
-    const { topBarH, playerState, entityManager, loop, showFPS, tradeUI, clickAreas, isHovered } = tb;
+    const { topBarH, playerState, entityManager, loop, showFPS, tradeUI, clickAreas, isHovered, setTooltip } = tb;
 
     // Background
     ctx.fillStyle = C.uiBorderOuter;
@@ -40,56 +42,58 @@ export function renderTopBar(ctx: CanvasRenderingContext2D, vpW: number, tb: Top
     ctx.fillRect(0, topBarH - 1, vpW, 1);
 
     const res = playerState.resources;
-    const y = 24;
+    const isiOS = IS_IOS;
+    const fontSize = isiOS ? 10 : 14;
+    const iconFont = isiOS ? 10 : 14;
+    const y = isiOS ? 17 : 24;
 
-    // Resource items with icons
-    const items: [string, string, string, number][] = [
-        ['🌾', 'Food', C.food, Math.floor(res.food)],
-        ['🪵', 'Wood', C.wood, Math.floor(res.wood)],
-        ['🪙', 'Gold', C.gold, Math.floor(res.gold)],
-        ['🪨', 'Stone', C.stone, Math.floor(res.stone)],
-    ];
+    // Resource items
+    const items: [string, string, string, number][] = isiOS
+        ? [['G', t('topbar.gold'), C.gold, Math.floor(res.gold)],
+           ['S', t('topbar.supplies'), C.wood, Math.floor(res.supplies)]]
+        : [['🪙', t('topbar.gold'), C.gold, Math.floor(res.gold)],
+           ['📦', t('topbar.supplies'), C.wood, Math.floor(res.supplies)]];
 
-    let x = 14;
-    for (const [icon, _name, color, val] of items) {
+    let x = isiOS ? 8 : 14;
+    for (const [icon, name, color, val] of items) {
+        const itemStartX = x;
         // Icon
-        ctx.fillStyle = '#fff';
-        ctx.font = '14px sans-serif';
+        ctx.fillStyle = color;
+        ctx.font = `${iconFont}px ${isiOS ? "'Inter', sans-serif" : "sans-serif"}`;
         ctx.fillText(icon, x, y);
-        x += 20;
+        x += isiOS ? 12 : 20;
         // Value
         ctx.fillStyle = color;
-        ctx.font = "bold 14px 'Inter', sans-serif";
+        ctx.font = `bold ${fontSize}px 'Inter', sans-serif`;
         ctx.fillText(`${val}`, x, y);
-        x += 60;
+        x += isiOS ? 40 : 60;
         // Separator dot
         ctx.fillStyle = C.uiSeparator;
-        ctx.fillRect(x, 12, 1, 14);
-        x += 10;
+        ctx.fillRect(x, isiOS ? 6 : 12, 1, isiOS ? 10 : 14);
+        x += isiOS ? 6 : 10;
+
+        // Tooltip on hover
+        const itemW = x - itemStartX - (isiOS ? 6 : 10);
+        if (isHovered(itemStartX, 4, itemW, topBarH - 8)) {
+            setTooltip({
+                x: itemStartX + itemW / 2,
+                y: topBarH + 4,
+                lines: [`${name}: ${val}`],
+            });
+        }
     }
 
     // Population
     ctx.fillStyle = C.uiText;
-    ctx.font = "bold 13px 'Inter', sans-serif";
+    ctx.font = `bold ${isiOS ? 10 : 13}px 'Inter', sans-serif`;
     const popColor = playerState.population >= playerState.maxPopulation ? C.uiTextRed : C.uiTextGreen;
     ctx.fillStyle = popColor;
-    ctx.fillText(`⚔ ${playerState.population}`, x, y);
+    const popIcon = isiOS ? 'P' : '⚔';
+    ctx.fillText(`${popIcon} ${playerState.population}`, x, y);
     ctx.fillStyle = C.uiTextDim;
-    ctx.fillText(`/${playerState.maxPopulation}`, x + ctx.measureText(`⚔ ${playerState.population}`).width, y);
-    x += 80;
+    ctx.fillText(`/${playerState.maxPopulation}`, x + ctx.measureText(`${popIcon} ${playerState.population}`).width, y);
+    x += isiOS ? 50 : 80;
 
-    // Age
-    ctx.fillStyle = C.uiHighlight;
-    ctx.font = "bold 13px 'MedievalSharp', cursive";
-    ctx.fillText(`⛨ ${playerState.ageName}`, x, y);
-    x += ctx.measureText(`⛨ ${playerState.ageName}`).width + 15;
-
-    // Civilization indicator
-    const civData = CIVILIZATION_DATA[entityManager.playerCiv];
-    ctx.fillStyle = civData.accentColor;
-    ctx.font = "bold 12px 'Inter', sans-serif";
-    ctx.fillText(`${civData.icon} ${civData.name}`, x, y);
-    x += ctx.measureText(`${civData.icon} ${civData.name}`).width + 15;
 
     // Trade Button
     if (playerState.hasTrade) {

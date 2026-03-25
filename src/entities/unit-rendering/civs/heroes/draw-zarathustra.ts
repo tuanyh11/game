@@ -255,12 +255,12 @@ export function drawZarathustraComplete(unit: Unit, ctx: CanvasRenderingContext2
     ctx.stroke();
 
     // Glowing golden eyes piercing through the mask
-    ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 5;
+     
     ctx.fillStyle = '#ffffff';
     // Eye slits
     ctx.fillRect(-2.5, yOffset - 13 + walkBob, 1.5, 0.8);
     ctx.fillRect(1, yOffset - 13 + walkBob, 1.5, 0.8);
-    ctx.shadowBlur = 0;
+    
 
     // Headpiece/Turban wrapping behind the mask
     ctx.fillStyle = cv.bodyDark; // Team-colored headpiece

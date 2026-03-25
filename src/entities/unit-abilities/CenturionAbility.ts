@@ -49,7 +49,7 @@ export const CenturionAbility: EliteAbility = {
             if (unit.centurionBlockTimer <= 0) {
                 unit.centurionBlockActive = false;
                 unit.centurionShielding = false;
-                unit.centurionBlockCooldown = 8;
+                unit.centurionBlockCooldown = 10;
             }
         }
     },
@@ -84,9 +84,9 @@ function throwPilumAtUnit(unit: Unit, particles: any, allUnits: Unit[]): void {
     // If they are closer, standard melee attack from CenturionStrategy will handle it instead.
     if (dist > unit.centurionSpearRange || dist <= 40) return;
 
-    unit.centurionPilumCooldown = 3.0; // Cooldown ném lao
+    unit.centurionPilumCooldown = 4.0; // Cooldown ném lao
     // Pilum throw sound
-    audioSystem.playSFXWithPitch('/musics/dragon-studio-horse-galloping-339737.mp3', 0.5 + Math.random() * 0.2, 1.2 + Math.random() * 0.3, unit.x, unit.y);
+    audioSystem.playSFXWithPitch('./sounds/dragon-studio-horse-galloping-339737.mp3', 0.5 + Math.random() * 0.2, 1.2 + Math.random() * 0.3, unit.x, unit.y);
     if (target.x > unit.x) unit.facingRight = true;
     else unit.facingRight = false;
 
@@ -106,9 +106,9 @@ function throwPilumAtBuilding(unit: Unit, particles: any, allUnits: Unit[]): voi
     // Only throw if building is within spear range BUT outside of melee minimum (e.g., > 40px)
     if (dist > bldgRange || dist <= 40) return;
 
-    unit.centurionPilumCooldown = 3.0;
+    unit.centurionPilumCooldown = 4.0;
     // Pilum throw sound
-    audioSystem.playSFXWithPitch('/musics/dragon-studio-horse-galloping-339737.mp3', 0.5 + Math.random() * 0.2, 1.2 + Math.random() * 0.3, unit.x, unit.y);
+    audioSystem.playSFXWithPitch('./sounds/dragon-studio-horse-galloping-339737.mp3', 0.5 + Math.random() * 0.2, 1.2 + Math.random() * 0.3, unit.x, unit.y);
     if (bldg.x > unit.x) unit.facingRight = true;
     else unit.facingRight = false;
 

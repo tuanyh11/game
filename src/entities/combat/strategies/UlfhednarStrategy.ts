@@ -8,8 +8,8 @@ import { audioSystem } from "../../../systems/AudioSystem";
 export class UlfhednarStrategy extends BaseCombatStrategy {
 
     protected calculateAttackSpeedModifier(unit: Unit): number {
-        // Cuồng Sói: +50% attack speed during rage
-        return unit.ulfhednarRageActive ? 0.5 : super.calculateAttackSpeedModifier(unit);
+        // Cuồng Sói: +50% attack speed during rage (cooldown multiplier)
+        return unit.ulfhednarRageActive ? 0.6 : super.calculateAttackSpeedModifier(unit);
     }
 
     protected shouldPierceBlock(unit: Unit): boolean {
@@ -21,9 +21,9 @@ export class UlfhednarStrategy extends BaseCombatStrategy {
         const { unit, particles } = context;
         let dmg = baseDamage;
 
-        // Ulfhednar: Cuồng Sói — +30% ATK during rage
+        // Ulfhednar: Cuồng Sói — +15% ATK during rage
         if (unit.ulfhednarRageActive) {
-            dmg = Math.round(dmg * 1.3);
+            dmg = Math.round(dmg * 1.15);
             // Electric spark on hit during rage
             particles.emit({ x: target.x, y: target.y - 6, count: 5, spread: 4, speed: [30, 80], angle: [0, Math.PI * 2], life: [0.15, 0.35], size: [2, 4], colors: ['#4488ff', '#88ccff', '#fff'], gravity: -15, shape: 'star' });
         }
@@ -32,10 +32,11 @@ export class UlfhednarStrategy extends BaseCombatStrategy {
     }
 
     public applyPassiveDefense(unit: Unit, incomingDmg: number, particles: ParticleSystem, pierceBlock: boolean = false): number {
-        // Cuồng Sói — invincible during rage
+        // Cuồng Sói — +15 armor during rage, visual sparks here
         if (unit.ulfhednarRageActive) {
             particles.emit({ x: unit.x + (visualRng() - 0.5) * 10, y: unit.y - 8, count: 3, spread: 4, speed: [25, 60], angle: [0, Math.PI * 2], life: [0.1, 0.25], size: [2, 4], colors: ['#ff4444', '#ff8844', '#ffcc44', '#fff'], gravity: -20, shape: 'star' });
-            return 0; // BẤT TỬ!
+            const dmgAfterBaseArmor = super.applyPassiveDefense(unit, incomingDmg, particles, pierceBlock);
+            return Math.max(1, dmgAfterBaseArmor - 15);
         }
         return super.applyPassiveDefense(unit, incomingDmg, particles, pierceBlock);
     }

@@ -4,11 +4,14 @@
 
 import {
     ResourceType, Cost, AGE_COSTS, getAgeNames,
-    UpgradeType, UPGRADE_DATA, UnitType
+    UpgradeType, UPGRADE_DATA, UnitType, isCivElite, isCivCavalry
 } from "../config/GameConfig";
+import { getItem } from "../config/EquipmentData";
+import type { EquipmentItem } from "../config/EquipmentData";
+
 
 // Time (seconds) to advance to each age: [dummy, age2, age3, age4]
-const AGE_UP_TIMES = [0, 40, 60, 90];
+const AGE_UP_TIMES = [0, 40, 60, 75];
 
 export interface ActiveResearch {
     upgradeType: UpgradeType;
@@ -18,10 +21,8 @@ export interface ActiveResearch {
 
 export class PlayerState {
     resources: Record<ResourceType, number> = {
-        [ResourceType.Food]: 200,
-        [ResourceType.Wood]: 200,
-        [ResourceType.Gold]: 100,
-        [ResourceType.Stone]: 100,
+        [ResourceType.Supplies]: 100,
+        [ResourceType.Gold]: 200,
     };
 
     population = 0;
@@ -41,37 +42,38 @@ export class PlayerState {
         [UpgradeType.RangedAttack]: 0,
         [UpgradeType.MeleeDefense]: 0,
         [UpgradeType.RangedDefense]: 0,
-        [UpgradeType.GatherFood]: 0,
-        [UpgradeType.GatherWood]: 0,
+        [UpgradeType.GatherSupplies]: 0,
         [UpgradeType.GatherGold]: 0,
-        [UpgradeType.GatherStone]: 0,
         [UpgradeType.CarryCapacity]: 0,
         [UpgradeType.VillagerSpeed]: 0,
         [UpgradeType.Architecture]: 0,
         [UpgradeType.MeleeHealth]: 0,
         [UpgradeType.Cartography]: 0,
         [UpgradeType.Trade]: 0,
+        [UpgradeType.EliteAttack]: 0,
+        [UpgradeType.EliteDefense]: 0,
+        [UpgradeType.CavalryAttack]: 0,
     };
 
     // Active research (only one at a time per building)
     activeResearch: ActiveResearch | null = null;
 
+    // Equipment crafting (separate from research — runs at Blacksmith)
+    activeCraft: { itemId: string; progress: number; time: number } | null = null;
+    craftedItems: string[] = [];  // item IDs crafted but not yet equipped
+
     get ageName(): string { return getAgeNames()[this.age - 1]; }
 
     canAfford(cost: Cost): boolean {
-        if (cost.food && this.resources.food < cost.food) return false;
-        if (cost.wood && this.resources.wood < cost.wood) return false;
+        if (cost.supplies && this.resources.supplies < cost.supplies) return false;
         if (cost.gold && this.resources.gold < cost.gold) return false;
-        if (cost.stone && this.resources.stone < cost.stone) return false;
         return true;
     }
 
     spend(cost: Cost): boolean {
         if (!this.canAfford(cost)) return false;
-        if (cost.food) this.resources.food -= cost.food;
-        if (cost.wood) this.resources.wood -= cost.wood;
+        if (cost.supplies) this.resources.supplies -= cost.supplies;
         if (cost.gold) this.resources.gold -= cost.gold;
-        if (cost.stone) this.resources.stone -= cost.stone;
         return true;
     }
 
@@ -162,9 +164,69 @@ export class PlayerState {
         return false;
     }
 
+    /** Cancel current research and refund resources */
+    cancelResearch(): boolean {
+        if (!this.activeResearch) return false;
+        const type = this.activeResearch.upgradeType;
+        const data = UPGRADE_DATA[type];
+        const level = this.upgrades[type];
+        const cost = data.costs[level];
+        // Refund resources
+        if (cost.supplies) this.resources.supplies += cost.supplies;
+        if (cost.gold) this.resources.gold += cost.gold;
+        this.activeResearch = null;
+        return true;
+    }
+
     /** Get the display level text for an upgrade */
     getUpgradeLevel(type: UpgradeType): number {
         return this.upgrades[type];
+    }
+
+
+
+
+    // ---- Equipment Crafting ----
+
+    /** Check if an equipment item can be crafted */
+    canCraftItem(itemId: string): boolean {
+        if (this.activeCraft) return false; // already crafting
+        const item = getItem(itemId);
+        if (!item) return false;
+        if (this.age < item.ageRequired) return false;
+        return this.canAfford(item.cost as Cost);
+    }
+
+    /** Start crafting an equipment item */
+    startCraft(itemId: string): boolean {
+        if (!this.canCraftItem(itemId)) return false;
+        const item = getItem(itemId)!;
+        this.spend(item.cost as Cost);
+        this.activeCraft = {
+            itemId: item.id,
+            progress: 0,
+            time: item.craftTime,
+        };
+        return true;
+    }
+
+    /** Update craft progress (called every frame). Returns item ID when complete. */
+    updateCraft(dt: number): string | null {
+        if (!this.activeCraft) return null;
+        this.activeCraft.progress += dt;
+        if (this.activeCraft.progress >= this.activeCraft.time) {
+            const itemId = this.activeCraft.itemId;
+            this.craftedItems.push(itemId);
+            this.activeCraft = null;
+            return itemId;
+        }
+        return null;
+    }
+
+    /** Get craft progress as 0-1 */
+    get craftPercent(): number {
+        if (!this.activeCraft || this.activeCraft.time <= 0) return 0;
+        return Math.min(1, this.activeCraft.progress / this.activeCraft.time);
     }
 
     /** Get bonus attack for a unit type based on upgrades */
@@ -172,8 +234,17 @@ export class PlayerState {
         if (unitType === UnitType.Archer) {
             return this.upgrades[UpgradeType.RangedAttack] * UPGRADE_DATA[UpgradeType.RangedAttack].bonusPerLevel;
         }
-        if (unitType === UnitType.Spearman || unitType === UnitType.Scout || unitType === UnitType.Swordsman || unitType === UnitType.Knight) {
+        if (unitType === UnitType.Spearman || unitType === UnitType.Swordsman) {
             return this.upgrades[UpgradeType.MeleeAttack] * UPGRADE_DATA[UpgradeType.MeleeAttack].bonusPerLevel;
+        }
+        // Scout & Knight: cavalry attack bonus ONLY (no melee double-dip)
+        if (unitType === UnitType.Scout || unitType === UnitType.Knight) {
+            return this.upgrades[UpgradeType.CavalryAttack] * UPGRADE_DATA[UpgradeType.CavalryAttack].bonusPerLevel;
+        }
+        // Elite & unique cavalry units
+        if (isCivElite(unitType) || isCivCavalry(unitType)) {
+            return this.upgrades[UpgradeType.EliteAttack] * UPGRADE_DATA[UpgradeType.EliteAttack].bonusPerLevel
+                 + this.upgrades[UpgradeType.CavalryAttack] * UPGRADE_DATA[UpgradeType.CavalryAttack].bonusPerLevel;
         }
         return 0;
     }
@@ -183,8 +254,17 @@ export class PlayerState {
         if (unitType === UnitType.Archer) {
             return this.upgrades[UpgradeType.RangedDefense] * UPGRADE_DATA[UpgradeType.RangedDefense].bonusPerLevel;
         }
-        if (unitType === UnitType.Spearman || unitType === UnitType.Scout || unitType === UnitType.Swordsman || unitType === UnitType.Knight) {
+        if (unitType === UnitType.Spearman || unitType === UnitType.Swordsman) {
             return this.upgrades[UpgradeType.MeleeDefense] * UPGRADE_DATA[UpgradeType.MeleeDefense].bonusPerLevel;
+        }
+        // Scout & Knight: cavalry armor ONLY (no melee defense double-dip)
+        if (unitType === UnitType.Scout || unitType === UnitType.Knight) {
+            return this.upgrades[UpgradeType.CavalryAttack] * 1;
+        }
+        // Elite & unique cavalry units
+        if (isCivElite(unitType) || isCivCavalry(unitType)) {
+            return this.upgrades[UpgradeType.EliteDefense] * UPGRADE_DATA[UpgradeType.EliteDefense].bonusPerLevel
+                 + this.upgrades[UpgradeType.CavalryAttack] * 1;
         }
         return 0;
     }
@@ -194,8 +274,17 @@ export class PlayerState {
         if (unitType === UnitType.Archer) {
             return this.upgrades[UpgradeType.RangedDefense] * 8;
         }
-        if (unitType === UnitType.Spearman || unitType === UnitType.Scout || unitType === UnitType.Swordsman || unitType === UnitType.Knight) {
+        if (unitType === UnitType.Spearman || unitType === UnitType.Swordsman) {
             return this.upgrades[UpgradeType.MeleeDefense] * 10;
+        }
+        // Scout & Knight: cavalry HP bonus ONLY (no melee HP double-dip)
+        if (unitType === UnitType.Scout || unitType === UnitType.Knight) {
+            return this.upgrades[UpgradeType.CavalryAttack] * 10;
+        }
+        // Elite & unique cavalry units
+        if (isCivElite(unitType) || isCivCavalry(unitType)) {
+            return this.upgrades[UpgradeType.EliteDefense] * 15
+                 + this.upgrades[UpgradeType.CavalryAttack] * 10;
         }
         return 0;
     }
@@ -210,10 +299,8 @@ export class PlayerState {
     /** Get gather speed bonus for a specific resource type */
     getGatherBonus(resType: ResourceType): number {
         switch (resType) {
-            case ResourceType.Food: return this.upgrades[UpgradeType.GatherFood] * UPGRADE_DATA[UpgradeType.GatherFood].bonusPerLevel;
-            case ResourceType.Wood: return this.upgrades[UpgradeType.GatherWood] * UPGRADE_DATA[UpgradeType.GatherWood].bonusPerLevel;
+            case ResourceType.Supplies: return this.upgrades[UpgradeType.GatherSupplies] * UPGRADE_DATA[UpgradeType.GatherSupplies].bonusPerLevel;
             case ResourceType.Gold: return this.upgrades[UpgradeType.GatherGold] * UPGRADE_DATA[UpgradeType.GatherGold].bonusPerLevel;
-            case ResourceType.Stone: return this.upgrades[UpgradeType.GatherStone] * UPGRADE_DATA[UpgradeType.GatherStone].bonusPerLevel;
             default: return 0;
         }
     }
@@ -221,11 +308,9 @@ export class PlayerState {
     /** Generic gather speed bonus (average of all, for backward compat) */
     get gatherSpeedBonus(): number {
         return (
-            this.upgrades[UpgradeType.GatherFood] +
-            this.upgrades[UpgradeType.GatherWood] +
-            this.upgrades[UpgradeType.GatherGold] +
-            this.upgrades[UpgradeType.GatherStone]
-        ) / 4 * 0.15;
+            this.upgrades[UpgradeType.GatherSupplies] +
+            this.upgrades[UpgradeType.GatherGold]
+        ) / 2 * 0.15;
     }
 
     /** Get carry capacity bonus from upgrades (e.g. +5 per level) */

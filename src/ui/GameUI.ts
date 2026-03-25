@@ -11,6 +11,7 @@ import {
     UpgradeType, UPGRADE_DATA, ResourceNodeType, GATHER_RATES,
     CIVILIZATION_DATA, CIV_UNIT_MODIFIERS, isCivElite, CIV_ELITE_UNIT, CivilizationType,
 } from "../config/GameConfig";
+import { UI_LAYOUT, IS_IOS } from "../config/PlatformConfig";
 import { PlayerState } from "../systems/PlayerState";
 import { EntityManager } from "../systems/EntityManager";
 import { SelectionSystem } from "../systems/SelectionSystem";
@@ -21,7 +22,7 @@ import { HERO_XP_TABLE } from "../entities/Unit";
 import { renderCommandGrid as renderCommandGridFn } from "./panels/CommandGrid";
 import { renderSpawnPalette as renderSpawnPaletteFn, renderFreePauseButton as renderFreePauseButtonFn, SPAWN_ITEMS, SpawnEntityType } from "./panels/SpawnPalette";
 import { renderUnitPortrait as renderUnitPortraitFn, renderBuildingPortrait as renderBuildingPortraitFn, renderResourcePortrait as renderResourcePortraitFn, renderMultiUnitGrid as renderMultiUnitGridFn, getUnitSkillInfo } from "./panels/Portrait";
-import { renderGameOverScreen as renderGameOverScreenFn } from "./panels/GameOverScreen";
+import { renderGameOverScreen as renderGameOverScreenFn, secondChanceButtonArea, skipButtonArea, exitButtonArea } from "./panels/GameOverScreen";
 import { renderTopBar as renderTopBarFn } from "./panels/TopBar";
 import { drawPanel as drawPanelFn, drawSeparator as drawSeparatorFn, drawStatBar as drawStatBarFn, wrapText as wrapTextFn, roundRect as roundRectFn } from "./UIHelpers";
 import { TradeUI } from "./TradeUI";
@@ -48,6 +49,7 @@ export class GameUI {
     private mouseX = 0;
     private mouseY = 0;
     private shiftHeld = false;
+    private activeTooltip: { x: number; y: number; lines: string[] } | null = null;
 
     /** True when there's at least one unit, building, or resource selected */
     private get hasSelection(): boolean {
@@ -56,12 +58,12 @@ export class GameUI {
             || this.selectionSystem.selectedResource !== null;
     }
 
-    // Layout
-    readonly topBarH = 36;
-    readonly bottomPanelH = 180;
-    readonly bottomPanelW = 650;
-    readonly minimapSize = 180;
-    private borderWidth = 4;
+    // Layout — adaptive from PlatformConfig
+    readonly topBarH = UI_LAYOUT.topBarH;
+    readonly bottomPanelH = UI_LAYOUT.bottomPanelH;
+    readonly bottomPanelW = UI_LAYOUT.bottomPanelW;
+    readonly minimapSize = UI_LAYOUT.minimapSize;
+    private borderWidth = UI_LAYOUT.borderWidth;
 
     // Settings-driven flags
     showFPS = true;
@@ -111,6 +113,7 @@ export class GameUI {
         // Initialize camera and selection bounds
         this.camera.setBottomMargin(this.bottomPanelH);
         this.selectionSystem.uiBottomHeight = this.bottomPanelH;
+        this.selectionSystem._gameUI = this;
 
         // Register Selection System hotkeys to fire active panel buttons
         this.selectionSystem.setHotkeyCallback((key: string) => {
@@ -231,16 +234,26 @@ export class GameUI {
     private handleClick(e: MouseEvent): void {
         // Intercept Game Over screen clicks
         if (this.game && this.game.gameState !== 'playing') {
-            const w = this.camera.viewportWidth;
-            const h = this.camera.viewportHeight;
+            const mx = e.clientX;
+            const my = e.clientY;
 
-            const btnW = 200;
-            const btnH = 50;
-            const btnX = w / 2 - btnW / 2;
-            const btnY = h / 2 + 60;
+            // Second chance: Watch Ad button
+            const ad = secondChanceButtonArea;
+            if (ad.w > 0 && mx >= ad.x && mx <= ad.x + ad.w && my >= ad.y && my <= ad.y + ad.h) {
+                this.game.useSecondChance();
+                return;
+            }
 
-            if (e.clientX >= btnX && e.clientX <= btnX + btnW &&
-                e.clientY >= btnY && e.clientY <= btnY + btnH) {
+            // Second chance: Skip button
+            const sk = skipButtonArea;
+            if (sk.w > 0 && mx >= sk.x && mx <= sk.x + sk.w && my >= sk.y && my <= sk.y + sk.h) {
+                this.game.skipSecondChance();
+                return;
+            }
+
+            // Normal exit button (victory / final defeat)
+            const ex = exitButtonArea;
+            if (ex.w > 0 && mx >= ex.x && mx <= ex.x + ex.w && my >= ex.y && my <= ex.y + ex.h) {
                 this.game.exitToMenu();
             }
             return;
@@ -250,35 +263,69 @@ export class GameUI {
             if (e.clientX >= area.x && e.clientX <= area.x + area.w &&
                 e.clientY >= area.y && e.clientY <= area.y + area.h) {
                 area.action();
+                // Suppress SelectionSystem from processing this click
+                this.selectionSystem.suppressNextClick = true;
                 return;
             }
         }
     }
 
+    /** Check if screen coordinates are inside any registered click area */
+    public isInClickArea(x: number, y: number): boolean {
+        for (const area of this.clickAreas) {
+            if (x >= area.x && x <= area.x + area.w &&
+                y >= area.y && y <= area.y + area.h) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private handleMinimapClick(e: MouseEvent): void {
-        const mmX = this.borderWidth + 8;
-        const mmY = this.camera.viewportHeight - this.bottomPanelH + 10;
-        const mmS = this.minimapSize - 16;
+        let mmX: number, mmY: number, mmS: number;
+        if (IS_IOS) {
+            mmS = this.minimapSize - 4;
+            mmX = 6;
+            mmY = this.camera.viewportHeight - mmS - 6;
+        } else {
+            mmX = this.borderWidth + 8;
+            mmY = this.camera.viewportHeight - this.bottomPanelH + 10;
+            mmS = this.minimapSize - 16;
+        }
         if (e.clientX >= mmX && e.clientX <= mmX + mmS &&
             e.clientY >= mmY && e.clientY <= mmY + mmS) {
-            this.camera.x = ((e.clientX - mmX) / mmS) * MAP_COLS * TILE_SIZE - this.camera.viewportWidth / 2;
-            this.camera.y = ((e.clientY - mmY) / mmS) * MAP_ROWS * TILE_SIZE - this.camera.viewportHeight / 2;
+            this.camera.x = ((e.clientX - mmX) / mmS) * MAP_COLS * TILE_SIZE - this.camera.effectiveWidth / 2;
+            this.camera.y = ((e.clientY - mmY) / mmS) * MAP_ROWS * TILE_SIZE - this.camera.effectiveHeight / 2;
         }
     }
 
     /** Check if screen coordinate is inside the minimap area */
     isInMinimap(sx: number, sy: number): boolean {
-        const mmX = this.borderWidth + 8;
-        const mmY = this.camera.viewportHeight - this.bottomPanelH + 10;
-        const mmS = this.minimapSize - 16;
+        let mmX: number, mmY: number, mmS: number;
+        if (IS_IOS) {
+            mmS = this.minimapSize - 4;
+            mmX = 6;
+            mmY = this.camera.viewportHeight - mmS - 30;
+        } else {
+            mmX = this.borderWidth + 8;
+            mmY = this.camera.viewportHeight - this.bottomPanelH + 10;
+            mmS = this.minimapSize - 16;
+        }
         return sx >= mmX && sx <= mmX + mmS && sy >= mmY && sy <= mmY + mmS;
     }
 
     /** Convert screen coordinate (on minimap) to world coordinate */
     minimapToWorld(sx: number, sy: number): { x: number; y: number } {
-        const mmX = this.borderWidth + 8;
-        const mmY = this.camera.viewportHeight - this.bottomPanelH + 10;
-        const mmS = this.minimapSize - 16;
+        let mmX: number, mmY: number, mmS: number;
+        if (IS_IOS) {
+            mmS = this.minimapSize - 4;
+            mmX = 6;
+            mmY = this.camera.viewportHeight - mmS - 30;
+        } else {
+            mmX = this.borderWidth + 8;
+            mmY = this.camera.viewportHeight - this.bottomPanelH + 10;
+            mmS = this.minimapSize - 16;
+        }
         return {
             x: ((sx - mmX) / mmS) * MAP_COLS * TILE_SIZE,
             y: ((sy - mmY) / mmS) * MAP_ROWS * TILE_SIZE,
@@ -329,6 +376,7 @@ export class GameUI {
     render(ctx: CanvasRenderingContext2D): void {
         this.clickAreas = [];
         this.hotkeyActions = {};
+        this.activeTooltip = null;
         const vpW = this.camera.viewportWidth;
         const vpH = this.camera.viewportHeight;
 
@@ -336,18 +384,22 @@ export class GameUI {
         this.renderControlGroups(ctx, vpW);
 
         if (this.showUI) {
-            // Render bottom panel FIRST (background), then minimap on top
-            if (this.hasSelection) {
-                this.renderBottomPanel(ctx, vpW, vpH);
-            }
-
-            // Always render minimap (floats in bottom-left, on top of panel)
-            this.renderMinimap(ctx, vpH);
-
-            // Portrait + command grid on top of everything
-            if (this.hasSelection) {
-                this.renderPortrait(ctx, vpH);
-                this.renderCommandGrid(ctx, vpW, vpH);
+            if (IS_IOS) {
+                // ── iOS: Floating UI (no bottom panel) ──
+                this.renderFloatingMinimap(ctx, vpW, vpH);
+                if (this.hasSelection || this.selectionSystem.buildMode !== null) {
+                    this.renderFloatingActionBar(ctx, vpW, vpH);
+                }
+            } else {
+                // ── Desktop: Traditional bottom panel ──
+                if (this.hasSelection) {
+                    this.renderBottomPanel(ctx, vpW, vpH);
+                }
+                this.renderMinimap(ctx, vpH);
+                if (this.hasSelection) {
+                    this.renderPortrait(ctx, vpH);
+                    this.renderCommandGrid(ctx, vpW, vpH);
+                }
             }
         }
 
@@ -369,6 +421,11 @@ export class GameUI {
         // Game Over / Victory screen overlay
         if (this.game && this.game.gameState !== 'playing') {
             this.renderGameOverScreen(ctx);
+        }
+
+        // LAST: Draw tooltip on top of everything
+        if (this.activeTooltip) {
+            this.drawActiveTooltip(ctx);
         }
     }
 
@@ -429,7 +486,8 @@ export class GameUI {
             const screenPosSnap = this.camera.worldToScreen(snappedX, snappedY);
 
             // Check if placeable
-            const canPlace = this.tileMap.canPlace(tx, ty, bd.size[0], bd.size[1]);
+            const canPlace = this.tileMap.canPlace(tx, ty, bd.size[0], bd.size[1])
+                && !this.entityManager.hasUnitsOnTiles(tx, ty, bd.size[0], bd.size[1]);
 
             ctx.fillStyle = canPlace ? 'rgba(80, 200, 80, 0.4)' : 'rgba(200, 80, 80, 0.4)';
             ctx.fillRect(screenPosSnap.x, screenPosSnap.y, bw, bh);
@@ -447,7 +505,7 @@ export class GameUI {
             // Resource ghost
             let rad = 6;
             if (this.freeSpawnUnit === ResourceNodeType.Tree) rad = 12;
-            else if (this.freeSpawnUnit === ResourceNodeType.GoldMine || this.freeSpawnUnit === ResourceNodeType.StoneMine) rad = 16;
+            else if (this.freeSpawnUnit === ResourceNodeType.GoldMine) rad = 16;
 
             ctx.fillStyle = 'rgba(200, 200, 80, 0.4)';
             ctx.beginPath();
@@ -490,6 +548,8 @@ export class GameUI {
         if (!this.game) return;
         renderGameOverScreenFn(ctx, {
             isVictory: this.game.gameState === 'victory',
+            isDefeatPrompt: this.game.gameState === 'defeat_prompt',
+            adInProgress: this.game.secondChanceAdInProgress,
             viewportWidth: this.camera.viewportWidth,
             viewportHeight: this.camera.viewportHeight,
             mouseX: this.mouseX,
@@ -510,6 +570,7 @@ export class GameUI {
             tradeUI: this.tradeUI,
             clickAreas: this.clickAreas,
             isHovered: (x, y, w, h) => this.isHovered(x, y, w, h),
+            setTooltip: (tip) => { this.activeTooltip = tip; },
         });
     }
 
@@ -592,72 +653,222 @@ export class GameUI {
     // ==================================================================
     private renderBottomPanel(ctx: CanvasRenderingContext2D, vpW: number, vpH: number): void {
         const y = vpH - this.bottomPanelH;
-        // Only draw up to bottomPanelW to avoid empty black space
-        this.drawPanel(ctx, 0, y, this.bottomPanelW, this.bottomPanelH);
 
-        // Gold corner decorations
-        const cs = 8;
-        this.drawGoldCorner(ctx, 0, y, cs);
-        this.drawGoldCorner(ctx, this.bottomPanelW - cs, y, cs);
-        this.drawGoldCorner(ctx, 0, vpH - cs, cs);
-        this.drawGoldCorner(ctx, this.bottomPanelW - cs, vpH - cs, cs);
+        if (IS_IOS) {
+            // iOS: simple semi-transparent strip
+            ctx.fillStyle = 'rgba(12, 10, 8, 0.85)';
+            ctx.fillRect(0, y, this.bottomPanelW, this.bottomPanelH);
+            // Thin top border
+            ctx.fillStyle = 'rgba(194, 24, 91, 0.3)';
+            ctx.fillRect(0, y, this.bottomPanelW, 1);
+        } else {
+            // Desktop: full decorative panel
+            this.drawPanel(ctx, 0, y, this.bottomPanelW, this.bottomPanelH);
 
-        // Vertical separators
-        const mmEnd = this.minimapSize + 6;
-        this.drawSeparator(ctx, mmEnd, y + 6, this.bottomPanelH - 12);
+            // Gold corner decorations
+            const cs = 8;
+            this.drawGoldCorner(ctx, 0, y, cs);
+            this.drawGoldCorner(ctx, this.bottomPanelW - cs, y, cs);
+            this.drawGoldCorner(ctx, 0, vpH - cs, cs);
+            this.drawGoldCorner(ctx, this.bottomPanelW - cs, vpH - cs, cs);
 
-        const portraitEnd = mmEnd + 240;
-        this.drawSeparator(ctx, portraitEnd, y + 6, this.bottomPanelH - 12);
+            // Vertical separators
+            const mmEnd = this.minimapSize + 6;
+            this.drawSeparator(ctx, mmEnd, y + 6, this.bottomPanelH - 12);
+
+            const portraitEnd = mmEnd + 240;
+            this.drawSeparator(ctx, portraitEnd, y + 6, this.bottomPanelH - 12);
+        }
     }
 
     // ==================================================================
     //  MINIMAP (left section)
     // ==================================================================
     private renderMinimap(ctx: CanvasRenderingContext2D, vpH: number): void {
-        const mx = this.borderWidth + 8;
-        const my = vpH - this.bottomPanelH + 6; // Reduced padding to fit 180px box
-        const ms = this.minimapSize - 16;
+        if (IS_IOS) {
+            // iOS: ultra-compact minimap
+            const mx = 2;
+            const my = vpH - this.bottomPanelH + 2;
+            const ms = this.minimapSize - 4;
 
-        // When no selection, draw a compact background panel behind the minimap
-        if (!this.hasSelection) {
-            const panelPad = 8;
-            const panelX = mx - panelPad - 3;
-            const panelY = my - panelPad - 3;
-            const panelW = ms + (panelPad + 3) * 2;
-            const panelH = ms + (panelPad + 3) * 2 + 12; // extra for label
-            this.drawPanel(ctx, panelX, panelY, panelW, panelH);
+            // Simple 1px border
+            ctx.fillStyle = '#333';
+            ctx.fillRect(mx - 1, my - 1, ms + 2, ms + 2);
+
+            // Terrain + Entities
+            this.tileMap.renderMinimap(ctx, mx, my, ms, ms);
+            this.entityManager.renderMinimap(ctx, mx, my, ms, ms);
+
+            // Camera viewport rectangle
+            const sx = ms / (MAP_COLS * TILE_SIZE);
+            const sy = ms / (MAP_ROWS * TILE_SIZE);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(
+                mx + this.camera.x * sx,
+                my + this.camera.y * sy,
+                this.camera.effectiveWidth * sx,
+                (this.camera.effectiveHeight - this.bottomPanelH - this.topBarH) * sy,
+            );
+        } else {
+            // Desktop: full decorative minimap
+            const mx = this.borderWidth + 8;
+            const my = vpH - this.bottomPanelH + 6;
+            const ms = this.minimapSize - 16;
+
+            if (!this.hasSelection) {
+                const panelPad = 8;
+                const panelX = mx - panelPad - 3;
+                const panelY = my - panelPad - 3;
+                const panelW = ms + (panelPad + 3) * 2;
+                const panelH = ms + (panelPad + 3) * 2 + 12;
+                this.drawPanel(ctx, panelX, panelY, panelW, panelH);
+            }
+
+            // Minimap border (carved frame look)
+            ctx.fillStyle = C.uiBorderOuter;
+            ctx.fillRect(mx - 3, my - 3, ms + 6, ms + 6);
+            ctx.fillStyle = C.uiBorderDark;
+            ctx.fillRect(mx - 2, my - 2, ms + 4, ms + 4);
+            ctx.fillStyle = C.uiBorder;
+            ctx.fillRect(mx - 1, my - 1, ms + 2, ms + 2);
+
+            // Terrain + Entities
+            this.tileMap.renderMinimap(ctx, mx, my, ms, ms);
+            this.entityManager.renderMinimap(ctx, mx, my, ms, ms);
+
+            // Camera viewport rectangle
+            const sx = ms / (MAP_COLS * TILE_SIZE);
+            const sy = ms / (MAP_ROWS * TILE_SIZE);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(
+                mx + this.camera.x * sx,
+                my + this.camera.y * sy,
+                this.camera.effectiveWidth * sx,
+                (this.camera.effectiveHeight - this.bottomPanelH - this.topBarH) * sy,
+            );
+
+            // Label
+            ctx.fillStyle = C.uiTextDim;
+            ctx.font = "9px 'Inter', sans-serif";
+            ctx.fillText('MINIMAP', mx + ms / 2 - 20, vpH - 6);
         }
+    }
 
-        // Minimap border (carved frame look)
-        ctx.fillStyle = C.uiBorderOuter;
-        ctx.fillRect(mx - 3, my - 3, ms + 6, ms + 6);
-        ctx.fillStyle = C.uiBorderDark;
+    // ==================================================================
+    //  iOS FLOATING MINIMAP (standalone, bottom-left, no panel)
+    // ==================================================================
+    private renderFloatingMinimap(ctx: CanvasRenderingContext2D, vpW: number, vpH: number): void {
+        const ms = this.minimapSize - 4;
+        const mx = 6;
+        const my = vpH - ms - 30;
+
+        // Semi-transparent background
+        ctx.fillStyle = 'rgba(12, 10, 8, 0.8)';
         ctx.fillRect(mx - 2, my - 2, ms + 4, ms + 4);
-        ctx.fillStyle = C.uiBorder;
-        ctx.fillRect(mx - 1, my - 1, ms + 2, ms + 2);
+        ctx.strokeStyle = 'rgba(194, 24, 91, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(mx - 2, my - 2, ms + 4, ms + 4);
 
-        // Terrain
+        // Terrain + Entities
         this.tileMap.renderMinimap(ctx, mx, my, ms, ms);
-
-        // Entities
         this.entityManager.renderMinimap(ctx, mx, my, ms, ms);
 
         // Camera viewport rectangle
         const sx = ms / (MAP_COLS * TILE_SIZE);
         const sy = ms / (MAP_ROWS * TILE_SIZE);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
         ctx.strokeRect(
             mx + this.camera.x * sx,
             my + this.camera.y * sy,
-            this.camera.viewportWidth * sx,
-            (this.camera.viewportHeight - this.bottomPanelH - this.topBarH) * sy,
+            this.camera.effectiveWidth * sx,
+            (this.camera.effectiveHeight - this.topBarH) * sy,
         );
 
-        // Label
-        ctx.fillStyle = C.uiTextDim;
-        ctx.font = "9px 'Inter', sans-serif";
-        ctx.fillText('MINIMAP', mx + ms / 2 - 20, vpH - 6);
+        // Store coords for hit testing
+        this._iosMinimapX = mx;
+        this._iosMinimapY = my;
+        this._iosMinimapS = ms;
+    }
+
+    // iOS minimap coords for click detection
+    public _iosMinimapX = 6;
+    public _iosMinimapY = 0;
+    public _iosMinimapS = 60;
+
+    // ==================================================================
+    //  iOS FLOATING ACTION BAR (bottom-center)
+    // ==================================================================
+    private renderFloatingActionBar(ctx: CanvasRenderingContext2D, vpW: number, vpH: number): void {
+        // Delegate to command grid but with floating positioning
+        const sel = this.selectionSystem;
+        const btnSize = UI_LAYOUT.cmdBtnSize;  // 36px
+        const gap = 4;
+        const barPad = 6;
+
+        // Use the existing command grid infrastructure to get actions
+        // We render using the same renderCommandGrid but override coordinates
+        // Instead of duplicating all the action logic, we call renderCommandGrid
+        // with a wrapper that positions it correctly
+
+        // For floating bar: render command grid at bottom-center
+        this.renderCommandGrid(ctx, vpW, vpH);
+    }
+
+    // ==================================================================
+    //  iOS FLOATING UNIT INFO (above action bar)
+    // ==================================================================
+    private renderFloatingUnitInfo(ctx: CanvasRenderingContext2D, vpW: number, vpH: number): void {
+        const sel = this.selectionSystem;
+        const infoH = 24;
+        const infoW = 180;
+        const infoX = Math.floor((vpW - infoW) / 2);
+        // Position above where action bar will be: action bar is at bottom
+        const btnSize = UI_LAYOUT.cmdBtnSize;
+        const actionBarH = btnSize + 12 + 8; // btnSize + padding + bottom padding
+        const infoY = vpH - actionBarH - infoH - 4;
+
+        // Background
+        ctx.fillStyle = 'rgba(12, 10, 8, 0.75)';
+        ctx.fillRect(infoX, infoY, infoW, infoH);
+        ctx.strokeStyle = 'rgba(194, 24, 91, 0.3)';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(infoX, infoY, infoW, infoH);
+
+        const textX = infoX + 6;
+        const textY = infoY + 3;
+
+        if (sel.selectedUnits.length === 1) {
+            const u = sel.selectedUnits[0];
+            ctx.fillStyle = '#e8d4a0';
+            ctx.font = "bold 10px 'Inter', sans-serif";
+            ctx.fillText(u.name, textX, textY + 10);
+            const hpX = textX + ctx.measureText(u.name).width + 8;
+            const hpW = Math.min(infoW - (hpX - infoX) - 6, 70);
+            if (hpW > 20) {
+                this.drawStatBar(ctx, hpX, textY + 3, hpW, 8, u.hp / u.maxHp, '#4ade80', `${u.hp}/${u.maxHp}`);
+            }
+        } else if (sel.selectedUnits.length > 1) {
+            ctx.fillStyle = '#e8d4a0';
+            ctx.font = "bold 10px 'Inter', sans-serif";
+            ctx.fillText(`×${sel.selectedUnits.length} đơn vị`, textX, textY + 10);
+        } else if (sel.selectedBuilding) {
+            const b = sel.selectedBuilding;
+            ctx.fillStyle = '#e8d4a0';
+            ctx.font = "bold 10px 'Inter', sans-serif";
+            ctx.fillText(b.name, textX, textY + 10);
+            const hpX = textX + ctx.measureText(b.name).width + 8;
+            const hpW = Math.min(infoW - (hpX - infoX) - 6, 70);
+            if (hpW > 20) {
+                this.drawStatBar(ctx, hpX, textY + 3, hpW, 8, b.hp / b.maxHp, '#4ade80', `${b.hp}/${b.maxHp}`);
+            }
+        } else if (sel.selectedResource) {
+            ctx.fillStyle = '#e8d4a0';
+            ctx.font = "bold 10px 'Inter', sans-serif";
+            ctx.fillText(sel.selectedResource.nodeType === ResourceNodeType.GoldMine ? 'Mỏ Vàng' : 'Cây', textX, textY + 10);
+        }
     }
 
     // ==================================================================
@@ -706,7 +917,7 @@ export class GameUI {
     //  COMMAND GRID (delegated to panels/CommandGrid.ts)
     // ==================================================================
     private renderCommandGrid(ctx: CanvasRenderingContext2D, vpW: number, vpH: number): void {
-        renderCommandGridFn(ctx, vpW, vpH, {
+        const cmdCtx: import('./panels/CommandGrid').CommandGridContext = {
             minimapSize: this.minimapSize,
             bottomPanelH: this.bottomPanelH,
             freeMode: this.freeMode,
@@ -717,7 +928,12 @@ export class GameUI {
             hotkeyActions: this.hotkeyActions,
             shiftHeld: this.shiftHeld,
             isHovered: (x, y, w, h) => this.isHovered(x, y, w, h),
-        });
+        };
+        renderCommandGridFn(ctx, vpW, vpH, cmdCtx);
+        // Capture tooltip set by CommandGrid
+        if (cmdCtx.activeTooltip) {
+            this.activeTooltip = cmdCtx.activeTooltip;
+        }
     }
 
     // ==================================================================
@@ -784,6 +1000,44 @@ export class GameUI {
         if (this.tradeUI) {
             this.tradeUI.destroy();
         }
+    }
+
+    /** Draw the active tooltip on top of all UI */
+    private drawActiveTooltip(ctx: CanvasRenderingContext2D): void {
+        const tip = this.activeTooltip;
+        if (!tip || tip.lines.length === 0) return;
+
+        ctx.save();
+        ctx.font = "bold 11px 'Inter', sans-serif";
+
+        const lineH = 16;
+        const padX = 10;
+        const padY = 6;
+        let maxW = 0;
+        for (const line of tip.lines) {
+            const w = ctx.measureText(line).width;
+            if (w > maxW) maxW = w;
+        }
+        const boxW = maxW + padX * 2;
+        const boxH = tip.lines.length * lineH + padY * 2;
+        const boxX = Math.max(4, tip.x - boxW / 2);
+        const boxY = tip.y - boxH - 6; // Draw ABOVE the hover point
+
+        // Dark background
+        ctx.fillStyle = 'rgba(10, 8, 6, 0.95)';
+        ctx.fillRect(boxX, boxY, boxW, boxH);
+        // Gold border
+        ctx.strokeStyle = C.uiBorder;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+        // Text lines
+        ctx.fillStyle = '#e8dcc0';
+        ctx.textAlign = 'left';
+        for (let i = 0; i < tip.lines.length; i++) {
+            ctx.fillText(tip.lines[i], boxX + padX, boxY + padY + (i + 1) * lineH - 3);
+        }
+        ctx.restore();
     }
 
     private roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {

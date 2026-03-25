@@ -145,7 +145,7 @@ export function drawScout_DaiMinh(unit: Unit, ctx: CanvasRenderingContext2D, age
     ctx.fillStyle = age >= 4 ? '#6a1818' : '#5a3a20'; ctx.fillRect(-1.5, -2, 3, 5);
     if (age >= 4) { ctx.fillStyle = '#ffd700'; ctx.fillRect(-1.5, -1, 3, 1); }
     ctx.fillStyle = age >= 4 ? '#ffd700' : age >= 3 ? '#c9a84c' : '#888'; ctx.fillRect(-2.5, -3, 5, 1.5);
-    ctx.fillStyle = age >= 4 ? '#eee' : age >= 3 ? '#ddd' : '#ccc';
+    ctx.fillStyle = lvl >= 3 ? cv.bladeColor : (age >= 4 ? '#eee' : age >= 3 ? '#ddd' : '#ccc');
     ctx.beginPath(); ctx.moveTo(-1.5, -3); ctx.quadraticCurveTo(-2, -12, -4, -20);
     ctx.lineTo(-2, -19); ctx.quadraticCurveTo(0, -11, 1.5, -3); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
@@ -158,7 +158,7 @@ export function drawScout_DaiMinh(unit: Unit, ctx: CanvasRenderingContext2D, age
     }
     ctx.restore(); ctx.restore();
 
-    if (lvl > 0) { ctx.fillStyle = '#ffd700'; ctx.font = '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -26 + bob); }
+    if (lvl > 0) { ctx.fillStyle = lvl >= 3 ? '#ff2222' : '#ffd700'; ctx.font = lvl >= 3 ? 'bold 8px sans-serif' : '7px sans-serif'; ctx.fillText('★'.repeat(lvl), -lvl * 3.5, -26 + bob); }
     if (moving && age >= 2) { ctx.globalAlpha = 0.12; ctx.fillStyle = '#aa8866'; for (let i = 0; i < 3; i++) ctx.fillRect(-10 - i * 4, 12 + bob + i * 2, 3, 2); ctx.globalAlpha = 1; }
     if (age >= 4) { ctx.globalAlpha = 0.07; ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.arc(0, 0 + bob, 16, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
 }
@@ -612,7 +612,7 @@ export function drawSpears_DaiMinh(unit: Unit, ctx: CanvasRenderingContext2D, ag
     ctx.fillStyle = '#dd2222';
     ctx.beginPath(); ctx.moveTo(shaftEnd, -1); ctx.quadraticCurveTo(shaftEnd - 3, -6, shaftEnd - 1, -8); ctx.quadraticCurveTo(shaftEnd + 1, -4, shaftEnd + 2, 0); ctx.fill();
     ctx.beginPath(); ctx.moveTo(shaftEnd, 1); ctx.quadraticCurveTo(shaftEnd - 3, 6, shaftEnd - 1, 8); ctx.quadraticCurveTo(shaftEnd + 1, 4, shaftEnd + 2, 0); ctx.fill();
-    ctx.fillStyle = age >= 4 ? '#eeeeee' : '#cccccc';
+    ctx.fillStyle = lvl >= 3 ? cv.bladeColor : (age >= 4 ? '#eeeeee' : '#cccccc');
     const bladeLen = age >= 3 ? 8 : 6;
     ctx.beginPath(); ctx.moveTo(shaftEnd, 0); ctx.quadraticCurveTo(shaftEnd + 2, -2, shaftEnd + bladeLen, 0); ctx.quadraticCurveTo(shaftEnd + 2, 2, shaftEnd, 0); ctx.fill();
     ctx.fillStyle = 'rgba(0,0,0,0.3)';

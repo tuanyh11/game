@@ -370,10 +370,10 @@ export function drawQiJiguangComplete(unit: Unit, ctx: CanvasRenderingContext2D,
     // Eyes
     if (skillActive) {
         ctx.fillStyle = '#44ffaa';
-        ctx.shadowColor = '#44ffaa'; ctx.shadowBlur = 4;
+         
         ctx.fillRect(-2.2, -11 + wB, 1.5, 0.9);
         ctx.fillRect(0.8, -11 + wB, 1.5, 0.9);
-        ctx.shadowBlur = 0;
+        
     } else if (atk && ap > 0.12 && ap < 0.5) {
         ctx.fillStyle = '#ff4400';
         ctx.fillRect(-2.2, -11 + wB, 1.5, 0.7);

@@ -9,6 +9,7 @@ import { ParticleSystem } from "../../effects/ParticleSystem";
 import { CivilizationType, UnitType, TerrainType, TILE_SIZE, UnitState } from "../../config/GameConfig";
 import { Building } from "../Building";
 import { audioSystem } from "../../systems/AudioSystem";
+import { getEquipBonuses } from "../unit-abilities/EquipmentSystem";
 
 export abstract class BaseCombatStrategy implements ICombatStrategy {
 
@@ -31,15 +32,8 @@ export abstract class BaseCombatStrategy implements ICombatStrategy {
             const dist = Math.hypot(dx, dy);
             const range = unit.civRange + bldg.tileW * TILE_SIZE * 0.4;
 
-            // Interrupt: switch to enemy unit if closer
-            if (findNearestEnemy) {
-                const nearbyEnemy = findNearestEnemy(unit.x, unit.y, unit.team, unit.data.sight * TILE_SIZE + TILE_SIZE * 2);
-                if (nearbyEnemy) {
-                    unit.attackBuildingTarget = null;
-                    unit.attackUnit(nearbyEnemy);
-                    return;
-                }
-            }
+            // NOTE: No interrupt to chase enemy units while committed to a building attack
+            // This prevents infinite loop when attacking walls blocking path to an enemy
 
             // Face target
             unit.facingRight = dx > 0;
@@ -131,6 +125,11 @@ export abstract class BaseCombatStrategy implements ICombatStrategy {
             // Apply Target Defense
             const pierceBlock = this.shouldPierceBlock(unit);
             dmg = target.applyPassiveDefense(dmg, particles, pierceBlock);
+            // Invulnerability shield (second chance)
+            if (target.invulnerableTimer > 0) {
+                unit.attackTarget = null;
+                return;
+            }
             target.hp -= dmg;
 
             // Post-damage logic (XP, Lifesteal, on-kill buffs)
@@ -189,6 +188,15 @@ export abstract class BaseCombatStrategy implements ICombatStrategy {
         if (unit.type === UnitType.Ulfhednar && unit.ulfhednarRageActive) atkSpeedMod *= 0.5;
         // La Mã Gladius: Swordsman +20% attack speed
         if (!unit.isHero && unit.civilization === CivilizationType.LaMa && unit.type === UnitType.Swordsman) atkSpeedMod *= 0.8;
+        // ---- HERO AURA: Attack Speed buff (e.g. Ragnar's Berserker Fury) ----
+        if (unit.auraBuffType === 'atkSpeed' && unit.auraBuffValue > 0) {
+            atkSpeedMod *= (1 - unit.auraBuffValue);
+        }
+        // ---- EQUIPMENT: Attack Speed bonus (e.g. Dragonbone Sword) ----
+        const eb = getEquipBonuses(unit);
+        if (eb.atkSpeedBonus > 0) {
+            atkSpeedMod *= (1 - eb.atkSpeedBonus);
+        }
         return atkSpeedMod;
     }
 
@@ -201,12 +209,81 @@ export abstract class BaseCombatStrategy implements ICombatStrategy {
     }
 
     protected handlePostDamageEffects(context: CombatContext, target: Unit, damageDealt: number): void {
-        const { unit } = context;
+        const { unit, particles } = context;
         if (unit.isHero) {
             unit.addHeroXp(Math.max(1, Math.floor(damageDealt * 0.15)));
             if (target.hp <= 0 && target.alive) {
                 const xpGain = Math.max(5, Math.floor((target.maxHp + target.data.attack * 2) * 0.3));
                 unit.addHeroXp(xpGain);
+            }
+
+            // ---- EQUIPMENT: Lifesteal (Blood Ring) ----
+            const eb = getEquipBonuses(unit);
+            if (eb.hasLifesteal && eb.lifestealValue > 0) {
+                const healAmt = Math.max(1, Math.floor(damageDealt * eb.lifestealValue));
+                unit.hp = Math.min(unit.hp + healAmt, unit.maxHp);
+                // Visual: red healing particles
+                particles.emit({
+                    x: unit.x, y: unit.y - 8, count: 2, spread: 3,
+                    speed: [10, 30], angle: [-Math.PI * 0.8, -Math.PI * 0.2],
+                    life: [0.2, 0.4], size: [1, 2],
+                    colors: ['#ef4444', '#fca5a5', '#fff'],
+                    gravity: -20, shape: 'circle',
+                });
+            }
+
+            // ---- EQUIPMENT: Splash (War Axe) ----
+            if (eb.hasSplash && eb.splashValue > 0 && target.alive) {
+                const splashDmg = Math.max(1, Math.floor(damageDealt * eb.splashValue));
+                // Find 1 nearby enemy (not the primary target)
+                const allUnits = unit._allUnits;
+                let closestSplash: Unit | null = null;
+                let closestDistSq = 50 * 50; // 50px splash radius
+                for (let i = 0; i < allUnits.length; i++) {
+                    const su = allUnits[i];
+                    if (!su.alive || su.team === unit.team || su.id === target.id) continue;
+                    const sdx = su.x - target.x, sdy = su.y - target.y;
+                    const sdSq = sdx * sdx + sdy * sdy;
+                    if (sdSq < closestDistSq) { closestDistSq = sdSq; closestSplash = su; }
+                }
+                if (closestSplash) {
+                    closestSplash.hp -= splashDmg;
+                    particles.emit({
+                        x: closestSplash.x, y: closestSplash.y - 4, count: 4, spread: 5,
+                        speed: [30, 80], angle: [0, Math.PI * 2],
+                        life: [0.1, 0.25], size: [1.5, 3],
+                        colors: ['#ff6600', '#ffcc00', '#fff'],
+                        gravity: 60, shape: 'circle',
+                    });
+                }
+            }
+
+            // ---- EQUIPMENT: Slow on hit (Frost Hammer) ----
+            if (eb.hasSlow && eb.slowValue > 0 && target.alive) {
+                target.slowTimer = 2.0; // 2s slow
+                target.slowAmount = eb.slowValue;
+                // Visual: frost particles on target
+                particles.emit({
+                    x: target.x, y: target.y - 6, count: 3, spread: 4,
+                    speed: [15, 40], angle: [-Math.PI * 0.8, -Math.PI * 0.2],
+                    life: [0.3, 0.6], size: [1.5, 3],
+                    colors: ['#60a5fa', '#93c5fd', '#dbeafe', '#fff'],
+                    gravity: -10, shape: 'circle',
+                });
+            }
+
+            // ---- EQUIPMENT: Anti-Heal on hit (Cursed Blade) ----
+            if (eb.hasAntiHeal && eb.antiHealValue > 0 && target.alive) {
+                target.healReductionTimer = 4.0; // 4s anti-heal
+                target.antiHealAmount = eb.antiHealValue;
+                // Visual: purple debuff particles on target
+                particles.emit({
+                    x: target.x, y: target.y - 6, count: 2, spread: 3,
+                    speed: [10, 25], angle: [-Math.PI * 0.8, -Math.PI * 0.2],
+                    life: [0.3, 0.5], size: [1, 2],
+                    colors: ['#a855f7', '#7c3aed', '#4c1d95'],
+                    gravity: -15, shape: 'circle',
+                });
             }
         }
     }
@@ -218,8 +295,47 @@ export abstract class BaseCombatStrategy implements ICombatStrategy {
     }
 
     public applyPassiveDefense(unit: Unit, damage: number, particles: ParticleSystem, pierceBlock: boolean = false): number {
-        // Base armor implementation
+        // Base armor implementation (armor stat already includes equipment bonus)
         let finalDamage = Math.max(1, damage - unit.armor);
+        // ---- HERO AURA: Armor buff (e.g. Spartacus's Phalanx Spirit) ----
+        if (unit.auraBuffType === 'armor' && unit.auraBuffValue > 0) {
+            finalDamage = Math.max(1, Math.floor(finalDamage * (1 - unit.auraBuffValue)));
+        }
+        // ---- HERO AURA: Armor debuff (e.g. Ragnar's Berserker Fury -10% defense) ----
+        if (unit.auraDebuffType === 'armor' && unit.auraDebuffValue < 0) {
+            finalDamage = Math.ceil(finalDamage * (1 + Math.abs(unit.auraDebuffValue)));
+        }
+        // ---- EQUIPMENT: Damage Reflect (Dragon Scale) ----
+        const eb = getEquipBonuses(unit);
+        if (eb.hasReflect && eb.reflectValue > 0) {
+            const reflected = Math.max(1, Math.floor(damage * eb.reflectValue));
+            // Visual: purple spark on the unit being hit
+            particles.emit({
+                x: unit.x, y: unit.y - 8, count: 3, spread: 4,
+                speed: [20, 60], angle: [0, Math.PI * 2],
+                life: [0.15, 0.3], size: [1, 2.5],
+                colors: ['#a855f7', '#c084fc', '#fff'],
+                gravity: 40, shape: 'circle',
+            });
+            // Deal reflect damage back — find the closest enemy unit attacking us
+            const allUnits = unit._allUnits;
+            if (allUnits) {
+                for (let i = 0; i < allUnits.length; i++) {
+                    const attacker = allUnits[i];
+                    if (attacker.alive && attacker.team !== unit.team && attacker.attackTarget === unit) {
+                        attacker.hp -= reflected;
+                        particles.emit({
+                            x: attacker.x, y: attacker.y - 6, count: 2, spread: 3,
+                            speed: [15, 40], angle: [0, Math.PI * 2],
+                            life: [0.1, 0.2], size: [1, 2],
+                            colors: ['#a855f7', '#fff'],
+                            gravity: 30, shape: 'circle',
+                        });
+                        break; // reflect to only 1 attacker per hit
+                    }
+                }
+            }
+        }
         return finalDamage;
     }
 

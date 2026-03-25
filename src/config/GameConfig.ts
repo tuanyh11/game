@@ -3,10 +3,11 @@
 // ============================================================
 
 import { t } from '../i18n/i18n';
+import { PLATFORM_MAP_COLS, PLATFORM_MAP_ROWS } from './PlatformConfig';
 
 export const TILE_SIZE = 16;
-export const MAP_COLS = 800;
-export const MAP_ROWS = 800;
+export const MAP_COLS = PLATFORM_MAP_COLS;
+export const MAP_ROWS = PLATFORM_MAP_ROWS;
 export const WORLD_W = MAP_COLS * TILE_SIZE;
 export const WORLD_H = MAP_ROWS * TILE_SIZE;
 
@@ -22,11 +23,10 @@ export enum TerrainType {
     Water, Bridge
 }
 
-export enum ResourceType { Food = 'food', Wood = 'wood', Gold = 'gold', Stone = 'stone' }
+export enum ResourceType { Gold = 'gold', Supplies = 'supplies' }
 
 export enum ResourceNodeType {
-    Tree = 'tree', GoldMine = 'goldMine', StoneMine = 'stoneMine',
-    BerryBush = 'berryBush', Farm = 'farm',
+    Tree = 'tree', GoldMine = 'goldMine',
 }
 
 export enum UnitType {
@@ -36,7 +36,7 @@ export enum UnitType {
     // Unique Civilization Heroes
     HeroSpartacus = 'heroSpartacus',       // La Mã (Roman)
     HeroZarathustra = 'heroZarathustra',   // Ba Tư (Persian)
-    HeroQiJiguang = 'heroHuangZhong',     // Đại Minh (Ming/Chinese)
+    HeroQiJiguang = 'heroQiJiguang',     // Đại Minh (Ming/Chinese)
     HeroMusashi = 'heroMusashi',           // Yamato (Japanese)
     HeroRagnar = 'heroRagnar',             // Viking (Norse)
 
@@ -54,16 +54,24 @@ export enum UnitType {
     Equites = 'equites',         // La Mã
     BearRider = 'bearRider',       // Viking
 
+    // Neutral Creep Monsters
+    CreepWolf = 'creepWolf',
+    CreepSkeleton = 'creepSkeleton',
+    CreepOgre = 'creepOgre',
+    CreepDragon = 'creepDragon',           // European dragon
+    CreepDragonEast = 'creepDragonEast',   // Asian dragon (Rồng Phương Đông)
+
     // Test Dummy
     TargetDummy = 'targetDummy',
 }
 
 export enum BuildingType {
     TownCenter = 'townCenter', House = 'house', Barracks = 'barracks',
-    Market = 'market', Farm = 'farm',
+    Market = 'market',
     Stable = 'stable', Tower = 'tower', HeroAltar = 'heroAltar',
     Blacksmith = 'blacksmith', GovernmentCenter = 'governmentCenter',
     Wall = 'wall', StoragePit = 'storagePit', Granary = 'granary',
+    Armory = 'armory',
 }
 
 export enum UnitState { Idle, Moving, Gathering, Returning, Building, Attacking }
@@ -117,9 +125,9 @@ export const CIVILIZATION_DATA: Record<CivilizationType, CivilizationData> = {
         shieldEmblem: '☀', helmetStyle: 'persian',
     },
     [CivilizationType.DaiMinh]: {
-        get name() { return t('civ.daiMinh'); },
+        get name() { return t('civ.daiTong'); },
         icon: '🐲',
-        get description() { return t('civ.daiMinh.desc'); },
+        get description() { return t('civ.daiTong.desc'); },
         bonuses: {
             infantryAttack: 1.0, infantryHp: 1.05,
             cavalryAttack: 0.85, cavalryHp: 0.95,
@@ -272,7 +280,7 @@ export const CIV_UNIT_MODIFIERS: Partial<Record<CivilizationType, Partial<Record
     // ---- YAMATO: Fast infantry & samurai, weak cavalry ----
     [CivilizationType.Yamato]: {
         [UnitType.Spearman]: { speed: 1.10, hp: 0.95, range: 1.15, name: 'Ashigaru' },           // Fast + Yari Jutsu longer reach
-        [UnitType.Swordsman]: { attack: 1.20, speed: 1.08, attackSpeed: 0.90, name: 'Samurai' }, // Elite infantry
+        [UnitType.Swordsman]: { attack: 1.15, speed: 1.08, attackSpeed: 0.92, name: 'Samurai' }, // Elite infantry
         [UnitType.Archer]: { attackSpeed: 0.92, name: 'Yumi Thủ' },                 // Faster shooting
         [UnitType.Scout]: { speed: 1.05, name: 'Kỵ Trinh Sát' },                  // Slightly faster
         [UnitType.Knight]: { attack: 0.90, hp: 0.90, name: 'Kỵ Mã Samurai' },     // Weakened cavalry
@@ -297,7 +305,7 @@ export const CIV_UNIT_MODIFIERS: Partial<Record<CivilizationType, Partial<Record
 };
 
 // ---- Cost interface ----
-export interface Cost { food?: number; wood?: number; gold?: number; stone?: number; }
+export interface Cost { gold?: number; supplies?: number; }
 
 // ---- Building data ----
 export interface BuildingData {
@@ -308,59 +316,61 @@ export interface BuildingData {
 
 export const BUILDING_DATA: Record<BuildingType, BuildingData> = {
     [BuildingType.TownCenter]: {
-        name: 'Nhà Chính', cost: { wood: 275, stone: 100 }, size: [4, 4], hp: 2400, popProvided: 5,
-        isDropOff: [ResourceType.Food, ResourceType.Wood, ResourceType.Gold, ResourceType.Stone],
+        name: 'Nhà Chính', cost: { supplies: 300 }, size: [4, 4], hp: 2400, popProvided: 5,
+        isDropOff: [ResourceType.Gold, ResourceType.Supplies],
         trainable: [UnitType.Villager], ageRequired: 2,
     },
     [BuildingType.House]: {
-        name: 'Nhà Ở', cost: { wood: 30 }, size: [3, 3], hp: 550, popProvided: 5, ageRequired: 1,
+        name: 'Nhà Ở', cost: { supplies: 25 }, size: [3, 3], hp: 550, popProvided: 5, ageRequired: 1,
     },
     [BuildingType.Barracks]: {
-        name: 'Trại Lính', cost: { wood: 175 }, size: [4, 4], hp: 1200,
+        name: 'Trại Lính', cost: { supplies: 150 }, size: [4, 4], hp: 1200,
         trainable: [UnitType.Spearman, UnitType.Archer, UnitType.Swordsman,
         UnitType.Immortal, UnitType.ChuKoNu, UnitType.Ninja, UnitType.Centurion, UnitType.Ulfhednar], ageRequired: 1,
     },
     [BuildingType.Market]: {
-        name: 'Kho Tài Nguyên', cost: { wood: 100 }, size: [3, 3], hp: 700,
-        isDropOff: [ResourceType.Wood, ResourceType.Gold, ResourceType.Stone, ResourceType.Food], ageRequired: 1,
-    },
-    [BuildingType.Farm]: {
-        name: 'Trang Trại', cost: { wood: 60 }, size: [3, 3], hp: 480, ageRequired: 2,
+        name: 'Kho Tài Nguyên', cost: { supplies: 80 }, size: [3, 3], hp: 700,
+        isDropOff: [ResourceType.Gold, ResourceType.Supplies], ageRequired: 1,
     },
     [BuildingType.Stable]: {
-        name: 'Chuồng Ngựa', cost: { wood: 175, gold: 50 }, size: [4, 4], hp: 1200,
+        name: 'Chuồng Ngựa', cost: { supplies: 150, gold: 40 }, size: [4, 4], hp: 1200,
         trainable: [
             UnitType.Scout, UnitType.Knight,
             UnitType.WarElephant, UnitType.FireLancer, UnitType.Yabusame, UnitType.Equites, UnitType.BearRider
         ], ageRequired: 2,
     },
     [BuildingType.Tower]: {
-        name: 'Tháp Canh', cost: { stone: 125, wood: 50 }, size: [3, 3], hp: 1500, ageRequired: 2,
+        name: 'Tháp Canh', cost: { supplies: 150 }, size: [3, 3], hp: 1500, ageRequired: 2,
     },
     [BuildingType.HeroAltar]: {
-        name: 'Đền Tướng', cost: { gold: 200, stone: 100 }, size: [4, 4], hp: 1800,
+        name: 'Đền Tướng', cost: { gold: 160, supplies: 80 }, size: [4, 4], hp: 1800,
         trainable: [UnitType.HeroSpartacus, UnitType.HeroZarathustra, UnitType.HeroQiJiguang, UnitType.HeroMusashi, UnitType.HeroRagnar],
         ageRequired: 2,
     },
     [BuildingType.Blacksmith]: {
-        name: 'Lò Rèn', cost: { wood: 150, gold: 50 }, size: [3, 3], hp: 1000,
+        name: 'Lò Rèn', cost: { supplies: 120, gold: 40 }, size: [3, 3], hp: 1000,
         ageRequired: 2,
     },
     [BuildingType.GovernmentCenter]: {
-        name: 'Nhà Chính Phủ', cost: { wood: 200, stone: 100 }, size: [4, 4], hp: 2000,
+        name: 'Nhà Chính Phủ', cost: { supplies: 250 }, size: [4, 4], hp: 2000,
+        isDropOff: [ResourceType.Gold, ResourceType.Supplies],
         ageRequired: 3,
     },
     [BuildingType.Wall]: {
-        name: 'Tường Thành', cost: { stone: 15 }, size: [3, 3], hp: 2400,
+        name: 'Tường Thành', cost: { supplies: 10 }, size: [1, 1], hp: 2400,
         ageRequired: 2,
     },
     [BuildingType.StoragePit]: {
-        name: 'Hố Lưu Trữ', cost: { wood: 120 }, size: [3, 3], hp: 600,
-        isDropOff: [ResourceType.Wood, ResourceType.Gold, ResourceType.Stone], ageRequired: 1,
+        name: 'Hố Lưu Trữ', cost: { supplies: 100 }, size: [3, 3], hp: 600,
+        isDropOff: [ResourceType.Gold, ResourceType.Supplies], ageRequired: 1,
     },
     [BuildingType.Granary]: {
-        name: 'Kho Thóc', cost: { wood: 120 }, size: [3, 3], hp: 600,
-        isDropOff: [ResourceType.Food], ageRequired: 1,
+        name: 'Kho Thóc', cost: { supplies: 100 }, size: [3, 3], hp: 600,
+        isDropOff: [ResourceType.Supplies], ageRequired: 1,
+    },
+    [BuildingType.Armory]: {
+        name: 'Quân Khí Xưởng', cost: { supplies: 160, gold: 80 }, size: [3, 3], hp: 1200,
+        ageRequired: 2,
     },
 };
 
@@ -372,6 +382,69 @@ export const TOWER_ATTACK_DATA: { damage: number; range: number; attackSpeed: nu
     { damage: 15, range: 7 * TILE_SIZE, attackSpeed: 1.2, arrowCount: 3 }, // Age 4: keep (3 arrows, fire)
 ];
 
+// ---- Tower Upgrade Types (Warcraft III-style specialization) ----
+export enum TowerUpgradeType {
+    None = 'none',
+    Fire = 'fire',      // Liệt Hỏa — high DPS, splash
+    Ice = 'ice',        // Hàn Băng — slows enemies
+    Cannon = 'cannon',  // Thần Công — AoE, anti-building
+}
+
+export interface TowerUpgradeData {
+    name: string;
+    icon: string;
+    cost: Cost;
+    ageRequired: number;
+    upgradeTime: number; // seconds
+    description: string;
+    // Combat bonuses (multiplied on top of base TOWER_ATTACK_DATA)
+    damageMult: number;
+    rangeMult: number;
+    attackSpeedMult: number; // lower = faster
+    arrowCountBonus: number;
+    splashRadius: number;   // 0 = no splash
+    slowPct: number;        // 0-1, slow effect on targets
+    slowDuration: number;   // seconds
+    bonusVsBuilding: number; // extra damage vs buildings
+    hpBonus: number;        // extra HP added to the tower
+}
+
+export const TOWER_UPGRADE_DATA: Record<TowerUpgradeType, TowerUpgradeData> = {
+    [TowerUpgradeType.None]: {
+        name: 'Tháp Canh', icon: '🏗️', cost: {}, ageRequired: 1, upgradeTime: 0,
+        description: '',
+        damageMult: 1, rangeMult: 1, attackSpeedMult: 1, arrowCountBonus: 0,
+        splashRadius: 0, slowPct: 0, slowDuration: 0, bonusVsBuilding: 0, hpBonus: 0,
+    },
+    [TowerUpgradeType.Fire]: {
+        name: 'Tháp Liệt Hỏa', icon: '🔥',
+        cost: { gold: 200, supplies: 100 },
+        ageRequired: 3, upgradeTime: 25,
+        description: '+50% sát thương, +2 mũi tên, splash nhỏ',
+        damageMult: 1.5, rangeMult: 1.0, attackSpeedMult: 0.9, arrowCountBonus: 2,
+        splashRadius: TILE_SIZE * 1.5, slowPct: 0, slowDuration: 0,
+        bonusVsBuilding: 0, hpBonus: 300,
+    },
+    [TowerUpgradeType.Ice]: {
+        name: 'Tháp Hàn Băng', icon: '❄️',
+        cost: { gold: 150, supplies: 150 },
+        ageRequired: 3, upgradeTime: 25,
+        description: 'Làm chậm địch 30%, +tầm bắn xa',
+        damageMult: 1.0, rangeMult: 1.3, attackSpeedMult: 1.1, arrowCountBonus: 0,
+        splashRadius: 0, slowPct: 0.3, slowDuration: 3.0,
+        bonusVsBuilding: 0, hpBonus: 200,
+    },
+    [TowerUpgradeType.Cannon]: {
+        name: 'Tháp Thần Công', icon: '💣',
+        cost: { gold: 250, supplies: 200 },
+        ageRequired: 3, upgradeTime: 30,
+        description: 'AoE lớn, bắn chậm, +dmg vs công trình',
+        damageMult: 2.5, rangeMult: 1.2, attackSpeedMult: 1.8, arrowCountBonus: -1,
+        splashRadius: TILE_SIZE * 3, slowPct: 0, slowDuration: 0,
+        bonusVsBuilding: 15, hpBonus: 500,
+    },
+};
+
 // ---- Unit data ----
 export interface UnitData {
     name: string; cost: Cost; hp: number; speed: number; attack: number;
@@ -380,51 +453,115 @@ export interface UnitData {
 }
 
 export const UNIT_DATA: Record<UnitType, UnitData> = {
-    [UnitType.Villager]: { name: 'Dân', cost: { food: 50 }, hp: 25, speed: 90, attack: 3, range: 24, attackSpeed: 2.0, sight: 6, trainTime: 25, ageRequired: 1 },
-    [UnitType.Spearman]: { name: 'Lính Giáo', cost: { food: 35, wood: 25 }, hp: 60, speed: 80, attack: 8, range: 32, attackSpeed: 1.4, sight: 10, trainTime: 20, ageRequired: 1 },
-    [UnitType.Archer]: { name: 'Cung Thủ', cost: { food: 25, gold: 45 }, hp: 35, speed: 80, attack: 5, range: 120, attackSpeed: 1.6, sight: 10, trainTime: 30, ageRequired: 2 },
-    [UnitType.Scout]: { name: 'Trinh Sát', cost: { food: 80 }, hp: 75, speed: 120, attack: 4, range: 30, attackSpeed: 1.0, sight: 12, trainTime: 30, ageRequired: 1 },
-    [UnitType.Swordsman]: { name: 'Kiếm Sĩ', cost: { food: 60, gold: 30 }, hp: 80, speed: 70, attack: 12, range: 28, attackSpeed: 1.2, sight: 10, trainTime: 25, ageRequired: 2 },
-    [UnitType.Knight]: { name: 'Kỵ Sĩ', cost: { food: 60, gold: 75 }, hp: 120, speed: 140, attack: 14, range: 35, attackSpeed: 1.8, sight: 10, trainTime: 35, ageRequired: 3 },
+    [UnitType.Villager]: { name: 'Dân', cost: { gold: 40 }, hp: 25, speed: 90, attack: 3, range: 24, attackSpeed: 2.0, sight: 6, trainTime: 16, ageRequired: 1 },
+    [UnitType.Spearman]: { name: 'Lính Giáo', cost: { gold: 50 }, hp: 60, speed: 80, attack: 8, range: 32, attackSpeed: 1.4, sight: 10, trainTime: 14, ageRequired: 1 },
+    [UnitType.Archer]: { name: 'Cung Thủ', cost: { gold: 40, supplies: 20 }, hp: 35, speed: 80, attack: 5, range: 120, attackSpeed: 1.6, sight: 10, trainTime: 20, ageRequired: 2 },
+    [UnitType.Scout]: { name: 'Trinh Sát', cost: { gold: 65 }, hp: 75, speed: 120, attack: 4, range: 30, attackSpeed: 1.0, sight: 12, trainTime: 20, ageRequired: 1 },
+    [UnitType.Swordsman]: { name: 'Kiếm Sĩ', cost: { gold: 50, supplies: 25 }, hp: 80, speed: 70, attack: 12, range: 28, attackSpeed: 1.2, sight: 10, trainTime: 17, ageRequired: 2 },
+    [UnitType.Knight]: { name: 'Kỵ Sĩ', cost: { gold: 60, supplies: 50 }, hp: 120, speed: 140, attack: 14, range: 35, attackSpeed: 1.8, sight: 10, trainTime: 23, ageRequired: 3 },
     // Unique Heroes (max level 6)
-    [UnitType.HeroSpartacus]: { name: '🗡️ Spartacus', cost: { gold: 250 }, hp: 280, speed: 100, attack: 35, range: 38, attackSpeed: 1.0, sight: 10, trainTime: 55, ageRequired: 2 },
-    [UnitType.HeroZarathustra]: { name: '🔥 Zarathustra', cost: { gold: 250 }, hp: 160, speed: 90, attack: 30, range: 180, attackSpeed: 1.2, sight: 12, trainTime: 55, ageRequired: 2 },
-    [UnitType.HeroQiJiguang]: { name: '🛡️ T. Kế Quang', cost: { gold: 250 }, hp: 250, speed: 95, attack: 32, range: 45, attackSpeed: 1.1, sight: 10, trainTime: 55, ageRequired: 2 },
-    [UnitType.HeroMusashi]: { name: '⚔️ Musashi', cost: { gold: 250 }, hp: 175, speed: 110, attack: 45, range: 35, attackSpeed: 0.9, sight: 9, trainTime: 55, ageRequired: 2 },
-    [UnitType.HeroRagnar]: { name: '🪓 Ragnar', cost: { gold: 250 }, hp: 240, speed: 90, attack: 35, range: 40, attackSpeed: 1.1, sight: 10, trainTime: 55, ageRequired: 2 },
+    [UnitType.HeroSpartacus]: { name: '🗡️ Spartacus', cost: { gold: 200 }, hp: 240, speed: 100, attack: 28, range: 38, attackSpeed: 1.0, sight: 10, trainTime: 36, ageRequired: 2 },
+    [UnitType.HeroZarathustra]: { name: '🔥 Zarathustra', cost: { gold: 200 }, hp: 150, speed: 90, attack: 22, range: 180, attackSpeed: 1.2, sight: 12, trainTime: 36, ageRequired: 2 },
+    [UnitType.HeroQiJiguang]: { name: '🛡️ T. Kế Quang', cost: { gold: 200 }, hp: 220, speed: 95, attack: 26, range: 45, attackSpeed: 1.1, sight: 10, trainTime: 36, ageRequired: 2 },
+    [UnitType.HeroMusashi]: { name: '⚔️ Musashi', cost: { gold: 200 }, hp: 165, speed: 110, attack: 28, range: 35, attackSpeed: 0.9, sight: 9, trainTime: 36, ageRequired: 2 },
+    [UnitType.HeroRagnar]: { name: '🪓 Ragnar', cost: { gold: 200 }, hp: 210, speed: 90, attack: 28, range: 40, attackSpeed: 1.1, sight: 10, trainTime: 36, ageRequired: 2 },
 
     // Civ-unique elite units
-    [UnitType.Immortal]: { name: 'Bất Tử Quân', cost: { food: 60, gold: 55 }, hp: 55, speed: 80, attack: 7, range: 120, attackSpeed: 1.3, sight: 10, trainTime: 32, ageRequired: 3 },
-    [UnitType.ChuKoNu]: { name: 'Cẩm Y Vệ', cost: { food: 55, gold: 50 }, hp: 85, speed: 115, attack: 13, range: 28, attackSpeed: 0.8, sight: 10, trainTime: 28, ageRequired: 3 },
-    [UnitType.Ninja]: { name: 'Ninja', cost: { food: 50, gold: 60 }, hp: 50, speed: 130, attack: 15, range: 26, attackSpeed: 0.9, sight: 10, trainTime: 32, ageRequired: 3 },
-    [UnitType.Centurion]: { name: 'Centurion', cost: { food: 80, gold: 50 }, hp: 135, speed: 65, attack: 10, range: 80, attackSpeed: 1.5, sight: 10, trainTime: 35, ageRequired: 3 },
-    [UnitType.Ulfhednar]: { name: 'Chiến Binh Sói', cost: { food: 55, gold: 45 }, hp: 90, speed: 90, attack: 13, range: 28, attackSpeed: 1.0, sight: 10, trainTime: 30, ageRequired: 3 },
+    [UnitType.Immortal]: { name: 'Bất Tử Quân', cost: { gold: 45, supplies: 50 }, hp: 55, speed: 80, attack: 7, range: 120, attackSpeed: 1.3, sight: 10, trainTime: 22, ageRequired: 3 },
+    [UnitType.ChuKoNu]: { name: 'Cẩm Y Vệ', cost: { gold: 40, supplies: 45 }, hp: 75, speed: 115, attack: 9, range: 28, attackSpeed: 1.1, sight: 10, trainTime: 18, ageRequired: 3 },
+    [UnitType.Ninja]: { name: 'Ninja', cost: { gold: 50, supplies: 40 }, hp: 50, speed: 130, attack: 10, range: 26, attackSpeed: 0.9, sight: 10, trainTime: 22, ageRequired: 3 },
+    [UnitType.Centurion]: { name: 'Centurion', cost: { gold: 40, supplies: 65 }, hp: 110, speed: 65, attack: 10, range: 80, attackSpeed: 1.5, sight: 10, trainTime: 24, ageRequired: 3 },
+    [UnitType.Ulfhednar]: { name: 'Chiến Binh Sói', cost: { gold: 35, supplies: 45 }, hp: 85, speed: 90, attack: 11, range: 28, attackSpeed: 1.1, sight: 10, trainTime: 20, ageRequired: 3 },
 
     // Civ-unique cavalry (Stable)
-    [UnitType.WarElephant]: { name: '🐘 Voi Chiến', cost: { food: 120, gold: 80 }, hp: 300, speed: 60, attack: 14, range: 110, attackSpeed: 2.0, sight: 12, trainTime: 45, ageRequired: 3 },
-    [UnitType.FireLancer]: { name: '🎇 Hỏa Thương', cost: { food: 70, gold: 60 }, hp: 110, speed: 135, attack: 25, range: 35, attackSpeed: 1.8, sight: 10, trainTime: 35, ageRequired: 3 },
-    [UnitType.Yabusame]: { name: '🏹 Yabusame', cost: { food: 60, gold: 70 }, hp: 90, speed: 145, attack: 10, range: 140, attackSpeed: 1.2, sight: 11, trainTime: 30, ageRequired: 3 },
-    [UnitType.Equites]: { name: '🛡️ Equites', cost: { food: 65, gold: 60 }, hp: 130, speed: 130, attack: 12, range: 35, attackSpeed: 1.5, sight: 10, trainTime: 32, ageRequired: 3 },
-    [UnitType.BearRider]: { name: '🐻 Kỵ Binh Gấu', cost: { food: 75, gold: 45 }, hp: 170, speed: 110, attack: 22, range: 30, attackSpeed: 1.4, sight: 10, trainTime: 28, ageRequired: 3 },
+    [UnitType.WarElephant]: { name: '🐘 Voi Chiến', cost: { gold: 65, supplies: 100 }, hp: 160, speed: 60, attack: 16, range: 70, attackSpeed: 2.0, sight: 12, trainTime: 26, ageRequired: 3 },
+    [UnitType.FireLancer]: { name: '🎇 Hỏa Thương', cost: { gold: 50, supplies: 55 }, hp: 100, speed: 135, attack: 15, range: 35, attackSpeed: 1.8, sight: 10, trainTime: 24, ageRequired: 3 },
+    [UnitType.Yabusame]: { name: '🏹 Yabusame', cost: { gold: 55, supplies: 50 }, hp: 85, speed: 145, attack: 10, range: 140, attackSpeed: 1.2, sight: 11, trainTime: 20, ageRequired: 3 },
+    [UnitType.Equites]: { name: '🛡️ Equites', cost: { gold: 50, supplies: 55 }, hp: 125, speed: 130, attack: 12, range: 35, attackSpeed: 1.5, sight: 10, trainTime: 22, ageRequired: 3 },
+    [UnitType.BearRider]: { name: '🐻 Kỵ Binh Gấu', cost: { gold: 35, supplies: 60 }, hp: 140, speed: 110, attack: 12, range: 30, attackSpeed: 1.4, sight: 10, trainTime: 18, ageRequired: 3 },
+
+    // Neutral Creeps
+    [UnitType.CreepWolf]: { name: '🐺 Sói Hoang', cost: {}, hp: 40, speed: 100, attack: 6, range: 24, attackSpeed: 1.0, sight: 6, trainTime: 0, ageRequired: 1 },
+    [UnitType.CreepSkeleton]: { name: '💀 Bộ Xương', cost: {}, hp: 80, speed: 70, attack: 10, range: 30, attackSpeed: 1.3, sight: 8, trainTime: 0, ageRequired: 1 },
+    [UnitType.CreepOgre]: { name: '🧌 Ogre', cost: {}, hp: 200, speed: 50, attack: 18, range: 32, attackSpeed: 1.8, sight: 8, trainTime: 0, ageRequired: 1 },
+    [UnitType.CreepDragon]: { name: '🐉 Rồng Tây', cost: {}, hp: 800, speed: 40, attack: 40, range: 80, attackSpeed: 2.0, sight: 12, trainTime: 0, ageRequired: 1 },
+    [UnitType.CreepDragonEast]: { name: '🐲 Rồng Đông', cost: {}, hp: 650, speed: 55, attack: 35, range: 100, attackSpeed: 1.6, sight: 14, trainTime: 0, ageRequired: 1 },
 
     [UnitType.TargetDummy]: { name: 'Hình Nhân', cost: {}, hp: 999999999, speed: 0, attack: 0, range: 0, attackSpeed: 0, sight: 4, trainTime: 1, ageRequired: 1 },
 };
 
+// ---- Neutral Creep Camp Config ----
+export const CREEP_TEAM = 99; // Neutral hostile team
+
+export enum CreepCampType {
+    WolfDen = 'wolfDen',
+    SkeletonTomb = 'skeletonTomb',
+    OgreCamp = 'ogreCamp',
+    DragonLair = 'dragonLair',
+    DragonLairEast = 'dragonLairEast',
+}
+
+export interface CreepCampData {
+    name: string;
+    units: { type: UnitType; count: number }[];
+    aggroRange: number;     // tiles — how far creeps detect enemies
+    leashRange: number;     // tiles — how far creeps chase before returning
+    dropGold: number;       // total gold dropped when camp cleared
+    dropXP: number;         // total XP given to hero
+    respawnTime: number;    // seconds until camp respawns
+    campRadius: number;     // tiles — visual camp area radius
+}
+
+export const CREEP_CAMP_DATA: Record<CreepCampType, CreepCampData> = {
+    [CreepCampType.WolfDen]: {
+        name: '🐺 Hang Sói',
+        units: [{ type: UnitType.CreepWolf, count: 4 }],
+        aggroRange: 6, leashRange: 12, dropGold: 50, dropXP: 60,
+        respawnTime: 120, campRadius: 4,
+    },
+    [CreepCampType.SkeletonTomb]: {
+        name: '💀 Lăng Mộ',
+        units: [{ type: UnitType.CreepSkeleton, count: 3 }],
+        aggroRange: 8, leashRange: 14, dropGold: 80, dropXP: 100,
+        respawnTime: 150, campRadius: 5,
+    },
+    [CreepCampType.OgreCamp]: {
+        name: '🧌 Trại Ogre',
+        units: [{ type: UnitType.CreepOgre, count: 2 }],
+        aggroRange: 8, leashRange: 14, dropGold: 120, dropXP: 150,
+        respawnTime: 180, campRadius: 5,
+    },
+    [CreepCampType.DragonLair]: {
+        name: '🐉 Hang Rồng Tây',
+        units: [{ type: UnitType.CreepDragon, count: 1 }],
+        aggroRange: 12, leashRange: 18, dropGold: 250, dropXP: 300,
+        respawnTime: 300, campRadius: 6,
+    },
+    [CreepCampType.DragonLairEast]: {
+        name: '🐲 Long Cung',
+        units: [{ type: UnitType.CreepDragonEast, count: 1 }],
+        aggroRange: 14, leashRange: 20, dropGold: 220, dropXP: 280,
+        respawnTime: 280, campRadius: 6,
+    },
+};
+
+export function isCreepType(type: UnitType): boolean {
+    return type === UnitType.CreepWolf || type === UnitType.CreepSkeleton ||
+        type === UnitType.CreepOgre || type === UnitType.CreepDragon || type === UnitType.CreepDragonEast;
+}
+
 // ---- Gather rates ----
 export const GATHER_RATES: Record<ResourceNodeType, { rate: number; carry: number; resourceType: ResourceType }> = {
-    [ResourceNodeType.Tree]: { rate: 0.45, carry: 10, resourceType: ResourceType.Wood },
-    [ResourceNodeType.GoldMine]: { rate: 0.38, carry: 10, resourceType: ResourceType.Gold },
-    [ResourceNodeType.StoneMine]: { rate: 0.38, carry: 10, resourceType: ResourceType.Stone },
-    [ResourceNodeType.BerryBush]: { rate: 0.32, carry: 10, resourceType: ResourceType.Food },
-    [ResourceNodeType.Farm]: { rate: 0.35, carry: 10, resourceType: ResourceType.Food },
+    [ResourceNodeType.Tree]: { rate: 0.65, carry: 10, resourceType: ResourceType.Supplies },
+    [ResourceNodeType.GoldMine]: { rate: 0.55, carry: 10, resourceType: ResourceType.Gold },
 };
 
 // ---- Ages ----
 export const AGE_COSTS: Cost[] = [
     {},
-    { food: 500, gold: 200 },
-    { food: 800, gold: 500, stone: 200 },
-    { food: 1000, gold: 800, stone: 400 },
+    { gold: 250, supplies: 100 },
+    { gold: 500, supplies: 250 },
+    { gold: 700, supplies: 400 },
 ];
 export function getAgeNames(): string[] {
     return [t('age.1'), t('age.2'), t('age.3'), t('age.4')];
@@ -438,17 +575,21 @@ export enum UpgradeType {
     MeleeDefense = 'meleeDefense',
     RangedDefense = 'rangedDefense',
     // Economy upgrades (Market)
-    GatherFood = 'gatherFood',
-    GatherWood = 'gatherWood',
+    GatherSupplies = 'gatherSupplies',
     GatherGold = 'gatherGold',
-    GatherStone = 'gatherStone',
     CarryCapacity = 'carryCapacity',
     VillagerSpeed = 'villagerSpeed',
+    // Blacksmith: Elite/Special unit upgrades
+    EliteAttack = 'eliteAttack',
+    EliteDefense = 'eliteDefense',
     // Government Center upgrades
     Architecture = 'architecture',
     MeleeHealth = 'meleeHealth',
     Cartography = 'cartography',
     Trade = 'trade',
+
+    // Blacksmith cavalry upgrade
+    CavalryAttack = 'cavalryAttack',
 }
 
 export function updateGameTranslations(): void {
@@ -481,7 +622,7 @@ export function updateGameTranslations(): void {
             const m = mods[u];
             if (m && typeof m.name === 'string') {
                 // E.g 'Cấm Quân'
-                const transKey = `skill.${civ}.${u}.name`;
+                const transKey = `civUnit.${civ}.${u}`;
                 Object.defineProperty(m, 'name', { get: () => t(transKey), configurable: true });
             }
         }
@@ -503,16 +644,16 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
     [UpgradeType.MeleeAttack]: {
         name: 'Tấn Công Cận Chiến',
         icon: '⚔',
-        description: '+2 Tấn công cho Lính Giáo, Kiếm Sĩ, Kỵ Sĩ, Trinh Sát',
+        description: '+2 Tấn công cho Lính Giáo, Kiếm Sĩ',
         maxLevel: 3,
         costs: [
-            { food: 100, gold: 50 },
-            { food: 200, gold: 100 },
-            { food: 300, gold: 200 },
+            { supplies: 100, gold: 50 },
+            { supplies: 200, gold: 100 },
+            { supplies: 250, gold: 170 },
         ],
         bonusPerLevel: 2,
-        researchTime: [30, 45, 60],
-        ageRequired: [1, 2, 3],
+        researchTime: [25, 36, 50],
+        ageRequired: [2, 3, 4],
     },
     [UpgradeType.RangedAttack]: {
         name: 'Tấn Công Tầm Xa',
@@ -520,27 +661,27 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
         description: '+2 Tấn công cho Cung Thủ',
         maxLevel: 3,
         costs: [
-            { food: 100, gold: 75 },
-            { food: 200, gold: 150 },
-            { food: 300, gold: 250 },
+            { supplies: 100, gold: 75 },
+            { supplies: 200, gold: 150 },
+            { supplies: 250, gold: 200 },
         ],
         bonusPerLevel: 2,
-        researchTime: [35, 50, 65],
-        ageRequired: [1, 2, 3],
+        researchTime: [28, 40, 55],
+        ageRequired: [2, 3, 4],
     },
     [UpgradeType.MeleeDefense]: {
         name: 'Giáp Cận Chiến',
         icon: '🛡',
-        description: '+1 Giáp, +10 HP cho lính cận chiến (Giáo, Kiếm, Kỵ Sĩ)',
+        description: '+1 Giáp, +10 HP cho lính cận chiến (Giáo, Kiếm)',
         maxLevel: 3,
         costs: [
-            { food: 100, wood: 75 },
-            { food: 200, wood: 150 },
-            { food: 300, wood: 250 },
+            { supplies: 175 },
+            { supplies: 350 },
+            { supplies: 450 },
         ],
         bonusPerLevel: 1,
-        researchTime: [30, 45, 60],
-        ageRequired: [1, 2, 3],
+        researchTime: [25, 36, 50],
+        ageRequired: [2, 3, 4],
     },
     [UpgradeType.RangedDefense]: {
         name: 'Giáp Tầm Xa',
@@ -548,41 +689,27 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
         description: '+1 Giáp, +8 HP cho cung thủ',
         maxLevel: 3,
         costs: [
-            { food: 100, wood: 100 },
-            { food: 200, wood: 200 },
-            { food: 300, wood: 300 },
+            { supplies: 200 },
+            { supplies: 300 },
+            { supplies: 450 },
         ],
         bonusPerLevel: 1,
-        researchTime: [35, 50, 65],
-        ageRequired: [1, 2, 3],
+        researchTime: [28, 36, 55],
+        ageRequired: [2, 3, 4],
     },
     // ---- ECONOMY UPGRADES (Market) ----
-    [UpgradeType.GatherFood]: {
-        name: 'Khai Thác Thực Phẩm',
-        icon: '🌾',
-        description: '+15% tốc độ thu hoạch thực phẩm',
+    [UpgradeType.GatherSupplies]: {
+        name: 'Khai Thác Vật Tư',
+        icon: '📦',
+        description: '+15% tốc độ thu hoạch vật tư',
         maxLevel: 3,
         costs: [
-            { food: 50, wood: 75 },
-            { food: 100, wood: 150 },
-            { food: 200, wood: 250 },
+            { supplies: 100, gold: 25 },
+            { supplies: 200, gold: 50 },
+            { supplies: 350, gold: 100 },
         ],
         bonusPerLevel: 0.15,
-        researchTime: [25, 40, 55],
-        ageRequired: [1, 2, 3],
-    },
-    [UpgradeType.GatherWood]: {
-        name: 'Khai Thác Gỗ',
-        icon: '🪵',
-        description: '+15% tốc độ khai thác gỗ',
-        maxLevel: 3,
-        costs: [
-            { food: 75, wood: 50 },
-            { food: 150, wood: 100 },
-            { food: 250, wood: 200 },
-        ],
-        bonusPerLevel: 0.15,
-        researchTime: [25, 40, 55],
+        researchTime: [20, 32, 45],
         ageRequired: [1, 2, 3],
     },
     [UpgradeType.GatherGold]: {
@@ -591,26 +718,12 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
         description: '+15% tốc độ khai thác vàng',
         maxLevel: 3,
         costs: [
-            { food: 75, gold: 50 },
-            { food: 150, gold: 100 },
-            { food: 250, gold: 200 },
+            { supplies: 75, gold: 50 },
+            { supplies: 150, gold: 100 },
+            { supplies: 250, gold: 200 },
         ],
         bonusPerLevel: 0.15,
-        researchTime: [25, 40, 55],
-        ageRequired: [1, 2, 3],
-    },
-    [UpgradeType.GatherStone]: {
-        name: 'Khai Thác Đá',
-        icon: '🪨',
-        description: '+15% tốc độ khai thác đá',
-        maxLevel: 3,
-        costs: [
-            { food: 75, stone: 50 },
-            { food: 150, stone: 100 },
-            { food: 250, stone: 200 },
-        ],
-        bonusPerLevel: 0.15,
-        researchTime: [25, 40, 55],
+        researchTime: [20, 32, 45],
         ageRequired: [1, 2, 3],
     },
     [UpgradeType.CarryCapacity]: {
@@ -619,12 +732,12 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
         description: '+5 sức mang tài nguyên cho dân',
         maxLevel: 3,
         costs: [
-            { food: 50, wood: 50 },
-            { food: 100, wood: 100 },
-            { food: 200, wood: 200 },
+            { supplies: 100 },
+            { supplies: 200 },
+            { supplies: 400 },
         ],
         bonusPerLevel: 5,
-        researchTime: [20, 35, 50],
+        researchTime: [16, 28, 40],
         ageRequired: [1, 2, 3],
     },
     [UpgradeType.VillagerSpeed]: {
@@ -633,11 +746,11 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
         description: '+10% tốc độ di chuyển cho dân',
         maxLevel: 2,
         costs: [
-            { food: 100, gold: 50 },
-            { food: 200, gold: 100 },
+            { supplies: 100, gold: 50 },
+            { supplies: 200, gold: 100 },
         ],
         bonusPerLevel: 0.10,
-        researchTime: [30, 50],
+        researchTime: [24, 40],
         ageRequired: [2, 3],
     },
     [UpgradeType.Architecture]: {
@@ -645,7 +758,7 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
         icon: '🏗️',
         description: '+20% Máu công trình, +20% Tốc độ xây dựng',
         maxLevel: 1,
-        costs: [{ wood: 300, stone: 200 }],
+        costs: [{ supplies: 500 }],
         bonusPerLevel: 0.20,
         researchTime: [45],
         ageRequired: [3],
@@ -653,9 +766,9 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
     [UpgradeType.MeleeHealth]: {
         name: 'Chiến Binh Thép',
         icon: '💪',
-        description: '+15% Máu cho Lính Giáo, Kiếm, Kỵ, Trinh Sát',
+        description: '+15% Máu cho Lính Giáo, Kiếm Sĩ',
         maxLevel: 1,
-        costs: [{ food: 250, gold: 150 }],
+        costs: [{ supplies: 250, gold: 150 }],
         bonusPerLevel: 0.15,
         researchTime: [40],
         ageRequired: [3],
@@ -665,7 +778,7 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
         icon: '🗺️',
         description: 'Chia sẻ tầm nhìn với Đồng minh',
         maxLevel: 1,
-        costs: [{ food: 100, gold: 100 }],
+        costs: [{ supplies: 100, gold: 100 }],
         bonusPerLevel: 1,
         researchTime: [30],
         ageRequired: [3],
@@ -675,10 +788,53 @@ export const UPGRADE_DATA: Record<UpgradeType, UpgradeData> = {
         icon: '🤝',
         description: 'Cho phép gửi tài nguyên cho Đồng minh',
         maxLevel: 1,
-        costs: [{ food: 150, gold: 150 }],
+        costs: [{ supplies: 150, gold: 150 }],
         bonusPerLevel: 1,
         researchTime: [40],
         ageRequired: [3],
+    },
+    // ---- BLACKSMITH: Elite / Special Unit Upgrades ----
+    [UpgradeType.EliteAttack]: {
+        name: 'Rèn Vũ Khí Tinh Nhuệ',
+        icon: '🔱',
+        description: '+3 Tấn công cho quân Elite & Kỵ binh đặc biệt',
+        maxLevel: 3,
+        costs: [
+            { supplies: 150, gold: 100 },
+            { supplies: 300, gold: 200 },
+            { supplies: 350, gold: 280 },
+        ],
+        bonusPerLevel: 3,
+        researchTime: [28, 40, 55],
+        ageRequired: [3, 3, 4],
+    },
+    [UpgradeType.EliteDefense]: {
+        name: 'Giáp Tinh Nhuệ',
+        icon: '🛡️',
+        description: '+2 Giáp, +15 HP cho quân Elite & Kỵ binh đặc biệt',
+        maxLevel: 3,
+        costs: [
+            { supplies: 250 },
+            { supplies: 500 },
+            { supplies: 600 },
+        ],
+        bonusPerLevel: 2,
+        researchTime: [28, 40, 55],
+        ageRequired: [3, 3, 4],
+    },
+    [UpgradeType.CavalryAttack]: {
+        name: 'Kỵ Binh Tinh Nhuệ',
+        icon: '🐴',
+        description: '+3 Tấn công, +1 Giáp, +10 HP cho Kỵ Sĩ, Trinh Sát',
+        maxLevel: 3,
+        costs: [
+            { supplies: 150, gold: 75 },
+            { supplies: 250, gold: 150 },
+            { supplies: 320, gold: 200 },
+        ],
+        bonusPerLevel: 3,
+        researchTime: [25, 36, 50],
+        ageRequired: [2, 3, 4],
     },
 };
 
@@ -694,7 +850,7 @@ export const C = {
     rock1: '#7a7a72', rock2: '#706e66', // grey stone
     water: '#2888b8', waterDeep: '#1a6898',
     // Entities
-    player: '#4488ff', enemy: '#ff4444', neutral: '#cccccc',
+    player: '#00ff88', enemy: '#ff4444', neutral: '#cccccc',
     gold: '#ffd700', stone: '#8899aa', wood: '#8B5E3C', food: '#e85050',
     selection: '#00ff66', selectionBox: 'rgba(0,255,100,0.15)',
     selectionBoxBorder: 'rgba(0,255,100,0.6)',

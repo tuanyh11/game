@@ -67,13 +67,14 @@ export const SPAWN_ITEMS: SpawnItemDef[] = [
     { type: BuildingType.Stable, entityCategory: 'building', get label() { return t('bld.stable'); }, get group() { return t('spawn.group.building'); } },
     { type: BuildingType.Tower, entityCategory: 'building', get label() { return t('bld.tower'); }, get group() { return t('spawn.group.building'); } },
     { type: BuildingType.HeroAltar, entityCategory: 'building', get label() { return t('bld.heroAltar'); }, get group() { return t('spawn.group.building'); } },
+    { type: BuildingType.Blacksmith, entityCategory: 'building', get label() { return t('bld.blacksmith'); }, get group() { return t('spawn.group.building'); } },
+    { type: BuildingType.Armory, entityCategory: 'building', get label() { return t('bld.armory'); }, get group() { return t('spawn.group.building'); } },
     { type: BuildingType.GovernmentCenter, entityCategory: 'building', get label() { return t('bld.governmentCenter'); }, get group() { return t('spawn.group.building'); } },
+    { type: BuildingType.Wall, entityCategory: 'building', get label() { return t('bld.wall'); }, get group() { return t('spawn.group.building'); } },
 
     // --- RESOURCES ---
     { type: ResourceNodeType.Tree, entityCategory: 'resource', get label() { return t('res.tree'); }, get group() { return t('spawn.group.resource'); } },
     { type: ResourceNodeType.GoldMine, entityCategory: 'resource', get label() { return t('res.goldMine'); }, get group() { return t('spawn.group.resource'); } },
-    { type: ResourceNodeType.StoneMine, entityCategory: 'resource', get label() { return t('res.stoneMine'); }, get group() { return t('spawn.group.resource'); } },
-    { type: ResourceNodeType.BerryBush, entityCategory: 'resource', get label() { return t('res.berryBush'); }, get group() { return t('spawn.group.resource'); } },
 ];
 
 export interface SpawnPaletteContext {

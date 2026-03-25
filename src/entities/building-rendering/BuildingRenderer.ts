@@ -13,13 +13,14 @@ import { drawTownCenter } from "./DrawTownCenter";
 import { drawHouse } from "./DrawHouse";
 import { drawBarracks } from "./DrawBarracks";
 import { drawCamp } from "./DrawCamp";
-import { drawFarm } from "./DrawFarm";
 import { drawStable } from "./DrawStable";
 import { drawTower } from "./DrawTower";
 import { drawHeroAltar } from "./DrawHeroAltar";
 import { drawBlacksmith } from "./DrawBlacksmith";
 import { drawGovernmentCenter } from "./DrawGovernmentCenter";
 import { drawWall } from "./draw-wall";
+import { drawArmory } from "./DrawArmory";
+import { RenderCache } from "../RenderCache";
 
 export function renderBuilding(b: Building, ctx: CanvasRenderingContext2D): void {
     if (!b.alive) return;
@@ -38,47 +39,79 @@ export function renderBuilding(b: Building, ctx: CanvasRenderingContext2D): void
         ctx.globalAlpha = (ctx.globalAlpha ?? 1) * (0.6 + 0.4 * Math.sin(b.damageFlashTimer * 40));
     }
 
-    // ===== 3D BUILDING SHADOW (cast to bottom-right) =====
-    if (b.built || pct > 0.5) {
-        const shadowAlpha = b.built ? 0.18 : 0.18 * pct;
-        const shadowOffX = Math.min(w * 0.15, 8);
-        const shadowOffY = Math.min(h * 0.08, 5);
-        ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
-        // Right shadow
-        ctx.fillRect(left + w, top + shadowOffY + 4, shadowOffX, h - 4);
-        // Bottom shadow
-        ctx.fillRect(left + 4, top + h, w - 4 + shadowOffX, shadowOffY);
-        // Corner shadow
-        ctx.fillStyle = `rgba(0,0,0,${shadowAlpha * 0.6})`;
-        ctx.fillRect(left + w, top + h, shadowOffX, shadowOffY);
-    }
-
-    // ===== Ambient occlusion (dark gradient at building base) =====
+    // ===== RENDER STATIC BASE (CACHED) =====
     if (b.built) {
-        ctx.fillStyle = 'rgba(0,0,0,0.06)';
-        ctx.fillRect(left, top + h - 4, w, 4);
-    }
+        const cacheKey = `bldg-${b.type}-${b.civilization}-${b.age}`;
+        const pad = Math.max(w * 0.15, h * 0.15, 12); // PADDING for shadow
+        const cw = w + pad * 2;
+        const ch = h + pad * 2;
 
-    // Draw the actual building
-    switch (b.type) {
-        case BuildingType.TownCenter: drawTownCenter(b, ctx, left, top, w, h); break;
-        case BuildingType.House: drawHouse(b, ctx, left, top, w, h); break;
-        case BuildingType.Wall: drawWall(ctx, b); break;
-        case BuildingType.Barracks: drawBarracks(b, ctx, left, top, w, h); break;
-        case BuildingType.Market: drawCamp(b, ctx, left, top, w, h, C.gold); break;
-        case BuildingType.Farm: drawFarm(b, ctx, left, top, w, h); break;
-        case BuildingType.Stable: drawStable(b, ctx, left, top, w, h); break;
-        case BuildingType.Tower: drawTower(b, ctx, left, top, w, h); break;
-        case BuildingType.HeroAltar: drawHeroAltar(b, ctx, left, top, w, h); break;
-        case BuildingType.Blacksmith: drawBlacksmith(b, ctx, left, top, w, h); break;
-        case BuildingType.GovernmentCenter: drawGovernmentCenter(b, ctx, left, top, w, h); break;
-    }
+        const cachedBldg = RenderCache.get(cacheKey, cw, ch, (oCtx) => {
+            oCtx.translate(pad, pad); // Center inside padded bounds
 
-    // ===== Building 3D highlight (top-left edge lit) =====
-    if (b.built && b.type !== BuildingType.Farm) {
-        ctx.fillStyle = 'rgba(255,255,240,0.05)';
-        ctx.fillRect(left, top, w, 3); // top edge
-        ctx.fillRect(left, top, 3, h); // left edge
+            // Building Shadow
+            const shadowOffX = Math.min(w * 0.15, 8);
+            const shadowOffY = Math.min(h * 0.08, 5);
+            oCtx.fillStyle = `rgba(0,0,0,0.18)`;
+            oCtx.fillRect(w, shadowOffY + 4, shadowOffX, h - 4);
+            oCtx.fillRect(4, h, w - 4 + shadowOffX, shadowOffY);
+            oCtx.fillStyle = `rgba(0,0,0,0.11)`;
+            oCtx.fillRect(w, h, shadowOffX, shadowOffY);
+
+            // Ambient occlusion
+            oCtx.fillStyle = 'rgba(0,0,0,0.06)';
+            oCtx.fillRect(0, h - 4, w, 4);
+
+            // Draw the actual building
+            switch (b.type) {
+                case BuildingType.TownCenter: drawTownCenter(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h); break;
+                case BuildingType.House: drawHouse(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h); break;
+                case BuildingType.Wall: drawWall(b, oCtx, 0, 0, w, h); break;
+                case BuildingType.Barracks: drawBarracks(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h); break;
+                case BuildingType.Market: drawCamp(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h, C.gold); break;
+                case BuildingType.Stable: drawStable(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h); break;
+                case BuildingType.Tower: drawTower(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h); break;
+                case BuildingType.HeroAltar: drawHeroAltar(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h); break;
+                case BuildingType.Blacksmith: drawBlacksmith(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h); break;
+                case BuildingType.GovernmentCenter: drawGovernmentCenter(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h); break;
+                case BuildingType.Armory: drawArmory(b, oCtx as CanvasRenderingContext2D, 0, 0, w, h); break;
+            }
+
+            // 3D highlight
+            oCtx.fillStyle = 'rgba(255,255,240,0.05)';
+            oCtx.fillRect(0, 0, w, 3);
+            oCtx.fillRect(0, 0, 3, h);
+        });
+
+        // Draw cached building
+        ctx.globalAlpha = 1;
+        ctx.drawImage(cachedBldg, left - pad, top - pad);
+    } else {
+        // ===== RENDER DYNAMIC BASE (CONSTRUCTION PHASE) =====
+        if (pct > 0.5) {
+            const shadowAlpha = 0.18 * pct;
+            const shadowOffX = Math.min(w * 0.15, 8);
+            const shadowOffY = Math.min(h * 0.08, 5);
+            ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
+            ctx.fillRect(left + w, top + shadowOffY + 4, shadowOffX, h - 4);
+            ctx.fillRect(left + 4, top + h, w - 4 + shadowOffX, shadowOffY);
+            ctx.fillStyle = `rgba(0,0,0,${shadowAlpha * 0.6})`;
+            ctx.fillRect(left + w, top + h, shadowOffX, shadowOffY);
+        }
+
+        switch (b.type) {
+            case BuildingType.TownCenter: drawTownCenter(b, ctx, left, top, w, h); break;
+            case BuildingType.House: drawHouse(b, ctx, left, top, w, h); break;
+            case BuildingType.Wall: drawWall(b, ctx, left, top, w, h); break;
+            case BuildingType.Barracks: drawBarracks(b, ctx, left, top, w, h); break;
+            case BuildingType.Market: drawCamp(b, ctx, left, top, w, h, C.gold); break;
+            case BuildingType.Stable: drawStable(b, ctx, left, top, w, h); break;
+            case BuildingType.Tower: drawTower(b, ctx, left, top, w, h); break;
+            case BuildingType.HeroAltar: drawHeroAltar(b, ctx, left, top, w, h); break;
+            case BuildingType.Blacksmith: drawBlacksmith(b, ctx, left, top, w, h); break;
+            case BuildingType.GovernmentCenter: drawGovernmentCenter(b, ctx, left, top, w, h); break;
+            case BuildingType.Armory: drawArmory(b, ctx, left, top, w, h); break;
+        }
     }
 
     ctx.globalAlpha = 1;
@@ -196,6 +229,119 @@ export function renderBuilding(b: Building, ctx: CanvasRenderingContext2D): void
         ctx.font = "bold 7px 'Inter', sans-serif";
         ctx.textAlign = 'center';
         ctx.fillText('⬆ LÊN ĐỜI', upBarX + upBarW / 2, upBarY - 3);
+        ctx.textAlign = 'left';
+    }
+
+    // ===== TRAINING ANIMATION (TC / Barracks / Stable / HeroAltar) =====
+    if (b.built && b.trainQueue.length > 0) {
+        const now = Date.now() / 1000;
+        const prog = b.trainProgress;
+        const pulse = 0.25 + Math.sin(now * 4) * 0.15;
+
+        // Pulsing glow around building
+        ctx.save();
+        const glowColor = b.type === BuildingType.TownCenter
+            ? `rgba(100,200,255,${pulse})`   // Blue glow for TC
+            : `rgba(255,150,50,${pulse})`;    // Orange glow for military buildings
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = 8 + prog * 6;
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(left, top, w, h);
+        ctx.restore();
+
+        // Rising sparkle dots (unit being "forged")
+        for (let i = 0; i < 3; i++) {
+            const phase = (now * 1.2 + i * 0.4) % 1;
+            const sx = left + w * 0.3 + ((i * 29) % Math.max(1, w * 0.4));
+            const sy = top + h - phase * (h * 0.6);
+            const sparkAlpha = phase < 0.7 ? phase * 1.0 : (1 - phase) * 3.3;
+            const sparkColor = b.type === BuildingType.TownCenter
+                ? `rgba(100,200,255,${Math.min(0.8, sparkAlpha)})`
+                : `rgba(255,180,80,${Math.min(0.8, sparkAlpha)})`;
+            ctx.fillStyle = sparkColor;
+            ctx.fillRect(sx, sy, 2, 2);
+        }
+
+        // Progress bar below building (compact, near doorway)
+        const trainBarW = w * 0.5, trainBarH = 4;
+        const trainBarX = left + (w - trainBarW) / 2;
+        const trainBarY = top + h + 2;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(trainBarX - 1, trainBarY - 1, trainBarW + 2, trainBarH + 2);
+        const trainFillColor = b.type === BuildingType.TownCenter ? '#66ccff' : '#ffaa44';
+        ctx.fillStyle = trainFillColor;
+        ctx.fillRect(trainBarX, trainBarY, trainBarW * prog, trainBarH);
+    }
+
+    // ===== RESEARCH/UPGRADE ANIMATION (Market / Blacksmith / GovernmentCenter) =====
+    if (b.built && b.isResearching) {
+        const now = Date.now() / 1000;
+        const prog = b.researchProgress;
+        const pulse = 0.3 + Math.sin(now * 3.5) * 0.15;
+
+        // Pulsing cyan/green glow around building
+        ctx.save();
+        const resGlow = `rgba(50,200,180,${pulse})`;
+        ctx.shadowColor = resGlow;
+        ctx.shadowBlur = 10 + prog * 8;
+        ctx.strokeStyle = resGlow;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(left - 1, top - 1, w + 2, h + 2);
+        ctx.restore();
+
+        // Rising scroll/rune sparkle particles
+        for (let i = 0; i < 5; i++) {
+            const phase = (now * 1.0 + i * 0.5) % 1;
+            const sx = left + 6 + ((i * 31 + Math.floor(now * 1.5)) % Math.max(1, w - 12));
+            const sy = top + h - phase * (h + 15);
+            const sparkAlpha = phase < 0.7 ? phase * 1.0 : (1 - phase) * 3.3;
+            // Alternate cyan and gold sparkles
+            const sparkColor = i % 2 === 0
+                ? `rgba(50,220,200,${Math.min(0.8, sparkAlpha)})`
+                : `rgba(200,180,50,${Math.min(0.6, sparkAlpha)})`;
+            ctx.fillStyle = sparkColor;
+            ctx.fillRect(sx, sy, 2, 2);
+            // Tiny glow dot
+            ctx.fillStyle = `rgba(255,255,255,${Math.min(0.4, sparkAlpha * 0.5)})`;
+            ctx.fillRect(sx + 0.5, sy - 0.5, 1, 1);
+        }
+
+        // Research progress bar (above building)
+        const resBarW = w * 0.7, resBarH = 6;
+        const resBarX = left + (w - resBarW) / 2;
+        const resBarY = top - 18;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(resBarX - 1, resBarY - 1, resBarW + 2, resBarH + 2);
+        ctx.fillStyle = '#0a1510';
+        ctx.fillRect(resBarX, resBarY, resBarW, resBarH);
+
+        // Cyan/teal fill
+        const fillW = (resBarW - 2) * prog;
+        const resGrad = ctx.createLinearGradient(resBarX, resBarY, resBarX, resBarY + resBarH);
+        resGrad.addColorStop(0, '#40e0c0');
+        resGrad.addColorStop(0.5, '#20b090');
+        resGrad.addColorStop(1, '#108060');
+        ctx.fillStyle = resGrad;
+        ctx.fillRect(resBarX + 1, resBarY + 1, fillW, resBarH - 2);
+
+        // Highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.fillRect(resBarX + 1, resBarY + 1, fillW, 2);
+
+        // Percentage text
+        ctx.fillStyle = '#fff';
+        ctx.font = "bold 6px 'Inter', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText(`${Math.floor(prog * 100)}%`, resBarX + resBarW / 2, resBarY + resBarH - 1);
+        ctx.textAlign = 'left';
+
+        // Label
+        ctx.fillStyle = '#40e0c0';
+        ctx.font = "bold 7px 'Inter', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('📜 Nghiên cứu', resBarX + resBarW / 2, resBarY - 3);
         ctx.textAlign = 'left';
     }
 

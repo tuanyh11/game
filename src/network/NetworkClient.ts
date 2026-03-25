@@ -38,7 +38,11 @@ export class NetworkClient {
     constructor(serverUrl?: string) {
         if (serverUrl) {
             this.serverUrl = serverUrl;
+        } else if (import.meta.env?.DEV) {
+            // Dev mode: Vite runs on port 5173, server on port 4000
+            this.serverUrl = 'ws://localhost:4000/game';
         } else if (typeof window !== 'undefined' && window.location) {
+            // Production: auto-detect from current page URL
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             this.serverUrl = `${protocol}//${window.location.host}/game`;
         } else {

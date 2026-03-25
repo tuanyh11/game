@@ -125,3 +125,96 @@ export function renderHeroLevelUp(unit: Unit, ctx: CanvasRenderingContext2D, x: 
         ctx.textAlign = 'left';
     }
 }
+
+// ============================================================
+//  HERO AURA BUFF INDICATOR — shows on units receiving aura
+//  Small colored particles/icon above the unit
+// ============================================================
+export function renderAuraBuffIndicator(unit: Unit, ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    if (!unit.auraBuffType) return;
+
+    const t = unit.animTimer;
+    let color1: string, color2: string;
+
+    switch (unit.auraBuffType) {
+        case 'armor':  color1 = '#60a5fa'; color2 = '#93c5fd'; break; // blue shield
+        case 'atkSpeed': color1 = '#f87171'; color2 = '#fca5a5'; break; // red flames
+        case 'regen':  color1 = '#4ade80'; color2 = '#86efac'; break; // green sparkles
+        case 'speed':  color1 = '#e2e8f0'; color2 = '#f1f5f9'; break; // white wind
+        case 'hp':     color1 = '#fbbf24'; color2 = '#fde68a'; break; // golden glow
+        default: return;
+    }
+
+    // Subtle glow ring at feet
+    ctx.globalAlpha = 0.08 + Math.sin(t * 3) * 0.04;
+    ctx.fillStyle = color1;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 10, 11, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2-3 small rising particles
+    ctx.globalAlpha = 0.5 + Math.sin(t * 4) * 0.2;
+    for (let i = 0; i < 2; i++) {
+        const px = x + Math.sin(t * 3 + i * 3.14) * 6;
+        const py = y + 6 - ((t * 15 + i * 12) % 24);
+        const size = 1.5 - ((t * 15 + i * 12) % 24) / 24;
+        if (size > 0.3) {
+            ctx.fillStyle = i % 2 === 0 ? color1 : color2;
+            ctx.beginPath();
+            ctx.arc(px, py, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    ctx.globalAlpha = 1;
+}
+
+// ============================================================
+//  HERO AURA RADIUS — drawn when hero is selected
+//  Shows the area of influence as a dashed circle on the ground
+// ============================================================
+import { HERO_AURA_DATA, getAuraRadius } from '../../../config/HeroAuraData';
+
+export function renderHeroAuraRadius(unit: Unit, ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    if (!unit.isHero || !unit.selected) return;
+
+    const aura = HERO_AURA_DATA[unit.type];
+    if (!aura) return;
+
+    let radius = getAuraRadius(aura, unit.heroLevel);
+    // Equipment: Crown of Kings boosts visual aura radius too
+    const eb = unit._equipBonuses;
+    if (eb && eb.hasAuraBoost) {
+        radius = Math.floor(radius * (1 + eb.auraBoostValue));
+    }
+    const t = unit.animTimer;
+
+    // Outer faint fill
+    ctx.globalAlpha = 0.04 + Math.sin(t * 2) * 0.015;
+    ctx.fillStyle = aura.color;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dashed border ring
+    ctx.globalAlpha = 0.2 + Math.sin(t * 2.5) * 0.08;
+    ctx.strokeStyle = aura.color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 8]);
+    ctx.lineDashOffset = -t * 20;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Aura name label
+    ctx.globalAlpha = 0.6;
+    ctx.font = "bold 8px 'Inter', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = aura.color;
+    ctx.fillText(`${aura.icon} ${aura.name}`, x, y - radius - 4);
+    ctx.textAlign = 'left';
+
+    ctx.globalAlpha = 1;
+}
+

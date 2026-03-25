@@ -17,7 +17,7 @@ import { Building } from "../entities/Building";
 
 // Re-export config types for external consumers
 export { AIDifficulty, AI_DIFFICULTY_NAMES, AI_DIFFICULTY_DESC } from "./ai/AIConfig";
-import { AIDifficulty, DifficultyParams, DIFFICULTY_PARAMS, sharedIntel } from "./ai/AIConfig";
+import { AIDifficulty, DifficultyParams, DIFFICULTY_PARAMS, sharedIntel, AIStrategy, StrategyParams, STRATEGY_PARAMS } from "./ai/AIConfig";
 import type { AIContext } from "./ai/AIContext";
 import { DefenseStance } from "./ai/AIContext";
 import type { AttackPatternRecord, DefenseTrainingPriority, Chokepoint, TrapState } from "./ai/AIContext";
@@ -34,6 +34,8 @@ import { sendAttackWave, rallyTroops, handleRaiding, analyzeEnemyComposition } f
 export class AIController implements AIContext {
     aiState: PlayerState;
     team = 1;
+    strategy: AIStrategy;
+    strategyParams: StrategyParams;
     timers = {
         gather: 0, build: 0, train: 0, attack: 0, combat: 0,
         defend: 0, scout: 0, ageUp: 0,
@@ -46,7 +48,7 @@ export class AIController implements AIContext {
     params: DifficultyParams;
     baseX = 0;
     baseY = 0;
-    waveState: 'gathering' | 'attacking' | 'supporting' | 'counterattack' | 'pursuit' | 'retreating' = 'gathering';
+    waveState: 'gathering' | 'attacking' | 'counterattack' | 'pursuit' | 'retreating' = 'gathering';
     waveResetTimer = 0;
     rallyX = 0;
     rallyY = 0;
@@ -54,6 +56,13 @@ export class AIController implements AIContext {
     retreatRallyY = 0;
     retreatRegroupTimer = 0;
     knownEnemyPositions: Map<number, { x: number; y: number; time: number }> = new Map();
+
+    // ===== SUPPORT SQUAD — Independent system =====
+    supportSquad: Set<number> = new Set();
+    supportSquadTarget: { x: number; y: number } | null = null;
+    supportSquadTimer = 0;
+
+    // Legacy (used by squad system)
     supportTarget: { x: number; y: number } | null = null;
     supportTimer = 0;
     counterAttackTarget: { x: number; y: number } | null = null;
@@ -119,6 +128,9 @@ export class AIController implements AIContext {
     trapState: TrapState | null = null;
     trapCooldown = 0;
 
+    // Cached enemy detection result (avoids flawed waveState-based caching)
+    _cachedHasEnemies = true;
+
     constructor(
         public entityManager: EntityManager,
         aiState: PlayerState,
@@ -132,10 +144,24 @@ export class AIController implements AIContext {
         this.params = DIFFICULTY_PARAMS[difficulty];
         this.attackWaveSize = this.params.startingWaveSize;
 
-        this.aiState.resources.food = 300 * this.params.resourceMult;
-        this.aiState.resources.wood = 300 * this.params.resourceMult;
+        // ---- Pick strategy ----
+        if (difficulty === AIDifficulty.Easy) {
+            this.strategy = AIStrategy.Balanced;
+        } else {
+            const roll = Math.random();
+            this.strategy = roll < 0.30 ? AIStrategy.Rush
+                          : roll < 0.70 ? AIStrategy.Balanced
+                          : AIStrategy.Boom;
+        }
+        this.strategyParams = STRATEGY_PARAMS[this.strategy];
+
+        // Apply strategy garrison ratio
+        this.forceAllocation.garrisonRatio = this.strategyParams.garrisonRatio;
+        this.forceAllocation.attackRatio = 1 - this.strategyParams.garrisonRatio - 0.15;
+        this.forceAllocation.supportRatio = 0.15;
+
+        this.aiState.resources.supplies = 300 * this.params.resourceMult;
         this.aiState.resources.gold = 200 * this.params.resourceMult;
-        this.aiState.resources.stone = 100 * this.params.resourceMult;
     }
 
     log(msg: string, color = '#66ccff') {
@@ -145,7 +171,31 @@ export class AIController implements AIContext {
         // }
     }
 
+    // Throttle map: unitId -> last safeMoveTo timestamp
+    private _lastMoveTime = new Map<number, number>();
+
     safeMoveTo(u: Unit, x: number, y: number, callback?: () => void): void {
+        // NaN guard: reject invalid coordinates at the source
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+        // --- TIER-5 BUGFIX: CHẶN PATHFINDING SPAM (cải tiến) ---
+        // Chỉ áp dụng dedup khi unit đang di chuyển (Moving).
+        // Nếu unit đang Idle hoặc Attacking thì CẦN nhận lệnh mới.
+        if (u.state === UnitState.Moving) {
+            // 1) Nếu điểm đến MỚI quá gần điểm đang đi (< 5 tiles), bỏ qua
+            const distSq = (u.targetX - x) ** 2 + (u.targetY - y) ** 2;
+            if (distSq < (TILE_SIZE * 5) ** 2) {
+                return; // Destination too similar, keep current path
+            }
+            // 2) Throttle: không cho phép gọi moveTo quá nhanh (0.8s cooldown)
+            const now = sharedIntel.gameTime;
+            const lastTime = this._lastMoveTime.get(u.id) || 0;
+            if (now - lastTime < 0.8) {
+                return; // Too soon since last path reset
+            }
+            this._lastMoveTime.set(u.id, now);
+        }
+
         const map = this.entityManager.map;
         if (map.isWaterAtWorld(x, y)) {
             const safe = map.findNearestWalkableWorld(x, y);
@@ -157,7 +207,7 @@ export class AIController implements AIContext {
 
     // ===== UPDATE — Main coordinator (delegates to domain modules) =====
     update(dt: number, particles: ParticleSystem): void {
-        sharedIntel.gameTime += dt;
+        // NOTE: sharedIntel.gameTime is incremented ONCE in Game.ts before all AI updates
         for (const k in this.timers) (this.timers as any)[k] += dt;
         if (this.raidCooldown > 0) this.raidCooldown -= dt;
 
@@ -181,14 +231,14 @@ export class AIController implements AIContext {
             }
         }
 
-        // Vision (every frame)
-        updateVision(this);
+        // Vision (throttled to 4 fps for performance)
+        if (this.timers.combat >= 0.25 || this.timers.gather === 0) {
+            updateVision(this);
+        }
 
         // Passive income
-        this.aiState.addResource(ResourceType.Food, 2 * this.params.resourceMult * dt);
-        this.aiState.addResource(ResourceType.Wood, 1.5 * this.params.resourceMult * dt);
+        this.aiState.addResource(ResourceType.Supplies, 2 * this.params.resourceMult * dt);
         this.aiState.addResource(ResourceType.Gold, 0.8 * this.params.resourceMult * dt);
-        this.aiState.addResource(ResourceType.Stone, 0.4 * this.params.resourceMult * dt);
 
         // Update age-up progress (AI)
         const aiAgeUpDone = this.aiState.updateAgeUp(dt);
@@ -214,13 +264,34 @@ export class AIController implements AIContext {
             for (const u of this.entityManager.units) {
                 if (u.team === this.team && u.alive) u.age = this.aiState.age;
             }
+
+            // ===== AGE-UP TIMING PUSH =====
+            // Immediately trigger attack wave after aging up (power spike!)
+            // Like AoE2's Castle Age push — leverage the tech advantage
+            if (this.aiState.age >= 2 && this.waveState === 'gathering') {
+                const military = this.entityManager.units.filter(
+                    u => u.alive && u.team === this.team && !u.isVillager &&
+                        (u.state === UnitState.Idle || u.state === UnitState.Moving)
+                );
+                // Only push if we have enough units (at least 60% of wave size)
+                const minForPush = Math.ceil(this.attackWaveSize * 0.6);
+                if (military.length >= minForPush) {
+                    // Boost wave size for timing push (120% of normal)
+                    this.attackWaveSize = Math.min(
+                        this.params.maxWaveSize,
+                        Math.ceil(this.attackWaveSize * 1.2)
+                    );
+                    this.timers.attack = 0; // Trigger attack ASAP
+                    this.log(`⚔️ TIMING PUSH! Đời ${this.aiState.age} power spike! Tấn công ngay với ${military.length} quân!`, '#ff4400');
+                }
+            }
         }
 
         // Update research progress (AI)
         this.aiState.updateResearch(dt);
 
-        // Wave state management
-        if (this.waveState === 'attacking' || this.waveState === 'supporting' ||
+        // Wave state management (no longer handles 'supporting' — that's Support Squad now)
+        if (this.waveState === 'attacking' ||
             this.waveState === 'counterattack' || this.waveState === 'pursuit') {
             this.waveResetTimer -= dt;
             if (this.waveResetTimer <= 0) {
@@ -230,9 +301,60 @@ export class AIController implements AIContext {
                     this.log(`⚔️ Phản công thành công! Chuyển sang tổng tấn công!`, '#ff4400');
                 } else {
                     this.waveState = 'gathering';
-                    this.supportTarget = null;
                     this.counterAttackTarget = null;
                     this.pursuitTarget = null;
+                }
+            }
+        }
+
+        // ===== SUPPORT SQUAD MANAGEMENT =====
+        if (this.supportSquad.size > 0) {
+            this.supportSquadTimer -= dt;
+
+            // Remove dead units from squad
+            for (const id of this.supportSquad) {
+                const unit = this.entityManager.units.find(u => u.id === id);
+                if (!unit || !unit.alive) {
+                    this.supportSquad.delete(id);
+                }
+            }
+
+            // Auto-disband when timer expires
+            if (this.supportSquadTimer <= 0) {
+                // FIX: Check for ACTUAL ENEMIES near support target, not just any injured ally
+                // The old check (any ally attacking + hp < maxHp) was too broad and kept
+                // the squad active forever in late game
+                let allyStillNeedsHelp = false;
+                if (this.supportSquadTarget) {
+                    const enemiesNearTarget = this.entityManager.units.some(
+                        u => u.alive && !u.isVillager &&
+                            this.entityManager.isEnemy(this.team, u.team) &&
+                            Math.hypot(u.x - this.supportSquadTarget!.x, u.y - this.supportSquadTarget!.y) < TILE_SIZE * 20
+                    );
+                    allyStillNeedsHelp = enemiesNearTarget;
+                }
+                if (allyStillNeedsHelp && this.supportSquadTarget) {
+                    // Extend timer but with a MAX extension count to prevent infinite loop
+                    const extensions = ((this as any)._supportExtensions || 0) + 1;
+                    (this as any)._supportExtensions = extensions;
+                    if (extensions <= 3) {
+                        this.supportSquadTimer = 15;
+                        this.log(`🔄 Đồng minh vẫn cần giúp, gia hạn support squad! (${extensions}/3)`, '#00ffcc');
+                    } else {
+                        // Max extensions reached — force disband
+                        this.log(`✅ Support Squad giải tán sau 3 lần gia hạn`, '#88ff88');
+                        this.supportSquad.clear();
+                        this.supportSquadTarget = null;
+                        this.supportTarget = null;
+                        (this as any)._supportExtensions = 0;
+                    }
+                } else {
+                    // Disband squad — units return to normal duty
+                    this.log(`✅ Support Squad giải tán (${this.supportSquad.size} lính trở về)`, '#88ff88');
+                    this.supportSquad.clear();
+                    this.supportSquadTarget = null;
+                    this.supportTarget = null;
+                    (this as any)._supportExtensions = 0;
                 }
             }
         }
@@ -241,31 +363,42 @@ export class AIController implements AIContext {
         if (this.waveState === 'retreating') {
             this.retreatRegroupTimer -= dt;
             if (this.retreatRegroupTimer <= 0) {
-                const military = this.entityManager.units.filter(
-                    u => u.alive && u.team === this.team && !u.isVillager
-                );
-                const atRally = military.filter(u => {
+                // Single-pass: count military at rally + gather nearby enemies
+                let atRallyCount = 0;
+                const atRallyUnits: Unit[] = [];
+                let ownPower = 0;
+                for (const u of this.entityManager.units) {
+                    if (!u.alive || u.team !== this.team || u.isVillager) continue;
                     const dist = Math.hypot(u.x - this.retreatRallyX, u.y - this.retreatRallyY);
-                    return dist < TILE_SIZE * 15;
-                });
-                const ownPower = this.calculateCombatPower(atRally);
-                const nearbyEnemies = this.entityManager.units.filter(
-                    u => u.alive && this.entityManager.isEnemy(this.team, u.team) &&
-                        Math.hypot(u.x - this.retreatRallyX, u.y - this.retreatRallyY) < TILE_SIZE * 25
-                );
-                const enemyPower = this.calculateCombatPower(nearbyEnemies);
+                    if (dist < TILE_SIZE * 15) {
+                        atRallyCount++;
+                        atRallyUnits.push(u);
+                        ownPower += u.attack + u.hp * 0.2;
+                    }
+                }
+                let enemyPower = 0;
+                for (const u of this.entityManager.units) {
+                    if (!u.alive || !this.entityManager.isEnemy(this.team, u.team)) continue;
+                    if (Math.hypot(u.x - this.retreatRallyX, u.y - this.retreatRallyY) < TILE_SIZE * 25) {
+                        enemyPower += u.attack + u.hp * 0.2;
+                    }
+                }
 
-                if (ownPower > enemyPower * 1.2 && atRally.length >= 4) {
+                // === POST-RETREAT EVALUATION ===
+                // Check reinforcements: are we stronger than before retreat?
+                const preRetreatPower = (this as any)._preRetreatPower || 0;
+                const reinforced = preRetreatPower > 0 && ownPower > preRetreatPower * 1.2;
+
+                if ((ownPower > enemyPower * 1.2 && atRallyCount >= 4) || reinforced) {
                     this.waveState = 'counterattack';
                     this.counterAttackTarget = { x: this.retreatRallyX, y: this.retreatRallyY };
                     this.waveResetTimer = 30;
-                    this.log(`💪 Đã tập hợp đủ lực lượng (${atRally.length} quân)! PHẢN CÔNG!`, '#ff6600');
-                } else if (atRally.length >= 3) {
-                    this.retreatRegroupTimer = 10;
-                    this.log(`⏳ Đang tập hợp quân... (${atRally.length} quân, cần thêm lực lượng)`, '#ffaa00');
+                    const reason = reinforced ? '🔥 VIỆN BINH ĐÃ ĐẾN!' : '💪 Đã tập hợp đủ lực lượng!';
+                    this.log(`${reason} Phản công với ${atRallyCount} quân!`, '#ff8800');
+                } else if (atRallyCount >= 3) {
+                    this.retreatRegroupTimer = 10; // Wait more for reinforcements
                 } else {
                     this.waveState = 'gathering';
-                    this.log(`📋 Lực lượng quá ít, chuyển sang huấn luyện thêm quân...`, '#aaaaff');
                 }
             }
         }
@@ -282,24 +415,31 @@ export class AIController implements AIContext {
         }
 
         // ===== DELEGATE TO DOMAIN MODULES =====
-        const hasEnemies = this.entityManager.units.some(u => u.alive && this.entityManager.isEnemy(this.team, u.team)) ||
-            this.entityManager.buildings.some(b => b.alive && this.entityManager.isEnemy(this.team, b.team));
+        // Scan for enemies periodically (every 0.5s) and cache the result
+        let hasEnemies: boolean;
+        if (this.timers.combat >= 0.5) {
+            hasEnemies = 
+                this.entityManager.units.some(u => u.alive && this.entityManager.isEnemy(this.team, u.team)) ||
+                this.entityManager.buildings.some(b => b.alive && this.entityManager.isEnemy(this.team, b.team));
+            this._cachedHasEnemies = hasEnemies;
+        } else {
+            hasEnemies = this._cachedHasEnemies;
+        }
 
         if (!hasEnemies) {
-            this.waveState = 'gathering';
-            for (const u of this.entityManager.units) {
-                if (u.team === this.team && u.alive && !u.manualCommand && !u.isVillager) {
-                    if (u.state === UnitState.Attacking || (u.state === UnitState.Moving && !u.targetResource && !u.buildTarget)) {
-                        u.state = UnitState.Idle;
-                        u.attackTarget = null;
-                        u.pathWaypoints = [];
-                    }
-                }
+            // No enemies found — but don't force-idle units that are actively attacking/moving
+            // to prevent canceling in-progress attack waves
+            if (this.waveState !== 'gathering') {
+                this.waveState = 'gathering';
+                this.supportTarget = null;
+                this.counterAttackTarget = null;
+                this.pursuitTarget = null;
             }
         } else {
             if (this.timers.combat >= 0.5) { this.timers.combat = 0; handleCombat(this); }
+            // IMPORTANT: allyCheck runs BEFORE handleDefense so ally support gets priority
+            if (this.timers.allyCheck >= 0.5) { this.timers.allyCheck = 0; checkAllyStatus(this); }
             if (this.timers.defend >= 0.5) { this.timers.defend = 0; handleDefense(this); }
-            if (this.timers.allyCheck >= 1) { this.timers.allyCheck = 0; checkAllyStatus(this); }
             if (this.timers.coordination >= 5) { this.timers.coordination = 0; coordinateWithAllies(this); }
             if (this.timers.tactical >= 8) { this.timers.tactical = 0; tacticalReassessment(this); analyzeEnemyComposition(this); }
             if (this.difficulty !== AIDifficulty.Easy && this.timers.raid >= 15) { this.timers.raid = 0; handleRaiding(this); }
@@ -307,10 +447,14 @@ export class AIController implements AIContext {
             if (this.timers.scout >= this.params.patrolInterval) { this.timers.scout = 0; if (this.waveState === 'gathering') rallyTroops(this); }
 
             // Wave attack
-            const attackDelay = Math.min(
-                this.params.attackInterval * 2,
-                this.params.attackInterval + this.wavesSent * this.params.attackWaveGrowth * 0.5
+            // FIX: Cap wavesSent contribution to max 5 waves worth of growth
+            // Previously wavesSent grew infinitely, making attack delay 170s+ in late game
+            const effectiveWavesSent = Math.min(this.wavesSent, 5);
+            const baseAttackDelay = Math.min(
+                this.params.attackInterval * 1.5, // Reduced cap from 2.0x to 1.5x
+                this.params.attackInterval + effectiveWavesSent * this.params.attackWaveGrowth * 0.5
             );
+            const attackDelay = baseAttackDelay * this.strategyParams.attackDelayMult;
             if (this.timers.attack >= attackDelay) { this.timers.attack = 0; sendAttackWave(this); }
         }
 
@@ -322,10 +466,10 @@ export class AIController implements AIContext {
             if (this.timers.build >= 12) { this.timers.build = 0; autoBuild(this); }
             if (this.timers.train >= this.params.trainInterval) { this.timers.train = 0; autoTrain(this); }
 
-            // Auto-assign builders
-            const aiBuildings = this.entityManager.buildings.filter(b => b.team === this.team);
-            for (const b of aiBuildings) {
-                if (!b.built) {
+            // Auto-assign builders (throttled — runs with train timer)
+            if (this.timers.train >= this.params.trainInterval * 0.5) {
+                for (const b of this.entityManager.buildings) {
+                    if (b.team !== this.team || b.built) continue;
                     const hasBuilder = this.entityManager.units.some(
                         u => u.alive && u.team === this.team && u.buildTarget === b
                     );
@@ -340,8 +484,13 @@ export class AIController implements AIContext {
             }
         }
 
+
+
         cleanupIntel(this);
     }
+
+
+
 
     // ===== Utility methods (exposed via AIContext) =====
 
@@ -439,17 +588,12 @@ export class AIController implements AIContext {
     }
 
     findNearestEnemyUnit(x: number, y: number, range: number): Unit | null {
-        let best: Unit | null = null;
-        let bestDist = range;
-        for (const u of this.entityManager.units) {
-            if (!u.alive || !this.entityManager.isEnemy(this.team, u.team)) continue;
-            const d = Math.hypot(u.x - x, u.y - y);
-            if (d < bestDist) { bestDist = d; best = u; }
-        }
-        return best;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return this.entityManager.findNearestEnemy(x, y, this.team, range);
     }
 
     findNearestEnemyBuilding(x: number, y: number, range: number) {
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
         let best = null;
         let bestDist = range;
         for (const b of this.entityManager.buildings) {
@@ -488,7 +632,6 @@ export class AIController implements AIContext {
         let bestDist = range;
         for (const b of this.entityManager.buildings) {
             if (!b.alive || !this.entityManager.isEnemy(this.team, b.team)) continue;
-            if (b.type !== BuildingType.Farm && b.type !== BuildingType.Market) continue;
             const d = Math.hypot(b.x - x, b.y - y);
             if (d < bestDist) { bestDist = d; best = b; }
         }
@@ -511,14 +654,6 @@ export class AIController implements AIContext {
         let bestDist = Infinity;
         for (const r of this.entityManager.resources) {
             if (!r.alive || r.nodeType !== type) continue;
-            // For Farms: only consider farms belonging to our team
-            if (type === ResourceNodeType.Farm) {
-                const ownsFarm = this.entityManager.buildings.some(
-                    b => b.alive && b.team === this.team && b.type === BuildingType.Farm &&
-                        Math.abs(b.x - r.x) < TILE_SIZE * 4 && Math.abs(b.y - r.y) < TILE_SIZE * 4
-                );
-                if (!ownsFarm) continue;
-            }
             const d = Math.hypot(r.x - x, r.y - y);
             if (d < bestDist) { bestDist = d; best = r; }
         }

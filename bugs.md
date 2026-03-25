@@ -1,0 +1,2 @@
+- dân lấy thực ở trang trại khi mất nhà chinhs chúng vẫn lấy liên tục được mặc dù nó chỉ chứa được số lượng cụ thể
+- ~~dân không hiển thị sau khi xem quảng cáo~~ (đã sửa: thêm findValidWorldPos để đảm bảo vị trí spawn hợp lệ)

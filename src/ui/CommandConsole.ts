@@ -19,6 +19,7 @@ export interface ConsoleHost {
     pause(): void;
     resume(): void;
     addHeroXp(amount: number): void;
+    upgradeAllUnits(level: number): void;
 }
 
 interface ConsoleLine {
@@ -51,6 +52,8 @@ export class CommandConsole {
         // Toggle console with Enter (when not typing in other inputs)
         if (e.key === 'Enter') {
             if (!this.isOpen) {
+                // Only allow console in dev mode — disabled in production builds
+                if (!import.meta.env.DEV) return;
                 // Open console
                 this.isOpen = true;
                 this.inputText = '';
@@ -252,6 +255,13 @@ export class CommandConsole {
                 break;
             }
 
+            case 'upgrade': {
+                const lvl = Math.min(3, Math.max(1, parseInt(args[0]) || 3));
+                this.host.upgradeAllUnits(lvl);
+                this.log(`⚔️ Nâng cấp tất cả lính lên ${lvl} sao!`, '#ff4444');
+                break;
+            }
+
             case 'elite': {
                 const count = parseInt(args[0]) || 5;
                 this.host.spawnElite(count);
@@ -322,6 +332,7 @@ export class CommandConsole {
             ['/showcivs     So sánh giao diện 5 nền văn minh', '#ccc'],
             ['/kill         Tiêu diệt đơn vị đang chọn', '#ccc'],
             ['/heroxp [n]   Thêm XP cho tướng đang chọn', '#ccc'],
+            ['/upgrade [n]  Nâng cấp tất cả lính (1-3 sao, mặc định 3)', '#ccc'],
             ['═══════ COMBO ═══════', '#ffd700'],
             ['/gg           Map sáng + Full tài nguyên + Nhanh 3x', '#ccc'],
         ];
